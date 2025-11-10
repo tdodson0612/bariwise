@@ -944,7 +944,7 @@ Future<void> _searchUsers(String query) async {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Please enter a search term'),
-          backgroundColor: Colors.orange,
+          backgroundColor: const Color.fromARGB(255, 0, 221, 255),
         ),
       );
     }
@@ -1071,13 +1071,13 @@ Widget _buildSearchBar() {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle, size: 14, color: Colors.green),
+            Icon(Icons.check_circle, size: 14, color: const Color.fromARGB(255, 1, 158, 255)),
             SizedBox(width: 4),
             Text(
               'Search by Name, Username or Email!',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.green.shade600,
+                color: const Color.fromARGB(255, 67, 144, 160),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1208,7 +1208,7 @@ Widget _buildSearchBar() {
                           icon: Icon(Icons.favorite),
                           label: Text('Save Recipe'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
+                            backgroundColor: const Color.fromARGB(255, 0, 174, 255),
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -1228,7 +1228,7 @@ Widget _buildSearchBar() {
                           icon: Icon(Icons.add_shopping_cart),
                           label: Text('Add to List'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: const Color.fromARGB(255, 0, 179, 255),
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -1251,11 +1251,11 @@ Widget _buildSearchBar() {
         // Background
         Positioned.fill(
           child: Image.asset(
-            'assets/background.png',
+            'assets/bari.png',
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
-                color: Colors.green.shade50,
+                color: const Color.fromARGB(255, 116, 215, 251),
                 child: Center(
                   child: Icon(
                     Icons.image_not_supported,
@@ -1288,7 +1288,7 @@ Widget _buildSearchBar() {
                     Icon(
                       Icons.scanner,
                       size: 48,
-                      color: Colors.green,
+                      color: const Color.fromARGB(255, 0, 255, 251),
                     ),
                     SizedBox(height: 12),
                     Text(
@@ -1403,7 +1403,7 @@ Widget _buildSearchBar() {
                                       ? Icons.check_circle
                                       : Icons.warning,
                                   color: _premiumController.canAccessFeature(PremiumFeature.scan)
-                                      ? Colors.green
+                                      ? const Color.fromARGB(255, 0, 234, 255)
                                       : Colors.red,
                                   size: 20,
                                 ),
@@ -1415,7 +1415,7 @@ Widget _buildSearchBar() {
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: _premiumController.canAccessFeature(PremiumFeature.scan)
-                                        ? Colors.green.shade700
+                                        ? const Color.fromARGB(255, 0, 208, 255)
                                         : Colors.red.shade700,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -1472,7 +1472,7 @@ Widget _buildSearchBar() {
                       icon: Icon(Icons.qr_code_scanner),
                       label: Text('Quick Scan Demo'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
+                        backgroundColor: const Color.fromARGB(255, 0, 234, 255),
                         foregroundColor: Colors.white,
                       ),
                     ),
@@ -1498,7 +1498,7 @@ Widget _buildSearchBar() {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.restaurant, color: Colors.green, size: 24),
+                            Icon(Icons.restaurant, color: const Color.fromARGB(255, 0, 208, 255), size: 24),
                             SizedBox(width: 12),
                             Text(
                               'Recipe Suggestions',
@@ -1539,7 +1539,7 @@ Widget _buildSearchBar() {
       child: ExpansionTile(
         title: Row(
           children: [
-            Icon(Icons.restaurant, color: Colors.green),
+            Icon(Icons.restaurant, color: const Color.fromARGB(255, 0, 191, 255)),
             SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -1647,7 +1647,7 @@ Widget _buildSearchBar() {
                           icon: Icon(Icons.add_shopping_cart),
                           label: Text('Add to List'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: const Color.fromARGB(255, 0, 165, 183),
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -1668,7 +1668,7 @@ Widget _buildSearchBar() {
     return Container(
       decoration: const BoxDecoration(
         image: DecorationImage(
-          image: AssetImage('assets/background.png'),
+          image: AssetImage('assets/bari.png'),
           fit: BoxFit.cover,
         ),
       ),
@@ -1738,7 +1738,7 @@ Widget _buildSearchBar() {
                     icon: const Icon(Icons.send),
                     label: const Text('Analyze'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: const Color.fromARGB(255, 76, 170, 175),
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -1785,7 +1785,7 @@ Widget _buildSearchBar() {
                 padding: const EdgeInsets.all(16),
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade700,
+                  color: const Color.fromARGB(255, 0, 185, 252),
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
@@ -1858,7 +1858,7 @@ Widget _buildSearchBar() {
           ),
         ),
         title: Text('Liver Food Scanner'),
-        backgroundColor: Colors.green,
+        backgroundColor: const Color.fromARGB(255, 76, 152, 175),
         foregroundColor: Colors.white,
         actions: [
           // FIXED: Show purchase button for non-premium users without AnimatedBuilder

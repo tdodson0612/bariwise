@@ -118,7 +118,7 @@ class _EditRecipePageState extends State<EditRecipePage> {
           // Background
           Positioned.fill(
             child: Image.asset(
-              'assets/background.png',
+              'assets/bari.png',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
                 return Container(

@@ -90,7 +90,7 @@ class _ContactScreenState extends State<ContactScreen> {
           // Background Image
           Positioned.fill(
             child: Image.asset(
-              'assets/background.png',
+              'assets/bari.png',
               fit: BoxFit.cover,
             ),
           ),

@@ -417,7 +417,7 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/background.png'),
+            image: AssetImage('assets/bari.png'),
             fit: BoxFit.cover,
           ),
         ),

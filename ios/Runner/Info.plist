@@ -33,7 +33,7 @@
 			<string>com.terrydodson.liverWiseApp</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.terrydodson.liverwiseapp</string>
+				<string>com.terrydodson.BariWiseapp</string>
 			</array>
 		</dict>
 	</array>

@@ -37,10 +37,10 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/background.png
-    - assets/icon/liverlogo.png  # Add this since it's referenced in flutter_launcher_icons
+    - assets/bari.png
+    - assets/icon/bari.png  # Add this since it's referenced in flutter_launcher_icons
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/icon/liverlogo.png"
+  image_path: "assets/icon/bari.png"

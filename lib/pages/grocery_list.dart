@@ -197,7 +197,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
               children: [
                 Positioned.fill(
                   child: Image.asset(
-                    'assets/background.png',
+                    'assets/bari.png',
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return Container(color: Colors.grey[100]);

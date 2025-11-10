@@ -179,7 +179,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/background.png',
+              'assets/bari.png',
               fit: BoxFit.cover,
             ),
           ),

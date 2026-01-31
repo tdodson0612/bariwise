@@ -1,0 +1,234 @@
+all but pages/recdetpage, down
+
+
+// CHANGES NEEDED FOR suggested_recipes_page.dart
+
+// -1. REMOVE this import at the top:
+// import 'package:supabase_flutter/supabase_flutter.dart'; // DELETE THIS LINE
+
+// -2. ADD these imports at the top:
+import 'package:http/http.dart' as http;
+import '../config/app_config.dart';
+
+// -3. REPLACE the _loadRecipes() method with this:
+Future<void> _loadRecipes() async {
+  if (_isLoading) return;
+  
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    // Try to load from cache first
+    final cachedRecipes = await _getCachedRecipes();
+    
+    if (cachedRecipes != null && cachedRecipes.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _allRecipes = cachedRecipes;
+          _currentRecipes = cachedRecipes;
+          _hasMore = false;
+          _isLoading = false;
+          _ingredientsExist = true;
+        });
+      }
+      return;
+    }
+
+    // Cache miss, check if ingredients exist
+    bool hasMatchingIngredients = await _checkIngredientsExist();
+    
+    if (!hasMatchingIngredients) {
+      if (mounted) {
+        setState(() {
+          _allRecipes = [];
+          _currentRecipes = [];
+          _hasMore = false;
+          _isLoading = false;
+          _ingredientsExist = false;
+        });
+      }
+      return;
+    }
+
+    // MODIFIED: Fetch recipes via Worker instead of direct Supabase
+    final response = await http.post(
+      Uri.parse(AppConfig.cloudflareWorkerQueryEndpoint),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'action': 'select',
+        'table': 'recipes',
+        'columns': ['*'],
+        'filters': {'ingredients_contains_any': widget.productIngredients},
+        'orderBy': 'health_score',
+        'ascending': false,
+        'limit': 2,
+        'offset': _currentPage * 2,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Worker query failed: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    
+    List<Recipe> newRecipes = (data as List).map<Recipe>((recipeData) {
+      return Recipe(
+        id: recipeData['id']?.toString() ?? '',
+        title: recipeData['title'] ?? 'Unknown Recipe',
+        description: recipeData['description'] ?? 'No description available',
+        ingredients: List<String>.from(recipeData['ingredients'] ?? []),
+        instructions: recipeData['instructions'] ?? 'No instructions available',
+        healthScore: recipeData['health_score'],
+      );
+    }).toList();
+
+    // Cache the results
+    if (newRecipes.isNotEmpty) {
+      await _cacheRecipes(newRecipes);
+    }
+
+    if (mounted) {
+      setState(() {
+        if (_currentPage == 0) {
+          _allRecipes = newRecipes;
+          _currentRecipes = newRecipes;
+        }
+        _hasMore = newRecipes.length == 2;
+        _isLoading = false;
+        _ingredientsExist = true;
+      });
+    }
+
+  } catch (e) {
+    print('Error loading recipes: $e');
+    if (await _checkIngredientsExist()) {
+      _loadFallbackRecipes();
+    } else {
+      if (mounted) {
+        setState(() {
+          _allRecipes = [];
+          _currentRecipes = [];
+          _hasMore = false;
+          _isLoading = false;
+          _ingredientsExist = false;
+        });
+      }
+    }
+  }
+}
+
+// -4. REPLACE the _checkIngredientsExist() method with this:
+Future<bool> _checkIngredientsExist() async {
+  try {
+    for (String ingredient in widget.productIngredients) {
+      // MODIFIED: Check via Worker
+      final response = await http.post(
+        Uri.parse(AppConfig.cloudflareWorkerQueryEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'select',
+          'table': 'recipes',
+          'columns': ['id'],
+          'filters': {'ingredients_contains': ingredient},
+          'limit': 1,
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List && data.isNotEmpty) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (e) {
+    print('Error checking ingredients: $e');
+    return false;
+  }
+}
+
+// 5. REPLACE the _loadMoreRecipes() method with this:
+Future<void> _loadMoreRecipes() async {
+  if (_isLoading || !_hasMore || !_ingredientsExist) return;
+
+  _currentPage++;
+  setState(() {
+    _isLoading = true;
+  });
+
+  try {
+    // MODIFIED: Fetch via Worker
+    final response = await http.post(
+      Uri.parse(AppConfig.cloudflareWorkerQueryEndpoint),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'action': 'select',
+        'table': 'recipes',
+        'columns': ['*'],
+        'filters': {'ingredients_contains_any': widget.productIngredients},
+        'orderBy': 'health_score',
+        'ascending': false,
+        'limit': 2,
+        'offset': _currentPage * 2,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Worker query failed: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+
+    List<Recipe> newRecipes = (data as List).map<Recipe>((recipeData) {
+      return Recipe(
+        id: recipeData['id']?.toString() ?? '',
+        title: recipeData['title'] ?? 'Unknown Recipe',
+        description: recipeData['description'] ?? 'No description available',
+        ingredients: List<String>.from(recipeData['ingredients'] ?? []),
+        instructions: recipeData['instructions'] ?? 'No instructions available',
+        healthScore: recipeData['health_score'],
+      );
+    }).toList();
+
+    if (mounted) {
+      setState(() {
+        _allRecipes.addAll(newRecipes);
+        _currentRecipes = _allRecipes;
+        _hasMore = newRecipes.length == 2;
+        _isLoading = false;
+      });
+      
+      // Update cache with all recipes
+      await _cacheRecipes(_allRecipes);
+    }
+
+  } catch (e) {
+    print('Error loading more recipes: $e');
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _hasMore = false;
+      });
+    }
+  }
+}
+
+// NOTES FOR YOUR CLOUDFLARE WORKER:
+// The Worker needs to handle these special filter types:
+// - 'ingredients_contains': Single ingredient ILIKE search
+// - 'ingredients_contains_any': Multiple ingredients, match if ANY ingredient matches
+// 
+// Example Worker logic:
+// if (filters.ingredients_contains) {
+//   query = query.ilike('ingredients', `%${filters.ingredients_contains}%`)
+// }
+// if (filters.ingredients_contains_any) {
+//   // OR logic: match if ingredients contains ANY of the values
+//   const conditions = filters.ingredients_contains_any.map(ing => 
+//     `ingredients.ilike.%${ing}%`
+//   ).join(',or.')
+//   query = query.or(conditions)
+// }

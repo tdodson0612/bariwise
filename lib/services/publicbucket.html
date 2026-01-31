@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Confirmed - bariWise</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 60px 40px;
+            max-width: 500px;
+            text-align: center;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .checkmark {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 30px;
+            background: #22c55e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            animation: scaleIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+
+        h1 {
+            color: #1f2937;
+            font-size: 32px;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(34, 197, 94, 0.5);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #e5e7eb;
+        }
+
+        .footer-text {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-top: 30px;
+            line-height: 1.5;
+        }
+
+        .footer-text a {
+            color: #22c55e;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .footer-text a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="checkmark">✓</div>
+        
+        <h1>Email Confirmed!</h1>
+        
+        <p class="subtitle">
+            Thank you for confirming your email address. Your account is now ready to use. Sign in to get started with bariWise.
+        </p>
+
+        <div class="button-container">
+            <button class="btn btn-primary" onclick="signInToApp()">
+                Sign In to bariWise
+            </button>
+            <button class="btn btn-secondary" onclick="goToWebsite()">
+                Visit Website
+            </button>
+        </div>
+
+        <p class="footer-text">
+            Need help? <a href="mailto:support@bariwise.com">Contact Support</a>
+        </p>
+    </div>
+
+    <script>
+        function signInToApp() {
+            // Deep link back to the app on the login screen
+            const deepLink = 'com.wiseapps.bariwise://login';
+            
+            // Try to open the deep link
+            window.location.href = deepLink;
+            
+            // Fallback: If deep link doesn't work (web), show message
+            setTimeout(() => {
+                if (document.hidden === false) {
+                    alert('Please open the bariWise app to sign in');
+                }
+            }, 1500);
+        }
+
+        function goToWebsite() {
+            window.location.href = 'https://bariwise.com';
+        }
+
+        // Optional: Check if we came from email confirmation and auto-close if on mobile app
+        window.addEventListener('load', () => {
+            console.log('Email confirmation page loaded');
+        });
+    </script>
+</body>
+</html>

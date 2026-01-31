@@ -1,0 +1,2928 @@
+// lib/services/database_service.dart - FULLY UPDATED: Auth token support for Worker + improved storage & profile pictures
+import 'dart:convert';
+import 'dart:io';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import '../models/favorite_recipe.dart';
+import '../models/grocery_item.dart';
+import '../models/submitted_recipe.dart';
+import '../config/app_config.dart';
+import 'auth_service.dart';
+
+class DatabaseService {
+  static final SupabaseClient _supabase = Supabase.instance.client;
+  
+  // Cache keys
+  static const String _CACHE_BADGES = 'cache_badges';
+  static const String _CACHE_USER_BADGES = 'cache_user_badges_';
+  static const String _CACHE_USER_PROFILE = 'cache_user_profile_';
+  static const String _CACHE_PROFILE_TIMESTAMP = 'cache_profile_timestamp_';
+  static const String _CACHE_FRIENDS = 'cache_friends_';
+  static const String _CACHE_MESSAGES = 'cache_messages_';
+  static const String _CACHE_LAST_MESSAGE_TIME = 'cache_last_message_time_';
+  static const String _CACHE_POSTS = 'cache_posts';
+  static const String _CACHE_LAST_POST_TIME = 'cache_last_post_time';
+  static const String _CACHE_USER_POSTS = 'cache_user_posts_';
+  static const String _CACHE_SUBMITTED_RECIPES = 'cache_submitted_recipes';
+  static const String _CACHE_FAVORITE_RECIPES = 'cache_favorite_recipes';
+
+  // Buckets
+  static const String _PROFILE_BUCKET = 'profile-pictures';
+  static const String _BACKGROUND_BUCKET = 'background-pictures';
+  static const String _ALBUM_BUCKET = 'photo-album';
+
+  static const List<String> _KNOWN_BUCKETS = [
+    _PROFILE_BUCKET,
+    _BACKGROUND_BUCKET,
+    _ALBUM_BUCKET,
+  ];
+
+  // ==================================================
+  // CLOUDFLARE WORKER HELPER METHODS - WITH AUTH TOKEN
+  // ==================================================
+  
+  /// Send a query to the Cloudflare Worker WITH authentication token
+  static Future<dynamic> _workerQuery({
+    required String action,
+    required String table,
+    List<String>? columns,
+    Map<String, dynamic>? filters,
+    Map<String, dynamic>? data,
+    String? orderBy,
+    bool? ascending,
+    int? limit,
+    bool requireAuth = false, // ✅ NEW: Require auth for sensitive operations
+  }) async {
+    try {
+      final authToken = _supabase.auth.currentSession?.accessToken;
+      
+      // ✅ NEW: Verify auth for sensitive operations
+      if (requireAuth && authToken == null) {
+        throw Exception('Authentication required. Please sign in again.');
+      }
+      
+      AppConfig.debugPrint('🔐 Worker query ($action) with auth: ${authToken != null ? "YES" : "NO"}');
+      
+      final response = await http.post(
+        Uri.parse(AppConfig.cloudflareWorkerQueryEndpoint),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': action,
+          'table': table,
+          'authToken': authToken,
+          if (columns != null) 'columns': columns,
+          if (filters != null) 'filters': filters,
+          if (data != null) 'data': data,
+          if (orderBy != null) 'orderBy': orderBy,
+          if (ascending != null) 'ascending': ascending,
+          if (limit != null) 'limit': limit,
+        }),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Worker request timed out'),
+      );
+
+      if (response.statusCode < 200 || response.statusCode > 299) {
+        final errorBody = response.body;
+        AppConfig.debugPrint('❌ Worker error ($action): ${response.statusCode} - $errorBody');
+        throw Exception('Worker query failed ($action): $errorBody');
+      }
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      throw Exception('Failed to execute worker query ($action): $e');
+    }
+  }
+
+  /// Upload file to R2 storage via Cloudflare Worker WITH auth token
+  static Future<String> _workerStorageUpload({
+    required String bucket,
+    required String path,
+    required String base64Data,
+    required String contentType,
+  }) async {
+    try {
+      final authToken = _supabase.auth.currentSession?.accessToken;
+    
+      // ✅ REQUIRE auth token
+      if (authToken == null) {
+        throw Exception('Session expired. Please sign out and sign back in.');
+      }
+    
+      AppConfig.debugPrint('🔐 Storage upload with auth token');
+      AppConfig.debugPrint('📦 Bucket: $bucket, Path: $path');
+      AppConfig.debugPrint('📊 Data size: ${base64Data.length} chars');
+    
+      // ✅ Validate file size early
+      final estimatedMB = (base64Data.length * 0.75 / 1024 / 1024);
+      if (estimatedMB > 10) {
+        throw Exception('Image file too large. Please choose a smaller image (max 10MB).');
+      }
+    
+      final response = await http.post(
+        Uri.parse('${AppConfig.cloudflareWorkerQueryEndpoint}/storage'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'upload',
+          'bucket': bucket,
+          'path': path,
+          'data': base64Data,
+          'contentType': contentType,
+          'authToken': authToken,
+        }),
+      ).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw Exception('Upload timeout - connection too slow. Please try again.');
+        },
+      );
+    
+      AppConfig.debugPrint('📡 Response status: ${response.statusCode}');
+    
+      // ✅ Better error handling
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw Exception('Authentication failed. Please sign out and sign back in.');
+      }
+    
+      if (response.statusCode != 200) {
+        final errorBody = response.body;
+        AppConfig.debugPrint('❌ Upload failed: $errorBody');
+        throw Exception('Upload failed: ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}');
+      }
+    
+      final uploadResult = jsonDecode(response.body);
+      final publicUrl = uploadResult['url'] ?? uploadResult['publicUrl'];
+    
+      if (publicUrl == null) {
+        throw Exception('Upload succeeded but no URL returned.');
+      }
+    
+      AppConfig.debugPrint('✅ Upload successful: $publicUrl');
+      return publicUrl;
+    } on http.ClientException {
+      throw Exception('Network error: Unable to connect. Check your internet connection.');
+    } on FormatException {
+      throw Exception('Invalid response from server. Please try again.');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Storage upload error: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete file from R2 storage via Cloudflare Worker WITH auth token
+  static Future<void> _workerStorageDelete({
+    required String bucket,
+    required String path,
+  }) async {
+    try {
+      final authToken = _supabase.auth.currentSession?.accessToken;
+     
+      if (authToken == null) {
+        throw Exception('Authentication required. Please sign in again.');
+      }
+     
+      AppConfig.debugPrint('🔐 Storage delete with auth token');
+      AppConfig.debugPrint('📦 Bucket: $bucket, Path: $path');
+     
+      final response = await http.post(
+        Uri.parse('${AppConfig.cloudflareWorkerQueryEndpoint}/storage'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'delete',
+          'bucket': bucket,
+          'path': path,
+          'authToken': authToken,
+        }),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Delete timeout - server not responding');
+        },
+      );
+     
+      if (response.statusCode == 401) {
+        throw Exception('Authentication failed. Please sign out and sign back in.');
+      }
+     
+      if (response.statusCode == 403) {
+        throw Exception('Permission denied. You can only delete your own files.');
+      }
+     
+      if (response.statusCode != 200) {
+        throw Exception('Delete failed (${response.statusCode}): ${response.body}');
+      }
+     
+      AppConfig.debugPrint('✅ Delete successful');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Storage delete error: $e');
+      rethrow;
+    }
+  }
+
+  /// Helper: delete a file from any known bucket using its public URL
+  static Future<void> _deleteFileByPublicUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      final segments = uri.pathSegments;
+
+      for (final bucket in _KNOWN_BUCKETS) {
+        final bucketIndex = segments.indexOf(bucket);
+        if (bucketIndex != -1 && bucketIndex < segments.length - 1) {
+          final filePath = segments.sublist(bucketIndex + 1).join('/');
+          AppConfig.debugPrint('🗑️ Deleting from $bucket: $filePath');
+          await _workerStorageDelete(bucket: bucket, path: filePath);
+          return;
+        }
+      }
+
+      AppConfig.debugPrint('⚠️ Could not determine bucket for URL: $url');
+    } catch (e) {
+      AppConfig.debugPrint('❌ _deleteFileByPublicUrl error: $e');
+      rethrow;
+    }
+  }
+
+  // ==================================================
+  // CACHE HELPER METHODS (Local only - no Worker needed)
+  // ==================================================
+  
+  static Future<SharedPreferences> _getPrefs() async {
+    return await SharedPreferences.getInstance();
+  }
+
+  static Future<void> _cacheData(String key, String data) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(key, data);
+  }
+
+  static Future<String?> _getCachedData(String key) async {
+    final prefs = await _getPrefs();
+    return prefs.getString(key);
+  }
+
+  static Future<void> _clearCache(String key) async {
+    final prefs = await _getPrefs();
+    await prefs.remove(key);
+  }
+
+  static Future<void> clearAllUserCache() async {
+    if (currentUserId == null) return;
+    final prefs = await _getPrefs();
+    final keys = prefs.getKeys().where((key) => 
+      key.contains(currentUserId!) || 
+      key == _CACHE_BADGES ||
+      key == _CACHE_POSTS ||
+      key == _CACHE_LAST_POST_TIME
+    ).toList();
+    for (final key in keys) {
+      await prefs.remove(key);
+    }
+  }
+
+  // ==================================================
+  // CURRENT USER ID & AUTH CHECK (Uses Supabase auth only)
+  // ==================================================
+  static String? get currentUserId => _supabase.auth.currentUser?.id;
+
+  static void ensureUserAuthenticated() {
+    if (currentUserId == null) {
+      throw Exception('Please sign in to continue');
+    }
+  }
+
+  static bool get isUserLoggedIn => currentUserId != null;
+
+  // ==================================================
+  // XP & LEVEL SYSTEM
+  // ==================================================
+
+  static Future<Map<String, dynamic>> addXP(int xpAmount, {String? reason}) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final profile = await getCurrentUserProfile();
+      final currentXP = profile?['xp'] ?? 0;
+      final currentLevel = profile?['level'] ?? 1;
+      final newXP = currentXP + xpAmount;
+      
+      int newLevel = _calculateLevel(newXP);
+      bool leveledUp = newLevel > currentLevel;
+      
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': currentUserId!},
+        data: {
+          'xp': newXP,
+          'level': newLevel,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_USER_PROFILE$currentUserId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$currentUserId');
+      
+      return {
+        'xp_gained': xpAmount,
+        'total_xp': newXP,
+        'new_level': newLevel,
+        'leveled_up': leveledUp,
+        'reason': reason,
+      };
+    } catch (e) {
+      throw Exception('Failed to add XP: $e');
+    }
+  }
+
+  static int _calculateLevel(int xp) {
+    int level = 1;
+    int xpNeeded = 100;
+    
+    while (xp >= xpNeeded) {
+      level++;
+      xpNeeded += (level * 50);
+    }
+    
+    return level;
+  }
+
+  static int getXPForNextLevel(int currentLevel) {
+    int xpNeeded = 100;
+    for (int i = 2; i <= currentLevel + 1; i++) {
+      xpNeeded += (i * 50);
+    }
+    return xpNeeded;
+  }
+
+  static double getLevelProgress(int currentXP, int currentLevel) {
+    int xpForCurrentLevel = getXPForNextLevel(currentLevel - 1);
+    int xpForNextLevel = getXPForNextLevel(currentLevel);
+    int xpIntoLevel = currentXP - xpForCurrentLevel;
+    int xpNeededForLevel = xpForNextLevel - xpForCurrentLevel;
+    
+    return xpIntoLevel / xpNeededForLevel;
+  }
+
+  // ==================================================
+  // ACHIEVEMENTS & BADGES (CACHED)
+  // ==================================================
+
+  static Future<List<Map<String, dynamic>>> getAllBadges() async {
+    try {
+      final cached = await _getCachedData(_CACHE_BADGES);
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        return List<Map<String, dynamic>>.from(decoded);
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'badges',
+        columns: ['*'],
+        orderBy: 'xp_reward',
+        ascending: true,
+      );
+      
+      final badges = List<Map<String, dynamic>>.from(response);
+      await _cacheData(_CACHE_BADGES, jsonEncode(badges));
+      
+      return badges;
+    } catch (e) {
+      throw Exception('Failed to get badges: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getUserBadges(String userId) async {
+    try {
+      final cacheKey = '$_CACHE_USER_BADGES$userId';
+      final cached = await _getCachedData(cacheKey);
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        return List<Map<String, dynamic>>.from(decoded);
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'user_achievements',
+        columns: ['*'],
+        filters: {'user_id': userId},
+        orderBy: 'earned_at',
+        ascending: false,
+      );
+      
+      final badges = List<Map<String, dynamic>>.from(response);
+      await _cacheData(cacheKey, jsonEncode(badges));
+      
+      return badges;
+    } catch (e) {
+      throw Exception('Failed to get user badges: $e');
+    }
+  }
+
+  static Future<bool> awardBadge(String badgeId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final existing = await _workerQuery(
+        action: 'select',
+        table: 'user_achievements',
+        columns: ['*'],
+        filters: {
+          'user_id': currentUserId!,
+          'badge_id': badgeId,
+        },
+        limit: 1,
+      );
+      
+      if (existing != null && (existing as List).isNotEmpty) {
+        return false;
+      }
+      
+      await _workerQuery(
+        action: 'insert',
+        table: 'user_achievements',
+        data: {
+          'user_id': currentUserId!,
+          'badge_id': badgeId,
+          'earned_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_USER_BADGES$currentUserId');
+      
+      final badgeData = await _workerQuery(
+        action: 'select',
+        table: 'badges',
+        columns: ['xp_reward'],
+        filters: {'id': badgeId},
+        limit: 1,
+      );
+      
+      if (badgeData != null && (badgeData as List).isNotEmpty) {
+        final badge = badgeData[0];
+        if (badge['xp_reward'] != null && badge['xp_reward'] > 0) {
+          await addXP(badge['xp_reward'], reason: 'Badge: $badgeId');
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      print('Failed to award badge: $e');
+      return false;
+    }
+  }
+
+  static Future<void> checkAchievements() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final recipeCount = (await getSubmittedRecipes()).length;
+      
+      if (recipeCount >= 1) await awardBadge('first_recipe');
+      if (recipeCount >= 5) await awardBadge('recipe_5');
+      if (recipeCount >= 25) await awardBadge('recipe_25');
+      if (recipeCount >= 50) await awardBadge('recipe_50');
+      if (recipeCount >= 100) await awardBadge('recipe_100');
+    } catch (e) {
+      print('Error checking achievements: $e');
+    }
+  }
+
+  // ==================================================
+  // USER PROFILE MANAGEMENT (WITH TIMESTAMP CACHING)
+  // ==================================================
+  
+  static Future<void> createUserProfile(
+    String userId, 
+    String email, 
+    {bool isPremium = false}
+  ) async {
+    try {
+      AppConfig.debugPrint('👤 Creating user profile for: $userId');
+      
+      final response = await _workerQuery(
+        action: 'insert',
+        table: 'profiles',
+        requireAuth: true, // ✅ Require authentication
+        data: {
+          'id': userId,
+          'email': email,
+          'is_premium': isPremium,
+          'daily_scans_used': 0,
+          'last_scan_date': DateTime.now().toIso8601String().split('T')[0],
+          'created_at': DateTime.now().toIso8601String(),
+          'username': email.split('@')[0],
+          'friends_list_visible': true,
+          'xp': 0,
+          'level': 1,
+        },
+      );
+      
+      AppConfig.debugPrint('✅ User profile created: $userId');
+      
+      // ✅ Award badge after successful profile creation
+      try {
+        await awardBadge('early_adopter');
+      } catch (badgeError) {
+        AppConfig.debugPrint('⚠️ Badge award failed (non-critical): $badgeError');
+      }
+    } catch (e) {
+      AppConfig.debugPrint('❌ Failed to create user profile: $e');
+      throw Exception('Profile creation failed: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getUserProfile(String userId) async {
+    try {
+      final cacheKey = '$_CACHE_USER_PROFILE$userId';
+      final timestampKey = '$_CACHE_PROFILE_TIMESTAMP$userId';
+      
+      final cached = await _getCachedData(cacheKey);
+      final cachedTimestamp = await _getCachedData(timestampKey);
+      
+      if (cached != null && cachedTimestamp != null) {
+        final serverProfileData = await _workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['updated_at'],
+          filters: {'id': userId},
+          limit: 1,
+        );
+        
+        if (serverProfileData != null && (serverProfileData as List).isNotEmpty) {
+          final serverProfile = serverProfileData[0];
+          final serverTimestamp = serverProfile['updated_at'] ?? '';
+          
+          if (serverTimestamp == cachedTimestamp) {
+            return jsonDecode(cached);
+          }
+        }
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'profiles',
+        columns: ['*'],
+        filters: {'id': userId},
+        limit: 1,
+      );
+      
+      if (response == null || (response as List).isEmpty) {
+        return null;
+      }
+      
+      final profileData = response[0];
+      await _cacheData(cacheKey, jsonEncode(profileData));
+      await _cacheData(timestampKey, profileData['updated_at'] ?? DateTime.now().toIso8601String());
+      
+      return profileData;
+    } catch (e) {
+      throw Exception('Failed to get user profile: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getCurrentUserProfile() async {
+    final userId = currentUserId;
+    if (userId == null) return null;
+    
+    try {
+      return await getUserProfile(userId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ==================================================
+  // RECIPE MANAGEMENT - SUBMITTED RECIPES (CACHED)
+  // ==================================================
+  
+  static Future<List<SubmittedRecipe>> getSubmittedRecipes() async {
+    if (currentUserId == null) return [];
+
+    try {
+      final cached = await _getCachedData(_CACHE_SUBMITTED_RECIPES);
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        return decoded.map((recipe) => SubmittedRecipe.fromJson(recipe)).toList();
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'submitted_recipes',
+        columns: ['*'],
+        filters: {'user_id': currentUserId!},
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      final recipes = (response as List)
+          .map((recipe) => SubmittedRecipe.fromJson(recipe))
+          .toList();
+      
+      await _cacheData(_CACHE_SUBMITTED_RECIPES, jsonEncode(response));
+      
+      return recipes;
+    } catch (e) {
+      throw Exception('Failed to load submitted recipes: $e');
+    }
+  }
+
+  static Future<void> submitRecipe(
+      String recipeName, String ingredients, String directions) async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'submitted_recipes',
+        data: {
+          'user_id': currentUserId!,
+          'recipe_name': recipeName,
+          'ingredients': ingredients,
+          'directions': directions,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache(_CACHE_SUBMITTED_RECIPES);
+      await addXP(50, reason: 'Recipe submitted');
+      await checkAchievements();
+    } catch (e) {
+      throw Exception('Failed to submit recipe: $e');
+    }
+  }
+
+  static Future<void> updateSubmittedRecipe({
+    required int recipeId,
+    required String recipeName,
+    required String ingredients,
+    required String directions,
+  }) async {
+    ensureUserAuthenticated();
+
+    try {
+      final recipeData = await _workerQuery(
+        action: 'select',
+        table: 'submitted_recipes',
+        columns: ['user_id'],
+        filters: {'id': recipeId},
+        limit: 1,
+      );
+
+      if (recipeData == null || (recipeData as List).isEmpty) {
+        throw Exception('Recipe not found');
+      }
+
+      if (recipeData[0]['user_id'] != currentUserId) {
+        throw Exception('You can only edit your own recipes');
+      }
+
+      await _workerQuery(
+        action: 'update',
+        table: 'submitted_recipes',
+        filters: {'id': recipeId},
+        data: {
+          'recipe_name': recipeName,
+          'ingredients': ingredients,
+          'directions': directions,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache(_CACHE_SUBMITTED_RECIPES);
+    } catch (e) {
+      throw Exception('Failed to update recipe: $e');
+    }
+  }
+
+  static Future<void> deleteSubmittedRecipe(int recipeId) async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'submitted_recipes',
+        filters: {'id': recipeId},
+      );
+      
+      await _clearCache(_CACHE_SUBMITTED_RECIPES);
+    } catch (e) {
+      throw Exception('Failed to delete submitted recipe: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getRecipeById(int recipeId) async {
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'submitted_recipes',
+        columns: ['*'],
+        filters: {'id': recipeId},
+        limit: 1,
+      );
+
+      if (response == null || (response as List).isEmpty) {
+        return null;
+      }
+
+      return response[0];
+    } catch (e) {
+      throw Exception('Failed to get recipe: $e');
+    }
+  }
+
+  static String generateShareableRecipeText(Map<String, dynamic> recipe) {
+    final name = recipe['recipe_name'] ?? 'Unnamed Recipe';
+    final ingredients = recipe['ingredients'] ?? 'No ingredients listed';
+    final directions = recipe['directions'] ?? 'No directions provided';
+
+    return '''
+🍽️ Recipe: $name
+
+📋 Ingredients:
+$ingredients
+
+👨‍🍳 Directions:
+$directions
+
+---
+Shared from Recipe Scanner App
+''';
+  }
+
+  // ==================================================
+  // SCAN COUNT MANAGEMENT
+  // ==================================================
+  
+  static Future<int> getDailyScanCount() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return 0;
+
+    try {
+      final profile = await getUserProfile(userId);
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      final lastScanDate = profile?['last_scan_date'] ?? '';
+
+      if (lastScanDate != today) {
+        await _workerQuery(
+          action: 'update',
+          table: 'profiles',
+          filters: {'id': userId},
+          data: {
+            'daily_scans_used': 0,
+            'last_scan_date': today,
+          },
+        );
+        
+        await _clearCache('$_CACHE_USER_PROFILE$userId');
+        await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+        
+        return 0;
+      }
+
+      return profile?['daily_scans_used'] ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  static Future<bool> canPerformScan() async {
+    try {
+      if (await isPremiumUser()) return true;
+      
+      final dailyCount = await getDailyScanCount();
+      return dailyCount < 3;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  static Future<void> incrementScanCount() async {
+    try {
+      if (await isPremiumUser()) return;
+
+      final currentCount = await getDailyScanCount();
+      
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': currentUserId!},
+        data: {
+          'daily_scans_used': currentCount + 1,
+        },
+      );
+      
+      await _clearCache('$_CACHE_USER_PROFILE$currentUserId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$currentUserId');
+      
+      await awardBadge('first_scan');
+      final totalScans = currentCount + 1;
+      if (totalScans >= 10) await awardBadge('scans_10');
+      if (totalScans >= 50) await awardBadge('scans_50');
+    } catch (e) {
+      throw Exception('Failed to update scan count: $e');
+    }
+  }
+
+  static Future<bool> isUsernameAvailable(String username) async {
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'profiles',
+        columns: ['id'],
+        filters: {'username': username},
+        limit: 1,
+      );
+      
+      return response == null || (response as List).isEmpty;
+    } catch (e) {
+      throw Exception('Failed to check username availability: $e');
+    }
+  }
+
+  static Future<void> updateProfile({
+    String? username,
+    String? email,
+    String? firstName,
+    String? lastName,
+    String? avatarUrl,
+    String? profilePicture, // now mapped to profile_picture_url
+  }) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final updates = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (username != null) updates['username'] = username;
+      if (email != null) updates['email'] = email;
+      if (firstName != null) updates['first_name'] = firstName;
+      if (lastName != null) updates['last_name'] = lastName;
+      if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+      if (profilePicture != null) updates['profile_picture_url'] = profilePicture;
+
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': currentUserId!},
+        data: updates,
+      );
+      
+      await _clearCache('$_CACHE_USER_PROFILE$currentUserId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$currentUserId');
+          
+    } catch (e) {
+      if (e.toString().contains('duplicate key value') || 
+          e.toString().contains('unique constraint')) {
+        throw Exception('Username is already taken. Please choose a different username.');
+      }
+      throw Exception('Failed to update profile: $e');
+    }
+  }
+
+  static Future<void> setPremiumStatus(String userId, bool isPremium) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'is_premium': isPremium,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_USER_PROFILE$userId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+    } catch (e) {
+      throw Exception('Failed to update premium status: $e');
+    }
+  }
+
+  static Future<bool> isPremiumUser() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return false;
+
+    try {
+      final profile = await getUserProfile(userId);
+      return profile?['is_premium'] ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================================================
+  // USER IMAGES: PROFILE, BACKGROUND, GALLERY (via Worker → R2)
+  // ==================================================
+
+  /// Upload and set the user's main profile picture (profile_picture_url)
+  static Future<String> uploadProfilePicture(File imageFile) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final userId = currentUserId!;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'profile_$timestamp.jpg';
+      final filePath = '$userId/$fileName';
+      
+      // Check file size
+      final fileSize = await imageFile.length();
+      AppConfig.debugPrint('👤 Profile picture size: ${fileSize / 1024 / 1024} MB');
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        throw Exception('Image file too large. Please choose a smaller image (max 10MB).');
+      }
+      
+      // Read and encode image
+      final imageBytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(imageBytes);
+      
+      AppConfig.debugPrint('📤 Uploading profile picture to R2: $filePath');
+      
+      // Upload to R2 via Worker
+      final publicUrl = await _workerStorageUpload(
+        bucket: 'profile-pictures',
+        path: filePath,
+        base64Data: base64Image,
+        contentType: 'image/jpeg',
+      );
+      
+      AppConfig.debugPrint('✅ Profile picture upload successful: $publicUrl');
+      
+      // Update profile with new picture URL
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'profile_picture': publicUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      // Clear cache
+      await _clearCache('$_CACHE_USER_PROFILE$userId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+      
+      AppConfig.debugPrint('✅ Profile picture saved to database');
+      
+      return publicUrl;
+    } on FormatException {
+      throw Exception('Invalid image format. Please choose a valid image file.');
+    } on FileSystemException {
+      throw Exception('Unable to read image file. Please try another image.');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Profile picture upload error: $e');
+      
+      final errorMsg = e.toString().toLowerCase();
+      
+      if (errorMsg.contains('authentication') || errorMsg.contains('401')) {
+        throw Exception('Session expired. Please sign out and sign back in.');
+      } else if (errorMsg.contains('network') || errorMsg.contains('socket')) {
+        throw Exception('Network error. Please check your internet connection and try again.');
+      } else if (errorMsg.contains('timeout')) {
+        throw Exception('Upload timeout. Please check your connection and try again.');
+      } else if (errorMsg.contains('413') || errorMsg.contains('too large')) {
+        throw Exception('Image file too large. Please choose a smaller image.');
+      } else if (errorMsg.contains('permission') || errorMsg.contains('403')) {
+        throw Exception('Permission denied. Please try signing out and back in.');
+      }
+      
+      rethrow;
+    }
+  }
+
+
+  /// Upload and set the user's profile background (background_picture_url)
+  static Future<String> uploadBackgroundPicture(File imageFile) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final userId = currentUserId!;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'background_$timestamp.jpg';
+      final filePath = '$userId/$fileName';
+      
+      // Check file size
+      final fileSize = await imageFile.length();
+      AppConfig.debugPrint('🏞️ Background picture size: ${fileSize / 1024 / 1024} MB');
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        throw Exception('Image file too large. Please choose a smaller image (max 10MB).');
+      }
+      
+      // Read and encode image
+      final imageBytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(imageBytes);
+      
+      AppConfig.debugPrint('📤 Uploading background picture to R2: $filePath');
+      
+      // Upload to R2 via Worker
+      final publicUrl = await _workerStorageUpload(
+        bucket: 'profile-pictures',
+        path: filePath,
+        base64Data: base64Image,
+        contentType: 'image/jpeg',
+      );
+      
+      AppConfig.debugPrint('✅ Background picture upload successful: $publicUrl');
+      
+      // Update profile with new background URL
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'profile_background': publicUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      // Clear cache
+      await _clearCache('$_CACHE_USER_PROFILE$userId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+      
+      AppConfig.debugPrint('✅ Background picture saved to database');
+      
+      return publicUrl;
+    } on FormatException {
+      throw Exception('Invalid image format. Please choose a valid image file.');
+    } on FileSystemException {
+      throw Exception('Unable to read image file. Please try another image.');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Background picture upload error: $e');
+      
+      final errorMsg = e.toString().toLowerCase();
+      
+      if (errorMsg.contains('authentication') || errorMsg.contains('401')) {
+        throw Exception('Session expired. Please sign out and sign back in.');
+      } else if (errorMsg.contains('network') || errorMsg.contains('socket')) {
+        throw Exception('Network error. Please check your internet connection and try again.');
+      } else if (errorMsg.contains('timeout')) {
+        throw Exception('Upload timeout. Please check your connection and try again.');
+      } else if (errorMsg.contains('413') || errorMsg.contains('too large')) {
+        throw Exception('Image file too large. Please choose a smaller image.');
+      } else if (errorMsg.contains('permission') || errorMsg.contains('403')) {
+        throw Exception('Permission denied. Please try signing out and back in.');
+      }
+      
+      rethrow;
+    }
+  }
+
+  /// Remove the background picture URL and delete the file from storage
+  static Future<void> removeBackgroundPicture() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final userId = currentUserId!;
+      
+      // Update profile to remove background
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'profile_background': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      // Clear cache
+      await _clearCache('$_CACHE_USER_PROFILE$userId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+      
+      AppConfig.debugPrint('✅ Background picture removed');
+    } catch (e) {
+      throw Exception('Failed to remove background picture: $e');
+    }
+  }
+
+
+  /// Upload to the user's photo album & append to pictures JSON array
+  static Future<String> uploadPicture(File imageFile) async {
+    ensureUserAuthenticated();
+   
+    try {
+      final userId = currentUserId!;
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'picture_$timestamp.jpg';
+      final filePath = '$userId/$fileName';
+     
+      // CHECK FILE SIZE FIRST
+      final fileSize = await imageFile.length();
+      AppConfig.debugPrint('📸 Image file size: ${fileSize / 1024 / 1024} MB');
+     
+      // Limit to 10MB to avoid Worker payload limits
+      if (fileSize > 10 * 1024 * 1024) {
+        throw Exception('Image file too large. Please choose a smaller image (max 10MB).');
+      }
+     
+      // Read and encode image
+      final imageBytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(imageBytes);
+     
+      AppConfig.debugPrint('📤 Uploading to R2 (album): $filePath');
+     
+      // Upload to R2 via Worker → photo-album bucket
+      final publicUrl = await _workerStorageUpload(
+        bucket: _ALBUM_BUCKET,
+        path: filePath,
+        base64Data: base64Image,
+        contentType: 'image/jpeg',
+      );
+     
+      AppConfig.debugPrint('✅ Upload successful: $publicUrl');
+     
+      // Get current pictures array
+      final profile = await getCurrentUserProfile();
+      final currentPictures = profile?['pictures'];
+     
+      List<String> picturesList = [];
+      if (currentPictures != null && currentPictures.isNotEmpty) {
+        try {
+          picturesList = List<String>.from(jsonDecode(currentPictures));
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Error parsing existing pictures: $e');
+          picturesList = [];
+        }
+      }
+     
+      picturesList.add(publicUrl);
+     
+      AppConfig.debugPrint('💾 Updating profile with ${picturesList.length} pictures');
+     
+      // Update profile with new pictures array
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'pictures': jsonEncode(picturesList),
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+     
+      // Clear cache
+      await _clearCache('$_CACHE_USER_PROFILE$userId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+     
+      AppConfig.debugPrint('✅ Profile updated successfully');
+     
+      return publicUrl;
+    } on FormatException {
+      throw Exception('Invalid image format. Please choose a valid image file.');
+    } on FileSystemException {
+      throw Exception('Unable to read image file. Please try another image.');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Upload error: $e');
+     
+      // Provide user-friendly error messages
+      final errorMsg = e.toString().toLowerCase();
+     
+      if (errorMsg.contains('authentication') || errorMsg.contains('401')) {
+        throw Exception('Session expired. Please sign out and sign back in.');
+      } else if (errorMsg.contains('network') || errorMsg.contains('socket')) {
+        throw Exception('Network error. Please check your internet connection and try again.');
+      } else if (errorMsg.contains('timeout')) {
+        throw Exception('Upload timeout. Please check your connection and try again.');
+      } else if (errorMsg.contains('413') || errorMsg.contains('too large')) {
+        throw Exception('Image file too large. Please choose a smaller image.');
+      } else if (errorMsg.contains('permission') || errorMsg.contains('403')) {
+        throw Exception('Permission denied. Please try signing out and back in.');
+      }
+     
+      rethrow;
+    }
+  }
+
+  static Future<List<String>> getUserPictures(String userId) async {
+    try {
+      final profile = await getUserProfile(userId);
+      final picturesJson = profile?['pictures'];
+     
+      if (picturesJson == null || picturesJson.isEmpty) {
+        return [];
+      }
+     
+      try {
+        return List<String>.from(jsonDecode(picturesJson));
+      } catch (e) {
+        AppConfig.debugPrint('Error parsing pictures: $e');
+        return [];
+      }
+    } catch (e) {
+      AppConfig.debugPrint('Error getting pictures: $e');
+      return [];
+    }
+  }
+
+  static Future<List<String>> getCurrentUserPictures() async {
+    if (currentUserId == null) return [];
+    return getUserPictures(currentUserId!);
+  }
+
+  static Future<void> deletePicture(String pictureUrl) async {
+    ensureUserAuthenticated();
+   
+    try {
+      final userId = currentUserId!;
+     
+      // Delete from storage (photo-album or whatever bucket the URL points to)
+      try {
+        await _deleteFileByPublicUrl(pictureUrl);
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Failed to delete picture from storage: $e');
+      }
+     
+      // Remove from profile's pictures array
+      final profile = await getCurrentUserProfile();
+      final currentPictures = profile?['pictures'];
+     
+      if (currentPictures != null && currentPictures.isNotEmpty) {
+        List<String> picturesList = List<String>.from(jsonDecode(currentPictures));
+        picturesList.remove(pictureUrl);
+       
+        await _workerQuery(
+          action: 'update',
+          table: 'profiles',
+          filters: {'id': userId},
+          data: {
+            'pictures': jsonEncode(picturesList),
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+        );
+       
+        await _clearCache('$_CACHE_USER_PROFILE$userId');
+        await _clearCache('$_CACHE_PROFILE_TIMESTAMP$userId');
+       
+        AppConfig.debugPrint('✅ Picture reference removed from profile');
+      }
+    } catch (e) {
+      AppConfig.debugPrint('❌ Delete error: $e');
+      throw Exception('Failed to delete picture: $e');
+    }
+  }
+
+  static Future<void> setPictureAsProfilePicture(String pictureUrl) async {
+    ensureUserAuthenticated();
+   
+    try {
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': currentUserId!},
+        data: {
+          'profile_picture_url': pictureUrl,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+     
+      await _clearCache('$_CACHE_USER_PROFILE$currentUserId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$currentUserId');
+     
+      AppConfig.debugPrint('✅ Profile picture updated (from gallery)');
+    } catch (e) {
+      throw Exception('Failed to set profile picture: $e');
+    }
+  }
+
+
+  // ==================================================
+  // FRIENDS LIST VISIBILITY
+  // ==================================================
+  
+  static Future<List<Map<String, dynamic>>> getUserFriends(String userId) async {
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['*'],
+        filters: {'status': 'accepted'},
+      );
+
+      final friends = <Map<String, dynamic>>[];
+      for (var row in response as List) {
+        if (row['sender'] == userId || row['receiver'] == userId) {
+          final friendId = row['sender'] == userId ? row['receiver'] : row['sender'];
+          
+          final friendProfile = await _workerQuery(
+            action: 'select',
+            table: 'profiles',
+            columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url'],
+            filters: {'id': friendId},
+            limit: 1,
+          );
+          
+          if (friendProfile != null && (friendProfile as List).isNotEmpty) {
+            friends.add(friendProfile[0]);
+          }
+        }
+      }
+      return friends;
+    } catch (e) {
+      throw Exception('Failed to load friends list: $e');
+    }
+  }
+
+  static Future<bool> getFriendsListVisibility() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final profile = await getCurrentUserProfile();
+      return profile?['friends_list_visible'] ?? true;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  static Future<void> updateFriendsListVisibility(bool isVisible) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': currentUserId!},
+        data: {
+          'friends_list_visible': isVisible,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_USER_PROFILE$currentUserId');
+      await _clearCache('$_CACHE_PROFILE_TIMESTAMP$currentUserId');
+    } catch (e) {
+      throw Exception('Failed to update privacy setting: $e');
+    }
+  }
+
+  // ==================================================
+  // CONTACT MESSAGES
+  // ==================================================
+  
+  static Future<void> submitContactMessage({
+    required String name,
+    required String email,
+    required String message,
+  }) async {
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'contact_messages',
+        data: {
+          'name': name,
+          'email': email,
+          'message': message,
+          'user_id': currentUserId,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to submit contact message: $e');
+    }
+  }
+
+  // ==================================================
+  // FAVORITE RECIPES (CACHED)
+  // ==================================================
+  
+  static Future<List<FavoriteRecipe>> getFavoriteRecipes() async {
+    if (currentUserId == null) return [];
+
+    try {
+      final cached = await _getCachedData(_CACHE_FAVORITE_RECIPES);
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        return decoded.map((recipe) => FavoriteRecipe.fromJson(recipe)).toList();
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'favorite_recipes',
+        columns: ['*'],
+        filters: {'user_id': currentUserId!},
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      final recipes = (response as List)
+          .map((recipe) => FavoriteRecipe.fromJson(recipe))
+          .toList();
+      
+      await _cacheData(_CACHE_FAVORITE_RECIPES, jsonEncode(response));
+      
+      return recipes;
+    } catch (e) {
+      throw Exception('Failed to load favorite recipes: $e');
+    }
+  }
+
+  static Future<void> addFavoriteRecipe(
+      String recipeName, String ingredients, String directions) async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'favorite_recipes',
+        data: {
+          'user_id': currentUserId!,
+          'recipe_name': recipeName,
+          'ingredients': ingredients,
+          'directions': directions,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache(_CACHE_FAVORITE_RECIPES);
+    } catch (e) {
+      throw Exception('Failed to add favorite recipe: $e');
+    }
+  }
+
+  static Future<void> removeFavoriteRecipe(int recipeId) async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'favorite_recipes',
+        filters: {'id': recipeId},
+      );
+      
+      await _clearCache(_CACHE_FAVORITE_RECIPES);
+    } catch (e) {
+      throw Exception('Failed to remove favorite recipe: $e');
+    }
+  }
+
+  static Future<bool> isRecipeFavorited(String recipeName) async {
+    if (currentUserId == null) return false;
+
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'favorite_recipes',
+        columns: ['id'],
+        filters: {
+          'user_id': currentUserId!,
+          'recipe_name': recipeName,
+        },
+        limit: 1,
+      );
+
+      return response != null && (response as List).isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ==================================================
+  // GROCERY LIST - ENHANCED WITH QUANTITY SUPPORT
+  // ==================================================
+  
+  static Future<List<GroceryItem>> getGroceryList() async {
+    if (currentUserId == null) return [];
+
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'grocery_items',
+        columns: ['*'],
+        filters: {'user_id': currentUserId!},
+        orderBy: 'order_index',
+        ascending: true,
+      );
+
+      return (response as List)
+          .map((item) => GroceryItem.fromJson(item))
+          .toList();
+    } catch (e) {
+      throw Exception('Failed to load grocery list: $e');
+    }
+  }
+
+  static Future<void> saveGroceryList(List<String> items) async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'grocery_items',
+        filters: {'user_id': currentUserId!},
+      );
+
+      if (items.isNotEmpty) {
+        final groceryItems = items.asMap().entries.map((entry) => {
+              'user_id': currentUserId!,
+              'item': entry.value,
+              'order_index': entry.key,
+              'created_at': DateTime.now().toIso8601String(),
+            }).toList();
+
+        for (final item in groceryItems) {
+          await _workerQuery(
+            action: 'insert',
+            table: 'grocery_items',
+            data: item,
+          );
+        }
+      }
+    } catch (e) {
+      throw Exception('Failed to save grocery list: $e');
+    }
+  }
+
+  static Future<void> clearGroceryList() async {
+    ensureUserAuthenticated();
+
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'grocery_items',
+        filters: {'user_id': currentUserId!},
+      );
+    } catch (e) {
+      throw Exception('Failed to clear grocery list: $e');
+    }
+  }
+
+  static Map<String, String> parseGroceryItem(String itemText) {
+    final parts = itemText.split(' x ');
+    
+    if (parts.length == 2) {
+      return {
+        'quantity': parts[0].trim(),
+        'name': parts[1].trim(),
+      };
+    } else {
+      return {
+        'quantity': '',
+        'name': itemText.trim(),
+      };
+    }
+  }
+
+  static String formatGroceryItem(String name, String quantity) {
+    if (quantity.isNotEmpty) {
+      return '$quantity x $name';
+    } else {
+      return name;
+    }
+  }
+
+  static Future<void> addToGroceryList(String item, {String? quantity}) async {
+    ensureUserAuthenticated();
+
+    try {
+      final currentItems = await getGroceryList();
+      final newOrderIndex = currentItems.length;
+      
+      final formattedItem = quantity != null && quantity.isNotEmpty 
+          ? '$quantity x $item' 
+          : item;
+
+      await _workerQuery(
+        action: 'insert',
+        table: 'grocery_items',
+        data: {
+          'user_id': currentUserId!,
+          'item': formattedItem,
+          'order_index': newOrderIndex,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to add item to grocery list: $e');
+    }
+  }
+
+  static List<String> _parseIngredients(String ingredientsText) {
+    final items = ingredientsText
+        .split(RegExp(r'[,\n•\-\*]|\d+\.'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .map((item) {
+          item = item.replaceAll(RegExp(r'^\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'), '');
+          item = item.replaceAll(RegExp(r'^\d+/\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'), '');
+          item = item.replaceAll(RegExp(r'^(a\s+)?(pinch\s+of\s+|dash\s+of\s+)?'), '');
+          return item.trim();
+        })
+        .where((item) => item.isNotEmpty && item.length > 2)
+        .toList();
+    return items;
+  }
+
+  static bool _areItemsSimilar(String item1, String item2) {
+    final clean1 = item1.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    final clean2 = item2.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    
+    if (clean1 == clean2) return true;
+    if (clean1.contains(clean2) || clean2.contains(clean1)) return true;
+    
+    return false;
+  }
+
+  static Future<Map<String, dynamic>> addRecipeToShoppingList(
+    String recipeName,
+    String ingredients,
+  ) async {
+    ensureUserAuthenticated();
+
+    try {
+      final currentItems = await getGroceryList();
+      final currentItemNames = currentItems.map((item) {
+        final parsed = parseGroceryItem(item.item);
+        return parsed['name']!.toLowerCase();
+      }).toList();
+      
+      final newIngredients = _parseIngredients(ingredients);
+      
+      final itemsToAdd = <String>[];
+      final skippedItems = <String>[];
+      
+      for (final newItem in newIngredients) {
+        bool isDuplicate = false;
+        
+        for (final existingItemName in currentItemNames) {
+          if (_areItemsSimilar(newItem.toLowerCase(), existingItemName)) {
+            isDuplicate = true;
+            skippedItems.add(newItem);
+            break;
+          }
+        }
+        
+        if (!isDuplicate) {
+          bool isDuplicateInNewItems = false;
+          for (final addedItem in itemsToAdd) {
+            if (_areItemsSimilar(newItem.toLowerCase(), addedItem.toLowerCase())) {
+              isDuplicateInNewItems = true;
+              break;
+            }
+          }
+          
+          if (!isDuplicateInNewItems) {
+            itemsToAdd.add(newItem);
+          } else {
+            skippedItems.add(newItem);
+          }
+        }
+      }
+
+      final updatedList = [
+        ...currentItems.map((item) => item.item),
+        ...itemsToAdd,
+      ];
+      await saveGroceryList(updatedList);
+
+      return {
+        'added': itemsToAdd.length,
+        'skipped': skippedItems.length,
+        'addedItems': itemsToAdd,
+        'skippedItems': skippedItems,
+        'recipeName': recipeName,
+      };
+    } catch (e) {
+      throw Exception('Failed to add recipe to shopping list: $e');
+    }
+  }
+
+  static Future<int> getShoppingListCount() async {
+    try {
+      final items = await getGroceryList();
+      return items.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // ==================================================
+  // SOCIAL FEATURES - FRIENDS (CACHED)
+  // ==================================================
+
+  static Future<List<Map<String, dynamic>>> getFriends() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final cacheKey = '$_CACHE_FRIENDS$currentUserId';
+      final cached = await _getCachedData(cacheKey);
+      
+      if (cached != null) {
+        final List<dynamic> decoded = jsonDecode(cached);
+        return List<Map<String, dynamic>>.from(decoded);
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['*'],
+        filters: {'status': 'accepted'},
+      );
+
+      final friends = <Map<String, dynamic>>[];
+      for (var row in response as List) {
+        if (row['sender'] == currentUserId || row['receiver'] == currentUserId) {
+          final friendId = row['sender'] == currentUserId ? row['receiver'] : row['sender'];
+          
+          final friendProfile = await _workerQuery(
+            action: 'select',
+            table: 'profiles',
+            columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url'],
+            filters: {'id': friendId},
+            limit: 1,
+          );
+          
+          if (friendProfile != null && (friendProfile as List).isNotEmpty) {
+            friends.add(friendProfile[0]);
+          }
+        }
+      }
+      
+      await _cacheData(cacheKey, jsonEncode(friends));
+      
+      return friends;
+    } catch (e) {
+      throw Exception('Failed to load friends: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getFriendRequests() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['*'],
+        filters: {
+          'receiver': currentUserId!,
+          'status': 'pending',
+        },
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      final requests = <Map<String, dynamic>>[];
+      for (var row in response as List) {
+        final senderId = row['sender'];
+        
+        final senderProfile = await _workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url'],
+          filters: {'id': senderId},
+          limit: 1,
+        );
+        
+        if (senderProfile != null && (senderProfile as List).isNotEmpty) {
+          requests.add({
+            'id': row['id'],
+            'created_at': row['created_at'],
+            'sender': senderProfile[0],
+          });
+        }
+      }
+
+      return requests;
+    } catch (e) {
+      throw Exception('Failed to load friend requests: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getSentFriendRequests() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['*'],
+        filters: {
+          'sender': currentUserId!,
+          'status': 'pending',
+        },
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      final requests = <Map<String, dynamic>>[];
+      for (var row in response as List) {
+        final receiverId = row['receiver'];
+        
+        final receiverProfile = await _workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url'],
+          filters: {'id': receiverId},
+          limit: 1,
+        );
+        
+        if (receiverProfile != null && (receiverProfile as List).isNotEmpty) {
+          requests.add({
+            'id': row['id'],
+            'created_at': row['created_at'],
+            'receiver': receiverProfile[0],
+          });
+        }
+      }
+
+      return requests;
+    } catch (e) {
+      throw Exception('Failed to load sent friend requests: $e');
+    }
+  }
+
+  static Future<String?> sendFriendRequest(String receiverId) async {
+    ensureUserAuthenticated();
+    
+    if (receiverId == currentUserId) {
+      throw Exception('Cannot send friend request to yourself');
+    }
+    
+    try {
+      // Fetch ALL friend requests (no complex filters)
+      final existing = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['id', 'status', 'sender', 'receiver', 'created_at'],
+      );
+
+      // Check them locally in Dart instead of using 'or' filters
+      if (existing is List) {
+        for (var row in existing) {
+          if ((row['sender'] == currentUserId && row['receiver'] == receiverId) ||
+              (row['sender'] == receiverId && row['receiver'] == currentUserId)) {
+            
+            if (row['status'] == 'accepted') {
+              throw Exception('You are already friends with this user');
+            } else if (row['status'] == 'pending') {
+              if (row['sender'] == receiverId) {
+                throw Exception('This user has already sent you a friend request. Check your pending requests!');
+              }
+              throw Exception('Friend request already sent');
+            }
+          }
+        }
+      }
+
+      // No existing request found, proceed with insert
+      final response = await _workerQuery(
+        action: 'insert',
+        table: 'friend_requests',
+        data: {
+          'sender': currentUserId!,
+          'receiver': receiverId,
+          'status': 'pending',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Handle response from Worker
+      if (response is Map<String, dynamic>) {
+        // Check if it's a duplicate response
+        if (response['status'] == 'duplicate') {
+          throw Exception('Friend request already sent');
+        }
+        // Single inserted row returned as Map
+        if (response['id'] != null) {
+          return response['id'].toString();
+        }
+        if (response['success'] == true) {
+          return null;
+        }
+      }
+
+      // List of rows returned
+      if (response is List && response.isNotEmpty) {
+        return response[0]['id'].toString();
+      }
+      
+      return null;
+    } catch (e) {
+      throw Exception('Failed to send friend request: $e');
+    }
+  }
+
+  static Future<void> acceptFriendRequest(String requestId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final requestData = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['receiver', 'status'],
+        filters: {'id': requestId},
+        limit: 1,
+      );
+      
+      if (requestData == null || (requestData as List).isEmpty) {
+        throw Exception('Friend request not found');
+      }
+      
+      final request = requestData[0];
+      
+      if (request['receiver'] != currentUserId) {
+        throw Exception('You cannot accept this friend request');
+      }
+      
+      if (request['status'] != 'pending') {
+        throw Exception('This friend request has already been ${request['status']}');
+      }
+
+      await _workerQuery(
+        action: 'update',
+        table: 'friend_requests',
+        filters: {'id': requestId},
+        data: {
+          'status': 'accepted',
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_FRIENDS$currentUserId');
+    } catch (e) {
+      throw Exception('Failed to accept friend request: $e');
+    }
+  }
+
+  static Future<void> declineFriendRequest(String requestId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'friend_requests',
+        filters: {'id': requestId},
+      );
+    } catch (e) {
+      throw Exception('Failed to decline friend request: $e');
+    }
+  }
+
+  static Future<void> cancelFriendRequestById(String requestId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final requestData = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['sender'],
+        filters: {'id': requestId},
+        limit: 1,
+      );
+      
+      if (requestData == null || (requestData as List).isEmpty) {
+        throw Exception('Friend request not found');
+      }
+      
+      if (requestData[0]['sender'] != currentUserId) {
+        throw Exception('You cannot cancel this friend request');
+      }
+
+      await _workerQuery(
+        action: 'delete',
+        table: 'friend_requests',
+        filters: {'id': requestId},
+      );
+    } catch (e) {
+      throw Exception('Failed to cancel friend request: $e');
+    }
+  }
+
+  static Future<void> cancelFriendRequest(String receiverId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'friend_requests',
+        filters: {
+          'sender': currentUserId!,
+          'receiver': receiverId,
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to cancel friend request: $e');
+    }
+  }
+
+  static Future<void> removeFriend(String friendId) async {
+    ensureUserAuthenticated();
+
+    try {
+      // Fetch ALL friend requests (Worker cannot do OR filters)
+      final allRequests = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['id', 'sender', 'receiver', 'status'],
+      );
+
+      // Filter in Dart only
+      for (var row in allRequests as List) {
+        final sender = row['sender'];
+        final receiver = row['receiver'];
+        final status = row['status'];
+
+        // Only delete THIS specific friendship
+        if (status == 'accepted' &&
+            ((sender == currentUserId && receiver == friendId) ||
+            (sender == friendId && receiver == currentUserId))) {
+
+          await _workerQuery(
+            action: 'delete',
+            table: 'friend_requests',
+            filters: {'id': row['id']},
+          );
+        }
+      }
+
+      await _clearCache('$_CACHE_FRIENDS$currentUserId');
+    } catch (e) {
+      throw Exception('Failed to remove friend: $e');
+    }
+  }
+
+  static Future<Map<String, dynamic>> checkFriendshipStatus(String userId) async {
+    ensureUserAuthenticated();
+    
+    if (userId == currentUserId) {
+      return {
+        'status': 'self',
+        'requestId': null,
+        'canSendRequest': false,
+        'isOutgoing': false,
+        'message': 'This is you!',
+      };
+    }
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'friend_requests',
+        columns: ['id', 'status', 'sender', 'receiver', 'created_at'],
+      );
+
+      for (var row in response as List) {
+        if ((row['sender'] == currentUserId && row['receiver'] == userId) ||
+            (row['sender'] == userId && row['receiver'] == currentUserId)) {
+          
+          final isOutgoing = row['sender'] == currentUserId;
+          final status = row['status'];
+
+          if (status == 'accepted') {
+            return {
+              'status': 'accepted',
+              'requestId': row['id'],
+              'canSendRequest': false,
+              'isOutgoing': isOutgoing,
+              'message': 'Friends',
+            };
+          } else if (status == 'pending') {
+            if (isOutgoing) {
+              return {
+                'status': 'pending_sent',
+                'requestId': row['id'],
+                'canSendRequest': false,
+                'isOutgoing': true,
+                'message': 'Friend request sent',
+              };
+            } else {
+              return {
+                'status': 'pending_received',
+                'requestId': row['id'],
+                'canSendRequest': false,
+                'isOutgoing': false,
+                'message': 'Friend request received',
+              };
+            }
+          }
+        }
+      }
+
+      return {
+        'status': 'none',
+        'requestId': null,
+        'canSendRequest': true,
+        'isOutgoing': false,
+        'message': 'Not friends',
+      };
+    } catch (e) {
+      return {
+        'status': 'error',
+        'requestId': null,
+        'canSendRequest': false,
+        'isOutgoing': false,
+        'message': 'Error checking status',
+      };
+    }
+  }
+
+  // ==================================================
+  // MESSAGING (SMART CACHING - OLD MESSAGES CACHED)
+  // ==================================================
+
+  static Future<List<Map<String, dynamic>>> getMessages(String friendId, {bool forceRefresh = false}) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final cacheKey = '$_CACHE_MESSAGES${currentUserId}_$friendId';
+      final lastTimeKey = '$_CACHE_LAST_MESSAGE_TIME${currentUserId}_$friendId';
+      
+      if (!forceRefresh) {
+        final cached = await _getCachedData(cacheKey);
+        final lastFetchTime = await _getCachedData(lastTimeKey);
+        
+        if (cached != null && lastFetchTime != null) {
+          final List<dynamic> cachedList = jsonDecode(cached);
+          final cachedMessages = List<Map<String, dynamic>>.from(cachedList);
+          
+          final allMessages = await _workerQuery(
+            action: 'select',
+            table: 'messages',
+            columns: ['*'],
+            orderBy: 'created_at',
+            ascending: true,
+          );
+          
+          final newMessages = <Map<String, dynamic>>[];
+          for (var msg in allMessages as List) {
+            if ((msg['sender'] == currentUserId && msg['receiver'] == friendId) ||
+                (msg['sender'] == friendId && msg['receiver'] == currentUserId)) {
+              if (DateTime.parse(msg['created_at']).isAfter(DateTime.parse(lastFetchTime))) {
+                newMessages.add(msg);
+              }
+            }
+          }
+          
+          if (newMessages.isNotEmpty) {
+            final combined = [...cachedMessages, ...newMessages];
+            
+            await _cacheData(cacheKey, jsonEncode(combined));
+            await _cacheData(lastTimeKey, DateTime.now().toIso8601String());
+            
+            return combined;
+          }
+          
+          return cachedMessages;
+        }
+      }
+      
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'messages',
+        columns: ['*'],
+        orderBy: 'created_at',
+        ascending: true,
+      );
+
+      final messages = <Map<String, dynamic>>[];
+      for (var msg in response as List) {
+        if ((msg['sender'] == currentUserId && msg['receiver'] == friendId) ||
+            (msg['sender'] == friendId && msg['receiver'] == currentUserId)) {
+          messages.add(msg);
+        }
+      }
+      
+      await _cacheData(cacheKey, jsonEncode(messages));
+      await _cacheData(lastTimeKey, DateTime.now().toIso8601String());
+      
+      return messages;
+    } catch (e) {
+      throw Exception('Failed to load messages: $e');
+    }
+  }
+
+  static Future<void> sendMessage(String receiverId, String content) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'messages',
+        data: {
+          'sender': currentUserId!,
+          'receiver': receiverId,
+          'content': content,
+          'is_read': false,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      await _clearCache('$_CACHE_MESSAGES${currentUserId}_$receiverId');
+      await _clearCache('$_CACHE_LAST_MESSAGE_TIME${currentUserId}_$receiverId');
+    } catch (e) {
+      throw Exception('Failed to send message: $e');
+    }
+  }
+
+  static Future<int> getUnreadMessageCount() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'messages',
+        columns: ['id'],
+        filters: {
+          'receiver': currentUserId!,
+          'is_read': false,
+        },
+      );
+
+      return (response as List).length;
+    } catch (e) {
+      print('Error getting unread count: $e');
+      return 0;
+    }
+  }
+
+  static Future<void> markMessageAsRead(String messageId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'update',
+        table: 'messages',
+        filters: {'id': messageId},
+        data: {'is_read': true},
+      );
+    } catch (e) {
+      print('Error marking message as read: $e');
+    }
+  }
+
+  static Future<void> markMessagesAsReadFrom(String senderId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final messages = await _workerQuery(
+        action: 'select',
+        table: 'messages',
+        columns: ['id'],
+        filters: {
+          'receiver': currentUserId!,
+          'sender': senderId,
+          'is_read': false,
+        },
+      );
+
+      for (var msg in messages as List) {
+        await _workerQuery(
+          action: 'update',
+          table: 'messages',
+          filters: {'id': msg['id']},
+          data: {'is_read': true},
+        );
+      }
+    } catch (e) {
+      print('Error marking messages as read: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getChatList() async {
+    ensureUserAuthenticated();
+    
+    try {
+      final friends = await getFriends();
+      final chats = <Map<String, dynamic>>[];
+
+      final allMessages = await _workerQuery(
+        action: 'select',
+        table: 'messages',
+        columns: ['*'],
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      for (final friend in friends) {
+        final friendId = friend['id'];
+        
+        Map<String, dynamic>? lastMessage;
+        for (var msg in allMessages as List) {
+          if ((msg['sender'] == currentUserId && msg['receiver'] == friendId) ||
+              (msg['sender'] == friendId && msg['receiver'] == currentUserId)) {
+            lastMessage = msg;
+            break;
+          }
+        }
+
+        chats.add({
+          'friend': friend,
+          'lastMessage': lastMessage,
+        });
+      }
+
+      chats.sort((a, b) {
+        final aTime = a['lastMessage']?['created_at'];
+        final bTime = b['lastMessage']?['created_at'];
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
+      });
+
+      return chats;
+    } catch (e) {
+      throw Exception('Failed to load chat list: $e');
+    }
+  }
+
+  // ==================================================
+  // USER SEARCH (Always fetch fresh)
+  // ==================================================
+
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final searchQuery = query.trim();
+      if (searchQuery.isEmpty) return [];
+
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'profiles',
+        columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url'],
+        limit: 50,
+      );
+
+      final results = <Map<String, dynamic>>[];
+      final lowerQuery = searchQuery.toLowerCase();
+      
+      for (var user in response as List) {
+        if (user['id'] == currentUserId) continue;
+        
+        final email = (user['email'] ?? '').toLowerCase();
+        final username = (user['username'] ?? '').toLowerCase();
+        final firstName = (user['first_name'] ?? '').toLowerCase();
+        final lastName = (user['last_name'] ?? '').toLowerCase();
+        
+        if (email.contains(lowerQuery) ||
+            username.contains(lowerQuery) ||
+            firstName.contains(lowerQuery) ||
+            lastName.contains(lowerQuery)) {
+          results.add(user);
+        }
+      }
+
+      return results;
+    } catch (e) {
+      throw Exception('Failed to search users: $e');
+    }
+  }
+
+  static Future<void> debugTestUserSearch() async {
+    ensureUserAuthenticated();
+    
+    try {
+      print('🔍 DEBUG: Starting user search test...');
+      print('📝 Current user ID: $currentUserId');
+      
+      print('\n--- TEST 1: Fetching all users via Worker ---');
+      final allUsers = await _workerQuery(
+        action: 'select',
+        table: 'profiles',
+        columns: ['id', 'email', 'username', 'first_name', 'last_name'],
+        limit: 10,
+      );
+      
+      final userList = (allUsers as List).where((u) => u['id'] != currentUserId).toList();
+      print('✅ Found ${userList.length} users in database');
+      for (var user in userList) {
+        print('  👤 ${user['username'] ?? user['email']} (${user['first_name']} ${user['last_name']})');
+      }
+      
+      print('\n--- TEST 2: Testing basic search via Worker ---');
+      final searchResults = await searchUsers('test');
+      print('✅ Search found ${searchResults.length} results');
+      
+      print('\n✅ DEBUG TEST COMPLETED (via Cloudflare Worker)');
+    } catch (e) {
+      print('❌ DEBUG TEST FAILED: $e');
+      throw Exception('Debug test failed: $e');
+    }
+  }
+
+  // ==================================================
+  // RECIPE COMMENTS & RATINGS
+  // ==================================================
+
+  static Future<List<Map<String, dynamic>>> getRecipeComments(int recipeId) async {
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'recipe_comments',
+        columns: ['*'],
+        filters: {'recipe_id': recipeId},
+        orderBy: 'created_at',
+        ascending: false,
+      );
+
+      final comments = <Map<String, dynamic>>[];
+      
+      for (var comment in response as List) {
+        final userId = comment['user_id'];
+        
+        final userProfile = await _workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'username', 'avatar_url', 'first_name', 'last_name'],
+          filters: {'id': userId},
+          limit: 1,
+        );
+        
+        if (userProfile != null && (userProfile as List).isNotEmpty) {
+          comments.add({
+            ...comment,
+            'user': userProfile[0],
+          });
+        }
+      }
+      
+      return comments;
+    } catch (e) {
+      throw Exception('Failed to get recipe comments: $e');
+    }
+  }
+
+  static Future<void> addComment({
+    required int recipeId,
+    required String commentText,
+    String? parentCommentId,
+  }) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'recipe_comments',
+        data: {
+          'recipe_id': recipeId,
+          'user_id': currentUserId!,
+          'comment_text': commentText,
+          'parent_comment_id': parentCommentId,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to add comment: $e');
+    }
+  }
+
+  static Future<bool> hasUserLikedPost(String postId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'comment_likes',
+        columns: ['id'],
+        filters: {
+          'comment_id': postId,
+          'user_id': currentUserId!,
+        },
+        limit: 1,
+      );
+      
+      return response != null && (response as List).isNotEmpty;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<void> likeComment(String commentId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final alreadyLiked = await hasUserLikedPost(commentId);
+      
+      if (!alreadyLiked) {
+        await _workerQuery(
+          action: 'insert',
+          table: 'comment_likes',
+          data: {
+            'comment_id': commentId,
+            'user_id': currentUserId!,
+            'created_at': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to like comment: $e');
+    }
+  }
+
+  static Future<void> unlikeComment(String commentId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'delete',
+        table: 'comment_likes',
+        filters: {
+          'comment_id': commentId,
+          'user_id': currentUserId!,
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to unlike comment: $e');
+    }
+  }
+
+  static Future<void> deleteComment(String commentId) async {
+    ensureUserAuthenticated();
+    
+    try {
+      final commentData = await _workerQuery(
+        action: 'select',
+        table: 'recipe_comments',
+        columns: ['user_id'],
+        filters: {'id': commentId},
+        limit: 1,
+      );
+      
+      if (commentData == null || (commentData as List).isEmpty) {
+        throw Exception('Comment not found');
+      }
+      
+      if (commentData[0]['user_id'] != currentUserId) {
+        throw Exception('You can only delete your own comments');
+      }
+      
+      await _workerQuery(
+        action: 'delete',
+        table: 'recipe_comments',
+        filters: {'id': commentId},
+      );
+    } catch (e) {
+      throw Exception('Failed to delete comment: $e');
+    }
+  }
+
+  static Future<void> reportComment(String commentId, String reason) async {
+    ensureUserAuthenticated();
+    
+    try {
+      await _workerQuery(
+        action: 'insert',
+        table: 'comment_reports',
+        data: {
+          'comment_id': commentId,
+          'reporter_id': currentUserId!,
+          'reason': reason,
+          'created_at': DateTime.now().toIso8601String(),
+          'status': 'pending',
+        },
+      );
+    } catch (e) {
+      throw Exception('Failed to report comment: $e');
+    }
+  }
+
+  // ==================================================
+  // RECIPE RATINGS
+  // ==================================================
+
+  static Future<Map<String, dynamic>> getRecipeAverageRating(int recipeId) async {
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'recipe_ratings',
+        columns: ['rating'],
+        filters: {'recipe_id': recipeId},
+      );
+      
+      if (response == null || (response as List).isEmpty) {
+        return {'average': 0.0, 'count': 0};
+      }
+      
+      final ratings = (response as List).map((r) => r['rating'] as int).toList();
+      final count = ratings.length;
+      final average = ratings.reduce((a, b) => a + b) / count;
+      
+      return {
+        'average': double.parse(average.toStringAsFixed(1)),
+        'count': count,
+      };
+    } catch (e) {
+      return {'average': 0.0, 'count': 0};
+    }
+  }
+
+  static Future<int?> getUserRecipeRating(int recipeId) async {
+    if (currentUserId == null) return null;
+    
+    try {
+      final response = await _workerQuery(
+        action: 'select',
+        table: 'recipe_ratings',
+        columns: ['rating'],
+        filters: {
+          'recipe_id': recipeId,
+          'user_id': currentUserId!,
+        },
+        limit: 1,
+      );
+      
+      if (response == null || (response as List).isEmpty) {
+        return null;
+      }
+      
+      return response[0]['rating'] as int?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<void> rateRecipe(int recipeId, int rating) async {
+    ensureUserAuthenticated();
+    
+    if (rating < 1 || rating > 5) {
+      throw Exception('Rating must be between 1 and 5');
+    }
+    
+    try {
+      final recipeData = await getRecipeById(recipeId);
+      if (recipeData == null) {
+        throw Exception('Recipe not found');
+      }
+      
+      if (recipeData['user_id'] == currentUserId) {
+        throw Exception('Cannot rate your own recipe');
+      }
+      
+      final existingRating = await getUserRecipeRating(recipeId);
+      
+      if (existingRating != null) {
+        await _workerQuery(
+          action: 'update',
+          table: 'recipe_ratings',
+          data: {
+            'rating': rating,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          filters: {
+            'recipe_id': recipeId,
+            'user_id': currentUserId!,
+          },
+        );
+      } else {
+        await _workerQuery(
+          action: 'insert',
+          table: 'recipe_ratings',
+          data: {
+            'recipe_id': recipeId,
+            'user_id': currentUserId!,
+            'rating': rating,
+            'created_at': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to rate recipe: $e');
+    }
+  }
+
+  // Replace your existing deleteAccountCompletely() in database_service.dart
+
+  static Future<void> deleteAccountCompletely() async {
+    ensureUserAuthenticated();
+    final userId = currentUserId!;
+    
+    try {
+      AppConfig.debugPrint('🗑️ Starting account deletion for user: $userId');
+
+      // 1) Get profile to extract picture URLs
+      AppConfig.debugPrint('📋 Step 1: Fetching user profile...');
+      final profile = await getUserProfile(userId);
+      AppConfig.debugPrint('✅ Profile fetched');
+      
+      final picturesJson = profile?['pictures'];
+      final profilePictureUrl = profile?['profile_picture_url'];
+      final backgroundPictureUrl = profile?['background_picture_url'];
+
+      // 2) Delete files from R2 storage
+      if (picturesJson != null && picturesJson.isNotEmpty) {
+        try {
+          final pictures = List<String>.from(jsonDecode(picturesJson));
+          AppConfig.debugPrint('🗑️ Deleting ${pictures.length} gallery pictures...');
+          
+          for (final url in pictures) {
+            try {
+              await _deleteFileByPublicUrl(url);
+            } catch (e) {
+              AppConfig.debugPrint('⚠️ Failed to delete gallery picture: $e');
+            }
+          }
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Error parsing pictures: $e');
+        }
+      }
+
+      if (profilePictureUrl is String && profilePictureUrl.isNotEmpty) {
+        try {
+          AppConfig.debugPrint('🗑️ Deleting profile picture...');
+          await _deleteFileByPublicUrl(profilePictureUrl);
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Failed to delete profile picture: $e');
+        }
+      }
+
+      if (backgroundPictureUrl is String && backgroundPictureUrl.isNotEmpty) {
+        try {
+          AppConfig.debugPrint('🗑️ Deleting background picture...');
+          await _deleteFileByPublicUrl(backgroundPictureUrl);
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Failed to delete background picture: $e');
+        }
+      }
+
+      // 3) Delete all user data in correct order (children first)
+      AppConfig.debugPrint('🗑️ Step 3: Deleting user data from all tables...');
+      
+      // Delete grocery items
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'grocery_items',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted grocery_items');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting grocery_items: $e');
+      }
+
+      // Delete submitted recipes
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'submitted_recipes',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted submitted_recipes');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting submitted_recipes: $e');
+      }
+
+      // Delete favorite recipes
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'favorite_recipes',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted favorite_recipes');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting favorite_recipes: $e');
+      }
+
+      // Delete user achievements
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'user_achievements',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted user_achievements');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting user_achievements: $e');
+      }
+
+      // Delete recipe ratings
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'recipe_ratings',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted recipe_ratings');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting recipe_ratings: $e');
+      }
+
+      // Delete recipe comments
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'recipe_comments',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted recipe_comments');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting recipe_comments: $e');
+      }
+
+      // Delete comment likes
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'comment_likes',
+          filters: {'user_id': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted comment_likes');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting comment_likes: $e');
+      }
+
+      // Delete friend requests (where user is sender)
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'friend_requests',
+          filters: {'sender': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted friend_requests (sender)');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting friend_requests (sender): $e');
+      }
+
+      // Delete friend requests (where user is receiver)
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'friend_requests',
+          filters: {'receiver': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted friend_requests (receiver)');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting friend_requests (receiver): $e');
+      }
+
+      // Delete messages (where user is sender)
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'messages',
+          filters: {'sender': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted messages (sender)');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting messages (sender): $e');
+      }
+
+      // Delete messages (where user is receiver)
+      try {
+        await _workerQuery(
+          action: 'delete',
+          table: 'messages',
+          filters: {'receiver': userId},
+        );
+        AppConfig.debugPrint('✅ Deleted messages (receiver)');
+      } catch (e) {
+        AppConfig.debugPrint('⚠️ Error deleting messages (receiver): $e');
+      }
+
+      // 4) Finally delete the user profile
+      AppConfig.debugPrint('🗑️ Step 4: Deleting user profile...');
+      await _workerQuery(
+        action: 'delete',
+        table: 'profiles',
+        filters: {'id': userId},
+      );
+      AppConfig.debugPrint('✅ Deleted user_profiles');
+
+      // 5) Clear all local cache
+      AppConfig.debugPrint('🗑️ Step 5: Clearing local cache...');
+      await clearAllUserCache();
+      
+      AppConfig.debugPrint('✅ Account deletion complete');
+      
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error in deleteAccountCompletely: $e');
+      throw Exception("Failed to delete account: $e");
+    }
+  }
+  static Future<String?> getProfilePicture(String userId) async {
+    try {
+      final profile = await getUserProfile(userId);
+      return profile?['profile_picture'] as String?;
+    } catch (e) {
+      AppConfig.debugPrint('Error getting profile picture: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> getCurrentProfilePicture() async {
+    if (currentUserId == null) return null;
+    return getProfilePicture(currentUserId!);
+  }
+
+  static Future<String?> getBackgroundPicture(String userId) async {
+    try {
+      final profile = await getUserProfile(userId);
+      return profile?['profile_background'] as String?;
+    } catch (e) {
+      AppConfig.debugPrint('Error getting background picture: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> getCurrentBackgroundPicture() async {
+    if (currentUserId == null) return null;
+    return getBackgroundPicture(currentUserId!);
+  }
+}

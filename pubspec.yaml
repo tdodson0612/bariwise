@@ -1,0 +1,140 @@
+name: bari_wise
+description: A Flutter app to scan food barcodes, show nutrition info, and discover healthy recipes for bari health.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# App version - increment for each App Store submission
+# Format: MAJOR.MINOR.PATCH+BUILD_NUMBER
+version: 1.0.1+4
+
+# Flutter SDK constraints
+environment:
+  sdk: ">=3.1.0 <4.0.0"
+  flutter: ">=3.13.0"
+
+# Core dependencies
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State management & storage
+  shared_preferences: ^2.2.3
+  
+  # Device information for contact screens
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.0.0
+  
+  # Logging & debugging
+  logger: ^2.0.2
+  
+  # Media handling
+  image_picker: ^1.0.7
+  
+  # Barcode scanning (last version that supports iOS 14)
+  google_mlkit_barcode_scanning: ^0.13.0
+  google_mlkit_commons: ^0.9.0
+  camera: ^0.10.5+5  # For auto-barcode scanner
+  
+  # Networking
+  http: ^1.2.1
+  
+  # File system
+  path_provider: ^2.1.1
+  
+  # Backend & authentication
+  supabase_flutter: ^2.3.4
+  
+  # Monetization (iOS 14 compatible)
+  google_mobile_ads: 5.1.0
+  in_app_purchase: ^3.1.13
+  
+  # Utilities
+  intl: ^0.19.0
+  app_links: ^6.3.2
+  share_plus: ^7.0.0
+  
+  # Cloud storage
+  amplify_storage_s3_dart: ^0.4.11
+  flutter_dotenv: ^6.0.0
+  
+  # Firebase (updated to latest versions)
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.1.5
+  
+  # Local notifications + permissions
+  flutter_local_notifications: ^19.5.0
+  permission_handler: ^12.0.1
+
+# Development dependencies
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  # Linting & code quality
+  flutter_lints: ^6.0.0
+  
+  # Icon generation
+  flutter_launcher_icons: ^0.13.1
+  
+  # Splash screen generation
+  flutter_native_splash: ^2.3.9
+  
+  # Package name modification
+  change_app_package_name: ^1.2.0
+
+# Flutter configuration
+flutter:
+  uses-material-design: true
+  
+  # Asset configuration
+  assets:
+    - .env
+    - assets/backgrounds/splash_screen.jpeg
+    - assets/backgrounds/login_background.jpeg
+    - assets/backgrounds/home_background.jpeg
+    - assets/backgrounds/ipad_background.jpeg
+    # App icon (for launcher icons generation)
+    - assets/icon/barilogo.jpeg
+    # Additional assets (add as needed)
+    - assets/baribelly.png
+
+# App launcher icons configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/barilogo.jpeg"
+  ios_config:
+    generate: true
+    image_path: "assets/icon/barilogo.jpeg"
+  android_config:
+    generate: true
+    image_path: "assets/icon/barilogo.jpeg"
+  remove_alpha_ios: true
+
+# Native splash screen configuration
+flutter_native_splash:
+  # Background color (dark green to match brand)
+  color: "#f5bc02"
+  
+  # Splash screen image
+  image: assets/backgrounds/splash_screen.jpeg
+  
+  # Platform-specific settings
+  android: true
+  ios: true
+  web: false
+  
+  # iOS-specific settings
+  ios_content_mode: scaleAspectFit
+  
+  # Android-specific settings
+  android_gravity: center
+  android_12:
+    image: assets/backgrounds/splash_screen.jpeg
+    color: "#f5bc02"
+  
+  # Fullscreen splash
+  fullscreen: true
+  
+  # Info.plist modifications for iOS
+  info_plist_files:
+    - 'ios/Runner/Info.plist'

@@ -1,0 +1,5 @@
+carouselview
+segmented button
+gap
+flutter_animate
+flutter_lints (for learning)

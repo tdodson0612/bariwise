@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDHe2_VJUf4lBFfnEIIYg6LReUblSxVOzg</string>
+	<key>GCM_SENDER_ID</key>
+	<string>818752789710</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.terrydodson.bariWiseApp</string>
+	<key>PROJECT_ID</key>
+	<string>bariwise-9b21a</string>
+	<key>STORAGE_BUCKET</key>
+	<string>bariwise-9b21a.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:818752789710:ios:8d02047a93a48bef20c49f</string>
+</dict>
+</plist>

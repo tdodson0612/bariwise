@@ -1,0 +1,156 @@
+// Cloudflare Worker for bariWise
+// ✅ FIXED: is_read type mismatch causing badges to not clear
+
+const SUPABASE_URL = "https://jmnwyzearnndhlitruyu.supabase.co";
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+export default {
+  async fetch(request, env, ctx) {
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response("OK", {
+        status: 200,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      });
+    }
+
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    try {
+      if (path === "/badges/unread" && request.method === "GET") {
+        return await getUnreadBadges(request, env);
+      }
+
+      if (path === "/badges/mark-read" && request.method === "POST") {
+        return await markBadgesRead(request, env);
+      }
+
+      if (path === "/notifications" && request.method === "GET") {
+        return await getNotifications(request, env);
+      }
+
+      return jsonResponse({ error: "Not found" }, 404);
+    } catch (err) {
+      return jsonResponse(
+        { error: err.message || "Internal error" },
+        500
+      );
+    }
+  },
+};
+
+/* =========================
+   HELPERS
+========================= */
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+}
+
+function supabaseHeaders(env) {
+  return {
+    "Content-Type": "application/json",
+    "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  };
+}
+
+function getPageParams(url) {
+  const page = Math.max(parseInt(url.searchParams.get("page") || "1"), 1);
+  let size = parseInt(url.searchParams.get("pageSize") || DEFAULT_PAGE_SIZE);
+  size = Math.min(size, MAX_PAGE_SIZE);
+
+  const from = (page - 1) * size;
+  const to = from + size - 1;
+
+  return { from, to };
+}
+
+/* =========================
+   BADGES
+========================= */
+
+async function getUnreadBadges(request, env) {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("userId");
+
+  if (!userId) {
+    return jsonResponse({ error: "userId required" }, 400);
+  }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/badges?user_id=eq.${userId}&is_read=eq.false`,
+    {
+      headers: supabaseHeaders(env),
+    }
+  );
+
+  const data = await res.json();
+  return jsonResponse({ badges: data });
+}
+
+async function markBadgesRead(request, env) {
+  const body = await request.json();
+  const { userId } = body;
+
+  if (!userId) {
+    return jsonResponse({ error: "userId required" }, 400);
+  }
+
+  // ✅ FIX: is_read must be BOOLEAN, not string
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/badges?user_id=eq.${userId}&is_read=eq.false`,
+    {
+      method: "PATCH",
+      headers: supabaseHeaders(env),
+      body: JSON.stringify({ is_read: true }),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    return jsonResponse({ error: text }, 500);
+  }
+
+  return jsonResponse({ success: true });
+}
+
+/* =========================
+   NOTIFICATIONS
+========================= */
+
+async function getNotifications(request, env) {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("userId");
+
+  if (!userId) {
+    return jsonResponse({ error: "userId required" }, 400);
+  }
+
+  const { from, to } = getPageParams(url);
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/notifications?user_id=eq.${userId}&order=created_at.desc`,
+    {
+      headers: {
+        ...supabaseHeaders(env),
+        Range: `${from}-${to}`,
+      },
+    }
+  );
+
+  const data = await res.json();
+  return jsonResponse({ notifications: data });
+}

@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "bari_wise",
-      "version": "1.0.1+4",
+      "version": "1.0.1+5",
       "dependencies": [
         "amplify_storage_s3_dart",
         "app_links",
@@ -63,7 +63,7 @@
     },
     {
       "name": "flutter_launcher_icons",
-      "version": "0.13.1",
+      "version": "0.14.4",
       "dependencies": [
         "args",
         "checked_yaml",

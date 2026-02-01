@@ -177,9 +177,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   String _getTalkBubbleText() {
     switch (_currentStep) {
       case TutorialStep.TUTORIAL_INTRO:
-        return "Hi there, friend. I am Levi, the bari. Let me walk you through this app and the way we use it to enrich our health and our lives.";
+        return "Hi there, friend. I am Barry, the belly. Let me walk you through this app and the way we use it to enrich our health and our lives.";
       case TutorialStep.TUTORIAL_ALL_BUTTONS:
-        return "These buttons are the 4 different ways you can see the nutrition facts and suggested bari friendly recipes for any food you like! Let's walk through them together!";
+        return "These buttons are the 4 different ways you can see the nutrition facts and suggested bariatric friendly recipes for any food you like! Let's walk through them together!";
       case TutorialStep.TUTORIAL_AUTO:
         return "Let's start with Auto. It works fast - just point your camera at the barcode, and it recognizes it automatically.";
       case TutorialStep.TUTORIAL_SCAN:

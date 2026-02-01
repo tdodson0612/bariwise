@@ -4,7 +4,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # App version - increment for each App Store submission
 # Format: MAJOR.MINOR.PATCH+BUILD_NUMBER
-version: 1.0.1+4
+version: 1.0.1+5
 
 # Flutter SDK constraints
 environment:
@@ -73,7 +73,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   
   # Icon generation
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
   
   # Splash screen generation
   flutter_native_splash: ^2.3.9

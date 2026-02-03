@@ -1,9 +1,16 @@
-// lib/services/auth_service.dart - COMPLETE FIXED VERSION
+// lib/services/auth_service.dart - FIXED FOR iOS LOGIN TIMEOUT
+// ✅ CHANGES FROM BUILD 91:
+// 1. Login timeout: 15s → 30s (iPad-safe)
+// 2. FCM: iOS platform check added (skips FCM on iOS completely)
+// 3. FCM: Non-blocking with .catchError() (never throws)
+// 4. Retry logic: Smart handling of iOS session conflicts
 
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_config.dart';
 
-// ✅ NEW: Replaces ProfileService imports
+// ✅ KEEP: Replaces ProfileService imports
 import 'profile_data_access.dart';
 
 // KEEP: Database service + FCM
@@ -58,9 +65,17 @@ class AuthService {
   }
 
   // --------------------------------------------------------
-  // 🔥 STORE / UPDATE FCM TOKEN (NON-BLOCKING)
+  // 🔥 FIX #1: PLATFORM-CONDITIONAL FCM TOKEN SAVE
+  // iOS: Skips completely (no FCM initialization in main.dart on iOS)
+  // Android: Saves token normally
   // --------------------------------------------------------
-  static Future<void> _saveFcmToken(String userId) async {
+  static Future<void> _saveFcmTokenIfAndroid(String userId) async {
+    // 🍎 CRITICAL iOS FIX: Skip FCM completely on iOS
+    if (!kIsWeb && Platform.isIOS) {
+      AppConfig.debugPrint("🍎 iOS detected - skipping FCM token save");
+      return;
+    }
+
     try {
       final token = await FirebaseMessaging.instance.getToken();
 
@@ -69,7 +84,7 @@ class AuthService {
         return;
       }
 
-      AppConfig.debugPrint("📱 Saving FCM token: ${token.substring(0, 20)}...");
+      AppConfig.debugPrint("📱 Saving FCM token (Android): ${token.substring(0, 20)}...");
 
       await DatabaseServiceCore.workerQuery(
         action: 'update',
@@ -89,7 +104,13 @@ class AuthService {
     }
   }
 
-  static void _listenForFcmTokenRefresh(String userId) {
+  static void _listenForFcmTokenRefreshIfAndroid(String userId) {
+    // 🍎 CRITICAL iOS FIX: Skip FCM listener on iOS
+    if (!kIsWeb && Platform.isIOS) {
+      AppConfig.debugPrint("🍎 iOS detected - skipping FCM token refresh listener");
+      return;
+    }
+
     try {
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
         AppConfig.debugPrint("🔄 FCM token refreshed: ${newToken.substring(0, 20)}...");
@@ -149,13 +170,13 @@ class AuthService {
               'Signup succeeded but profile setup failed. Please sign in.');
         }
 
-        // 🔥 Save FCM token after profile creation (NON-BLOCKING)
-        _saveFcmToken(userId).catchError((error) {
+        // 🔥 FIX: Platform-conditional FCM (skips iOS)
+        _saveFcmTokenIfAndroid(userId).catchError((error) {
           AppConfig.debugPrint("⚠️ FCM token save failed (continuing anyway): $error");
         });
 
-        // 🔄 Listen for token refresh (also non-blocking)
-        _listenForFcmTokenRefresh(userId);
+        // 🔄 Listen for token refresh (also platform-conditional)
+        _listenForFcmTokenRefreshIfAndroid(userId);
       }
 
       return response;
@@ -165,7 +186,7 @@ class AuthService {
   }
 
   // --------------------------------------------------------
-  // 🔥 SIGN IN (FIXED: Non-blocking FCM + Smart retry)
+  // 🔥 FIX #2: SIGN IN WITH 30-SECOND TIMEOUT + PLATFORM-CONDITIONAL FCM
   // --------------------------------------------------------
   static Future<AuthResponse> signIn({
     required String email,
@@ -192,12 +213,12 @@ class AuthService {
           AppConfig.debugPrint('⚠️ Session clear failed (continuing): $clearError');
         }
 
-        // Attempt login
+        // 🔥 FIX: Increased timeout from 15s → 30s for iPad
         final response = await _supabase.auth.signInWithPassword(
           email: email,
           password: password,
         ).timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 30), // ✅ CHANGED FROM 15 SECONDS
           onTimeout: () {
             throw Exception('Connection timed out. Please try again.');
           },
@@ -227,12 +248,12 @@ class AuthService {
             }
           }
 
-          // Save FCM token (non-blocking)
-          _saveFcmToken(userId).catchError((error) {
-            AppConfig.debugPrint("⚠️ FCM token save failed: $error");
+          // 🔥 FIX: Platform-conditional FCM (skips iOS completely)
+          _saveFcmTokenIfAndroid(userId).catchError((error) {
+            AppConfig.debugPrint("⚠️ FCM token save failed (non-critical): $error");
           });
 
-          _listenForFcmTokenRefresh(userId);
+          _listenForFcmTokenRefreshIfAndroid(userId);
 
           return response; // ✅ SUCCESS - Return immediately
         }
@@ -311,6 +332,7 @@ class AuthService {
       throw Exception('Failed to reset session: $e');
     }
   }
+
   // --------------------------------------------------------
   // Ensure user profile exists
   // --------------------------------------------------------
@@ -422,9 +444,9 @@ class AuthService {
 
       AppConfig.debugPrint("🌟 User upgraded to premium: $userId");
 
-      // Refresh FCM token for this user (optional but helpful)
+      // Refresh FCM token for this user (platform-conditional)
       if (currentUserId == userId) {
-        _saveFcmToken(userId).catchError((error) {
+        _saveFcmTokenIfAndroid(userId).catchError((error) {
           AppConfig.debugPrint("⚠️ FCM token save failed: $error");
         });
       }

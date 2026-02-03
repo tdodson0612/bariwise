@@ -490,7 +490,8 @@ class _HomePageState extends State<HomePage>
       }
       
       await _loadFavoriteRecipes();
-      await _syncFavoritesFromDatabase();
+      // Disabled auto-sync - only sync when user manually refreshes
+      // await _syncFavoritesFromDatabase();
 
     } catch (e) {
       if (mounted) {
@@ -629,7 +630,12 @@ class _HomePageState extends State<HomePage>
   Future<void> _syncFavoritesFromDatabase() async {
     try {
       final currentUserId = AuthService.currentUserId;
-      if (currentUserId == null) return;
+      if (currentUserId == null) {
+        if (AppConfig.enableDebugPrints) {
+          print('⏭️ Skipping favorites sync - no user logged in');
+        }
+        return;
+      }
 
       final response = await http.post(
         Uri.parse(AppConfig.cloudflareWorkerQueryEndpoint),
@@ -663,10 +669,16 @@ class _HomePageState extends State<HomePage>
         }
 
         await _saveFavoritesToLocalCache(favoriteRecipes);
-        print('✅ Synced ${favoriteRecipes.length} favorites from database');
+        if (AppConfig.enableDebugPrints) {
+          print('✅ Synced ${favoriteRecipes.length} favorites from database');
+        }
       }
     } catch (e) {
-      print('⚠️ Error syncing favorites from database: $e');
+      // Silent fail - don't show error popup on home screen load
+      if (AppConfig.enableDebugPrints) {
+        print('⚠️ Error syncing favorites (non-critical): $e');
+      }
+      // Continue without favorites - not critical for home screen
     }
   }
 
@@ -4640,6 +4652,10 @@ class _HomePageState extends State<HomePage>
                 decoration: BoxDecoration(
                   color: Colors.white.withAlpha((0.9 * 255).toInt()),
                   borderRadius: BorderRadius.circular(10),
+                ),
+                constraints: BoxConstraints(
+                  minHeight: 200,
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

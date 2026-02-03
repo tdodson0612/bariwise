@@ -1,9 +1,9 @@
-// tutorial_overlay.dart
+// tutorial_overlay.dart - FIXED VERSION with Barry the Belly
 import 'package:flutter/material.dart';
 
 enum TutorialStep {
   TUTORIAL_INTRO,
-  TUTORIAL_ALL_BUTTONS, // NEW: Show all 4 buttons together
+  TUTORIAL_ALL_BUTTONS,
   TUTORIAL_AUTO,
   TUTORIAL_SCAN,
   TUTORIAL_MANUAL,
@@ -35,45 +35,44 @@ class TutorialOverlay extends StatefulWidget {
 class _TutorialOverlayState extends State<TutorialOverlay>
     with SingleTickerProviderStateMixin {
   TutorialStep _currentStep = TutorialStep.TUTORIAL_INTRO;
-  late AnimationController _leviController;
-  late Animation<Offset> _leviSlideAnimation;
+  late AnimationController _barryController;
+  late Animation<Offset> _barrySlideAnimation;
   
   bool _showHighlight = false;
   GlobalKey? _currentHighlightKey;
-  double _leviOffset = 0.0;
+  double _barryOffset = 0.0;
   
-  // NEW: For highlighting all buttons together
   bool _highlightAllButtons = false;
   
   @override
   void initState() {
     super.initState();
     
-    _leviController = AnimationController(
+    _barryController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
     
-    _leviSlideAnimation = Tween<Offset>(
+    _barrySlideAnimation = Tween<Offset>(
       begin: const Offset(1.5, 0),
       end: Offset.zero,
     ).animate(CurvedAnimation(
-      parent: _leviController,
+      parent: _barryController,
       curve: Curves.easeOut,
     ));
     
-    _leviController.forward();
+    _barryController.forward();
   }
   
   @override
   void dispose() {
-    _leviController.dispose();
+    _barryController.dispose();
     super.dispose();
   }
   
   void _nextStep() {
     print('🎓 _nextStep called - current: $_currentStep');
-    _playLeviHop();
+    _playBarryHop();
     setState(() {
       switch (_currentStep) {
         case TutorialStep.TUTORIAL_INTRO:
@@ -121,13 +120,13 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     });
   }
 
-  void _playLeviHop() async {
+  void _playBarryHop() async {
     if (!mounted) return;
     
     for (int i = 0; i < 3; i++) {
-      setState(() => _leviOffset = -20.0);
+      setState(() => _barryOffset = -20.0);
       await Future.delayed(Duration(milliseconds: 150));
-      setState(() => _leviOffset = 0.0);
+      setState(() => _barryOffset = 0.0);
       await Future.delayed(Duration(milliseconds: 150));
     }
   }
@@ -135,24 +134,20 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   void _updateHighlight(GlobalKey newKey) async {
     print('🎯 Updating highlight to new key');
     
-    // Fade out previous highlight
     setState(() {
       _showHighlight = false;
-      _highlightAllButtons = false; // Also turn off all-buttons highlight
+      _highlightAllButtons = false;
     });
     await Future.delayed(const Duration(milliseconds: 200));
     
-    // Wait for layout to complete
     await Future.delayed(const Duration(milliseconds: 100));
     
-    // Fade in new highlight
     if (mounted) {
       setState(() {
         _currentHighlightKey = newKey;
         _showHighlight = true;
       });
       
-      // Debug: Check if the key has a valid context
       final context = newKey.currentContext;
       if (context == null) {
         print('⚠️ WARNING: New highlight key has no context yet');
@@ -195,13 +190,11 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     }
   }
   
-  // NEW: Build highlight for all 4 buttons together
   Widget _buildAllButtonsHighlight() {
     if (!_highlightAllButtons) {
       return const SizedBox.shrink();
     }
 
-    // Get positions of all 4 buttons
     final autoBox = widget.autoButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final scanBox = widget.scanButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final manualBox = widget.manualButtonKey.currentContext?.findRenderObject() as RenderBox?;
@@ -212,13 +205,11 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       return const SizedBox.shrink();
     }
 
-    // Get global positions
     final autoPos = overlayBox.globalToLocal(autoBox.localToGlobal(Offset.zero));
     final scanPos = overlayBox.globalToLocal(scanBox.localToGlobal(Offset.zero));
     final manualPos = overlayBox.globalToLocal(manualBox.localToGlobal(Offset.zero));
     final lookupPos = overlayBox.globalToLocal(lookupBox.localToGlobal(Offset.zero));
 
-    // Calculate bounding box that contains all 4 buttons
     final left = [autoPos.dx, scanPos.dx, manualPos.dx, lookupPos.dx].reduce((a, b) => a < b ? a : b);
     final top = [autoPos.dy, scanPos.dy, manualPos.dy, lookupPos.dy].reduce((a, b) => a < b ? a : b);
     final right = [
@@ -334,16 +325,17 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               // Yellow highlight for individual button
               _buildHighlight(),
               
+              // 🔥 FIXED: Barry the Belly image
               Positioned(
                 right: 16,
-                bottom: 140 + _leviOffset,
+                bottom: 140 + _barryOffset,
                 child: SlideTransition(
-                  position: _leviSlideAnimation,
+                  position: _barrySlideAnimation,
                   child: Container(
                     width: 120,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade700,
+                      color: Colors.orange.shade100,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -356,24 +348,25 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.asset(
-                        'assets/levibari.jpeg',
+                        'assets/baribelly.png',
                         width: 120,
                         height: 120,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          print('❌ Error loading levibari.jpeg: $error');
-                          // Fallback to a bari emoji/icon
+                          print('❌ Error loading baribelly.png: $error');
+                          // Fallback to heart emoji
                           return Container(
                             width: 120,
                             height: 120,
                             decoration: BoxDecoration(
-                              color: Colors.orange.shade700,
+                              color: Colors.pink.shade100,
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Center(
-                              child: Text(
-                                '🫀',
-                                style: TextStyle(fontSize: 60),
+                              child: Icon(
+                                Icons.favorite,
+                                size: 60,
+                                color: Colors.pink.shade400,
                               ),
                             ),
                           );

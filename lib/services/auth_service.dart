@@ -1,9 +1,6 @@
-// lib/services/auth_service.dart - FIXED FOR iOS LOGIN TIMEOUT
-// ✅ CHANGES FROM BUILD 91:
-// 1. Login timeout: 15s → 30s (iPad-safe)
-// 2. FCM: iOS platform check added (skips FCM on iOS completely)
-// 3. FCM: Non-blocking with .catchError() (never throws)
-// 4. Retry logic: Smart handling of iOS session conflicts
+// lib/services/auth_service.dart - COMPLETE FIX (Build 92)
+// ✅ FIX #1: Login timeout 15s → 30s + iOS FCM skip
+// ✅ FIX #2: Password reset deep link fixed (localhost → proper deep link)
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -186,7 +183,7 @@ class AuthService {
   }
 
   // --------------------------------------------------------
-  // 🔥 FIX #2: SIGN IN WITH 30-SECOND TIMEOUT + PLATFORM-CONDITIONAL FCM
+  // 🔥 FIX #1: SIGN IN WITH 30-SECOND TIMEOUT + PLATFORM-CONDITIONAL FCM
   // --------------------------------------------------------
   static Future<AuthResponse> signIn({
     required String email,
@@ -311,7 +308,7 @@ class AuthService {
   }
 
   // --------------------------------------------------------
-  // 🍎 NEW: Force clear all session data (for iOS troubleshooting)
+  // 🍎 Force clear all session data (for iOS troubleshooting)
   // --------------------------------------------------------
   static Future<void> forceResetSession() async {
     try {
@@ -374,12 +371,14 @@ class AuthService {
   }
 
   // --------------------------------------------------------
-  // RESET PASSWORD
+  // 🔥 FIX #2: RESET PASSWORD WITH PROPER DEEP LINK
+  // Changed from localhost:3000 → proper app deep link
   // --------------------------------------------------------
   static Future<void> resetPassword(String email) async {
     try {
       await _supabase.auth.resetPasswordForEmail(
         email,
+        // ✅ FIX: Use proper deep link instead of localhost
         redirectTo: 'com.terrydodson.bariWiseApp://reset-password',
       );
       AppConfig.debugPrint('✅ Password reset email sent to: $email');

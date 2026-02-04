@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "bari_wise",
-      "version": "1.0.1+6",
+      "version": "1.0.1+7",
       "dependencies": [
         "amplify_storage_s3_dart",
         "app_links",

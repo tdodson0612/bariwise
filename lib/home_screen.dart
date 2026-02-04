@@ -1807,7 +1807,7 @@ class _HomePageState extends State<HomePage>
                   
                   // Visibility dropdown
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(8),
@@ -1829,39 +1829,55 @@ class _HomePageState extends State<HomePage>
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 12),
                         Expanded(
-                          child: DropdownButton<String>(
-                            value: selectedVisibility,
-                            isExpanded: true,
-                            underline: SizedBox(),
-                            items: [
-                              DropdownMenuItem(
-                                value: 'public',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.public, size: 18, color: Colors.blue),
-                                    SizedBox(width: 8),
-                                    Text('Everyone (Public)'),
-                                  ],
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedVisibility,
+                              isExpanded: true,
+                              isDense: true,
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'public',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.public, size: 16, color: Colors.blue),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Everyone (Public)',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              DropdownMenuItem(
-                                value: 'friends',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.people, size: 18, color: Colors.orange),
-                                    SizedBox(width: 8),
-                                    Text('Friends Only'),
-                                  ],
+                                DropdownMenuItem(
+                                  value: 'friends',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.people, size: 16, color: Colors.orange),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Friends Only',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => selectedVisibility = value);
-                              }
-                            },
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedVisibility = value);
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -2547,7 +2563,7 @@ class _HomePageState extends State<HomePage>
                 SizedBox(height: 16),
                 
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(8),
@@ -2571,39 +2587,55 @@ class _HomePageState extends State<HomePage>
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      SizedBox(width: 8),
+                      SizedBox(width: 12),
                       Expanded(
-                        child: DropdownButton<String>(
-                          value: selectedVisibility,
-                          isExpanded: true,
-                          underline: SizedBox(),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'public',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.public, size: 18, color: Colors.blue),
-                                  SizedBox(width: 8),
-                                  Text('Everyone (Public)'),
-                                ],
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedVisibility,
+                            isExpanded: true,
+                            isDense: true,
+                            items: [
+                              DropdownMenuItem(
+                                value: 'public',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.public, size: 16, color: Colors.blue),
+                                    SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        'Everyone (Public)',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'friends',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.people, size: 18, color: Colors.orange),
-                                  SizedBox(width: 8),
-                                  Text('Friends Only'),
-                                ],
+                              DropdownMenuItem(
+                                value: 'friends',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.people, size: 16, color: Colors.orange),
+                                    SizedBox(width: 6),
+                                    Flexible(
+                                      child: Text(
+                                        'Friends Only',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => selectedVisibility = value);
-                            }
-                          },
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => selectedVisibility = value);
+                              }
+                            },
+                          ),
                         ),
                       ),
                     ],
@@ -2876,7 +2908,7 @@ class _HomePageState extends State<HomePage>
                   
                   // Visibility dropdown
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(8),
@@ -2898,39 +2930,55 @@ class _HomePageState extends State<HomePage>
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        SizedBox(width: 8),
+                        SizedBox(width: 12),
                         Expanded(
-                          child: DropdownButton<String>(
-                            value: selectedVisibility,
-                            isExpanded: true,
-                            underline: SizedBox(),
-                            items: [
-                              DropdownMenuItem(
-                                value: 'public',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.public, size: 18, color: Colors.blue),
-                                    SizedBox(width: 8),
-                                    Text('Everyone (Public)'),
-                                  ],
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedVisibility,
+                              isExpanded: true,
+                              isDense: true,
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'public',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.public, size: 16, color: Colors.blue),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Everyone (Public)',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              DropdownMenuItem(
-                                value: 'friends',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.people, size: 18, color: Colors.orange),
-                                    SizedBox(width: 8),
-                                    Text('Friends Only'),
-                                  ],
+                                DropdownMenuItem(
+                                  value: 'friends',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.people, size: 16, color: Colors.orange),
+                                      SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'Friends Only',
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 13),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => selectedVisibility = value);
-                              }
-                            },
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => selectedVisibility = value);
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ],

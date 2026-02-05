@@ -1,5 +1,4 @@
-// lib/login.dart - COMPLETE UPDATED FILE
-// Replace your entire login.dart with this version
+// lib/login.dart - DEBUG VERSION WITH COMPREHENSIVE LOGGING
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
@@ -146,6 +145,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
+    print('\n========================================');
+    print('🟢 LOGIN PAGE: Starting login handler');
+    print('========================================');
+    
     try {
       final trimmedEmail = _email.trim().toLowerCase();
       
@@ -153,46 +156,69 @@ class _LoginPageState extends State<LoginPage> {
         throw Exception('Please enter your email address');
       }
 
-      AppConfig.debugPrint('🔐 Login attempt for: $trimmedEmail');
+      print('🟢 LOGIN PAGE: Email: $trimmedEmail');
+      print('🟢 LOGIN PAGE: Remember me: $_rememberMe');
 
       if (_rememberMe) {
+        print('🟢 LOGIN PAGE: Saving credentials...');
         await _saveCredentials();
+        print('🟢 LOGIN PAGE: ✅ Credentials saved');
       }
 
+      print('🟢 LOGIN PAGE: Calling AuthService.signIn...');
       final response = await AuthService.signIn(
         email: trimmedEmail,
         password: _password,
       );
 
+      print('🟢 LOGIN PAGE: AuthService.signIn returned');
+      print('  - User ID: ${response.user?.id}');
+      print('  - User Email: ${response.user?.email}');
+      print('  - Session exists: ${response.session != null}');
+      print('  - Access token exists: ${response.session?.accessToken != null}');
+
       // ✅ CRITICAL: Verify we actually got authenticated
       if (response.user == null || response.session == null) {
+        print('🟢 LOGIN PAGE: ❌ CRITICAL - No user or session!');
         throw Exception('Login failed - no user session created');
       }
 
-      AppConfig.debugPrint('✅ Login successful: ${response.user?.email}');
+      print('🟢 LOGIN PAGE: ✅ Login successful!');
+      print('  - User ID: ${response.user!.id}');
       
-      // ✅ Wait for auth state to settle
+      // Wait for auth state to settle
+      print('🟢 LOGIN PAGE: Waiting 800ms for auth state to settle...');
       await Future.delayed(const Duration(milliseconds: 800));
       
-      if (!mounted) return;
+      if (!mounted) {
+        print('🟢 LOGIN PAGE: ⚠️ Widget unmounted, aborting navigation');
+        return;
+      }
 
-      // ✅ Show success message
+      print('🟢 LOGIN PAGE: Showing success message...');
       ErrorHandlingService.showSuccess(context, 'Welcome back!');
       
-      // ✅ Short delay before navigation
       await Future.delayed(const Duration(milliseconds: 300));
       
-      if (!mounted) return;
+      if (!mounted) {
+        print('🟢 LOGIN PAGE: ⚠️ Widget unmounted after success message');
+        return;
+      }
 
-      // ✅ CRITICAL: Use pushNamedAndRemoveUntil to prevent back navigation
+      print('🟢 LOGIN PAGE: Navigating to /home...');
       Navigator.pushNamedAndRemoveUntil(
         context, 
         '/home',
-        (route) => false, // Remove all previous routes
+        (route) => false,
       );
+      
+      print('🟢 LOGIN PAGE: ✅ Navigation complete');
+      print('========================================\n');
 
     } catch (e) {
-      AppConfig.debugPrint('❌ Login error: $e');
+      print('🟢 LOGIN PAGE: ❌ Login handler error: $e');
+      print('🟢 LOGIN PAGE: Error type: ${e.runtimeType}');
+      print('========================================\n');
       rethrow;
     } finally {
       if (mounted) {
@@ -202,38 +228,61 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleSignUp() async {
+    print('\n========================================');
+    print('🟢 SIGNUP PAGE: Starting signup handler');
+    print('========================================');
+    
     if (_password != _confirmPassword) {
+      print('🟢 SIGNUP PAGE: ❌ Passwords do not match');
       throw Exception('Passwords do not match');
     }
 
     if (_password.length < 6) {
+      print('🟢 SIGNUP PAGE: ❌ Password too short');
       throw Exception('Password should be at least 6 characters');
     }
 
     try {
       final trimmedEmail = _email.trim().toLowerCase();
       
-      AppConfig.debugPrint('📝 Sign up attempt for: $trimmedEmail');
+      print('🟢 SIGNUP PAGE: Email: $trimmedEmail');
+      print('🟢 SIGNUP PAGE: Password length: ${_password.length}');
+      print('🟢 SIGNUP PAGE: Calling AuthService.signUp...');
 
+      final startTime = DateTime.now();
+      
       final response = await AuthService.signUp(
         email: trimmedEmail,
         password: _password,
       ).timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 30), // Increased from 15s
         onTimeout: () {
+          print('🟢 SIGNUP PAGE: ❌ TIMEOUT after 30 seconds');
           throw Exception('Connection timed out. Please try again.');
         },
       );
 
+      final duration = DateTime.now().difference(startTime);
+      print('🟢 SIGNUP PAGE: AuthService.signUp completed in ${duration.inSeconds}s');
+
+      print('🟢 SIGNUP PAGE: Signup response received:');
+      print('  - User ID: ${response.user?.id}');
+      print('  - User Email: ${response.user?.email}');
+      print('  - Session exists: ${response.session != null}');
+      print('  - Access token exists: ${response.session?.accessToken != null}');
+
       if (response.user != null) {
-        AppConfig.debugPrint('✅ Sign up successful: ${response.user?.email}');
+        print('🟢 SIGNUP PAGE: ✅ User created successfully!');
+        print('  - User ID: ${response.user!.id}');
         
         if (_rememberMe) {
+          print('🟢 SIGNUP PAGE: Saving credentials...');
           await _saveCredentials();
         }
 
         if (mounted) {
           if (response.session == null) {
+            print('🟢 SIGNUP PAGE: ⚠️ No session - email confirmation required');
             ErrorHandlingService.showSuccess(
               context,
               'Account created! Please check your email to confirm your account.'
@@ -242,25 +291,39 @@ class _LoginPageState extends State<LoginPage> {
             await Future.delayed(const Duration(seconds: 2));
             
             if (mounted) {
+              print('🟢 SIGNUP PAGE: Switching to login mode');
               setState(() {
                 _isLogin = true;
                 _isLoading = false;
               });
             }
           } else {
+            print('🟢 SIGNUP PAGE: ✅ Session exists - auto-login successful!');
+            print('  - Token preview: ${response.session!.accessToken.substring(0, 20)}...');
+            
             ErrorHandlingService.showSuccess(context, 'Welcome to bari Food Scanner!');
             await Future.delayed(const Duration(milliseconds: 500));
             
-            if (mounted) {
-              Navigator.pushReplacementNamed(context, '/home');
+            if (!mounted) {
+              print('🟢 SIGNUP PAGE: ⚠️ Widget unmounted before navigation');
+              return;
             }
+            
+            print('🟢 SIGNUP PAGE: Navigating to /home...');
+            Navigator.pushReplacementNamed(context, '/home');
+            print('🟢 SIGNUP PAGE: ✅ Navigation complete');
           }
         }
       } else {
+        print('🟢 SIGNUP PAGE: ❌ No user in response');
         throw Exception('Sign up failed. Please try again.');
       }
+      
+      print('========================================\n');
     } catch (e) {
-      AppConfig.debugPrint('❌ Sign up error: $e');
+      print('🟢 SIGNUP PAGE: ❌ Signup handler error: $e');
+      print('🟢 SIGNUP PAGE: Error type: ${e.runtimeType}');
+      print('========================================\n');
       rethrow;
     } finally {
       if (mounted) {
@@ -269,11 +332,11 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // ✅ NEW: Force reset session (for iOS debugging)
   Future<void> _forceResetSession() async {
     try {
       setState(() => _isLoading = true);
       
+      print('🟢 LOGIN PAGE: User requested session reset');
       await AuthService.forceResetSession();
       
       if (mounted) {
@@ -283,6 +346,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } catch (e) {
+      print('🟢 LOGIN PAGE: Session reset failed: $e');
       if (mounted) {
         ErrorHandlingService.showSimpleError(
           context,
@@ -401,25 +465,31 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _setupAuthListener() {
+    print('🟢 LOGIN PAGE: Setting up auth state listener...');
     _authSub = AuthService.authStateChanges.listen((data) {
       final event = data.event;
       final session = data.session;
 
       if (!mounted) return;
 
+      print('🟢 LOGIN PAGE: Auth state change detected');
+      print('  - Event: $event');
+      print('  - Session exists: ${session != null}');
+      print('  - User: ${session?.user.email}');
+
       // ✅ CRITICAL: Only log, don't navigate from here
-      // Navigation is handled by _handleLogin() and _handleSignUp()
       switch (event) {
         case AuthChangeEvent.signedIn:
-          AppConfig.debugPrint('🔐 Auth state: User signed in: ${session?.user.email}');
+          print('🟢 LOGIN PAGE: 🔐 Auth event: User signed in');
           break;
         case AuthChangeEvent.signedOut:
-          AppConfig.debugPrint('🔓 Auth state: User signed out');
+          print('🟢 LOGIN PAGE: 🔓 Auth event: User signed out');
           break;
         case AuthChangeEvent.passwordRecovery:
-          AppConfig.debugPrint('🔑 Auth state: Password recovery initiated');
+          print('🟢 LOGIN PAGE: 🔑 Auth event: Password recovery');
           break;
         default:
+          print('🟢 LOGIN PAGE: Auth event: $event');
           break;
       }
     });
@@ -730,7 +800,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                             
-                            // Forgot Password (Login Only)
+                            // Forgot Password + Debug Session Reset (Login Only)
                             if (_isLogin) ...[
                               const SizedBox(height: 16),
                               TextButton(
@@ -745,21 +815,19 @@ class _LoginPageState extends State<LoginPage> {
                                 ),
                               ),
                               
-                              // ✅ NEW: Clear Session Button (Debug Only)
-                              if (AppConfig.enableDebugPrints) ...[
-                                const SizedBox(height: 8),
-                                TextButton.icon(
-                                  onPressed: _isLoading ? null : _forceResetSession,
-                                  icon: const Icon(Icons.refresh, size: 16, color: Colors.orange),
-                                  label: Text(
-                                    "Clear Session (iOS Debug)",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.orange.shade700,
-                                    ),
+                              // Debug Session Reset Button
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: _isLoading ? null : _forceResetSession,
+                                icon: const Icon(Icons.refresh, size: 16, color: Colors.red),
+                                label: Text(
+                                  "Clear Session & Retry",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.red.shade700,
                                   ),
                                 ),
-                              ],
+                              ),
                             ],
                             
                             SizedBox(height: isTablet ? 32 : 24),

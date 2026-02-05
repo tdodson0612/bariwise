@@ -1,1 +1,0 @@
- C:\\Users\\Default.DESKTOP-PJGMVFB\\.vscode\\REALPROJECTS\\bariwise\\.dart_tool\\flutter_build\\1a52d300cd333612e7eb46ea712b3704\\native_assets.json: 

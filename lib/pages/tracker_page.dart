@@ -1,5 +1,5 @@
 // lib/pages/tracker_page.dart
-// Updated with unit dropdowns, improved height handling, and ingredient auto-fill
+// Updated with unit dropdowns, improved height handling, debugging, and ingredient auto-fill
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,7 +41,7 @@ class _TrackerPageState extends State<TrackerPage> {
   final TextEditingController _waterController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
 
-  // Unit selections
+  // Unit selections - consistent defaults
   String _weightUnit = 'kg';
   String _exerciseUnit = 'minutes';
   String _waterUnit = 'cups';
@@ -179,10 +179,15 @@ class _TrackerPageState extends State<TrackerPage> {
       final userId = AuthService.currentUserId ?? '';
       
       setState(() {
-        _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'lbs';
+        _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'kg';
         _exerciseUnit = prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
         _waterUnit = prefs.getString('$_PREF_WATER_UNIT$userId') ?? 'cups';
       });
+      
+      AppConfig.debugPrint('📋 Loaded unit preferences:');
+      AppConfig.debugPrint('   Weight: $_weightUnit');
+      AppConfig.debugPrint('   Exercise: $_exerciseUnit');
+      AppConfig.debugPrint('   Water: $_waterUnit');
     } catch (e) {
       AppConfig.debugPrint('Error loading unit preferences: $e');
     }
@@ -193,6 +198,7 @@ class _TrackerPageState extends State<TrackerPage> {
       final prefs = await SharedPreferences.getInstance();
       final userId = AuthService.currentUserId ?? '';
       await prefs.setString('$key$userId', value);
+      AppConfig.debugPrint('✅ Saved unit preference: $key = $value');
     } catch (e) {
       AppConfig.debugPrint('Error saving unit preference: $e');
     }
@@ -202,23 +208,52 @@ class _TrackerPageState extends State<TrackerPage> {
     setState(() => _isLoading = true);
 
     try {
+      AppConfig.debugPrint('📂 Loading tracker data...');
+      
       await _loadUnitPreferences();
       
       final userId = AuthService.currentUserId;
       if (userId == null) {
         throw Exception('User not logged in');
       }
+      AppConfig.debugPrint('   User ID: $userId');
 
+      // Load profile data
+      AppConfig.debugPrint('🔍 Loading surgery type...');
       final diseaseType = await ProfileService.getSurgeryType(userId);
+      AppConfig.debugPrint('   Surgery type: ${diseaseType ?? 'none'}');
+      
+      AppConfig.debugPrint('🔍 Loading height...');
       final height = await ProfileService.getHeight(userId);
+      AppConfig.debugPrint('   Height: ${height?.toStringAsFixed(0) ?? 'none'} cm');
+      
+      AppConfig.debugPrint('🔍 Loading privacy settings...');
       final weightVisible = await ProfileService.getWeightVisibility(userId);
       final weightLossVisible = await ProfileService.getWeightLossVisibility(userId);
+      AppConfig.debugPrint('   Weight visible: $weightVisible');
+      AppConfig.debugPrint('   Weight loss visible: $weightLossVisible');
+      
+      AppConfig.debugPrint('🔍 Loading weight streak...');
       final streak = await TrackerService.getWeightStreak(userId);
+      AppConfig.debugPrint('   Current streak: $streak days');
 
+      AppConfig.debugPrint('🔍 Auto-filling missing weights...');
       await TrackerService.autoFillMissingWeights(userId);
 
+      AppConfig.debugPrint('🔍 Loading entry for ${_selectedDate.toString().split(' ')[0]}...');
       final dateString = _selectedDate.toString().split(' ')[0];
       final entry = await TrackerService.getEntryForDate(userId, dateString);
+      
+      if (entry != null) {
+        AppConfig.debugPrint('✅ Entry found:');
+        AppConfig.debugPrint('   Meals: ${entry.meals.length}');
+        AppConfig.debugPrint('   Exercise: ${entry.exercise ?? 'none'}');
+        AppConfig.debugPrint('   Water: ${entry.waterIntake ?? 'none'}');
+        AppConfig.debugPrint('   Weight: ${entry.weight?.toStringAsFixed(1) ?? 'none'} kg');
+        AppConfig.debugPrint('   Score: ${entry.dailyScore}');
+      } else {
+        AppConfig.debugPrint('ℹ️ No entry found for this date');
+      }
 
       if (mounted) {
         setState(() {
@@ -236,16 +271,20 @@ class _TrackerPageState extends State<TrackerPage> {
 
           _isLoading = false;
         });
+        
+        AppConfig.debugPrint('✅ Data loaded successfully');
       }
-    } catch (e) {
-      AppConfig.debugPrint('Error loading tracker data: $e');
+    } catch (e, stackTrace) {
+      AppConfig.debugPrint('❌ Error loading tracker data: $e');
+      AppConfig.debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         setState(() => _isLoading = false);
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.databaseError,
-          customMessage: 'Failed to load tracker data',
+          customMessage: 'Failed to load tracker data: ${e.toString()}',
           onRetry: _loadData,
         );
       }
@@ -254,11 +293,19 @@ class _TrackerPageState extends State<TrackerPage> {
 
   Future<void> _saveEntry() async {
     final userId = AuthService.currentUserId;
-    if (userId == null) return;
+    if (userId == null) {
+      AppConfig.debugPrint('❌ Cannot save: No user ID');
+      ErrorHandlingService.showSimpleError(context, 'You must be logged in to save entries');
+      return;
+    }
 
     setState(() => _isSaving = true);
 
     try {
+      AppConfig.debugPrint('💾 Starting save operation...');
+      AppConfig.debugPrint('   User ID: $userId');
+      AppConfig.debugPrint('   Date: ${_selectedDate.toString().split(' ')[0]}');
+      
       // Convert exercise to standard format (minutes)
       String? exerciseText;
       if (_exerciseController.text.trim().isNotEmpty) {
@@ -269,6 +316,7 @@ class _TrackerPageState extends State<TrackerPage> {
           } else {
             exerciseText = '${value.round()} minutes';
           }
+          AppConfig.debugPrint('   Exercise: $exerciseText');
         }
       }
 
@@ -296,15 +344,18 @@ class _TrackerPageState extends State<TrackerPage> {
               break;
           }
           waterText = '${cups.toStringAsFixed(1)} cups';
+          AppConfig.debugPrint('   Water: $waterText');
         }
       }
 
+      // Calculate score
       final score = TrackerService.calculateDailyScore(
         meals: _meals,
         surgeryType: _diseaseType,
         exercise: exerciseText,
         waterIntake: waterText,
       );
+      AppConfig.debugPrint('   Calculated score: $score');
 
       // Convert weight to kg if needed
       double? weight;
@@ -312,9 +363,13 @@ class _TrackerPageState extends State<TrackerPage> {
         final value = double.tryParse(_weightController.text.trim());
         if (value != null) {
           weight = _weightUnit == 'lbs' ? value * 0.453592 : value;
+          AppConfig.debugPrint('   Weight: ${weight.toStringAsFixed(1)} kg (from $_weightUnit)');
         }
+      } else {
+        AppConfig.debugPrint('   Weight: none entered');
       }
 
+      // Create entry
       final entry = TrackerEntry(
         date: _selectedDate.toString().split(' ')[0],
         meals: _meals,
@@ -324,8 +379,29 @@ class _TrackerPageState extends State<TrackerPage> {
         dailyScore: score,
       );
 
+      AppConfig.debugPrint('📝 Saving entry...');
       await TrackerService.saveEntry(userId, entry);
+      
+      AppConfig.debugPrint('🔄 Auto-filling missing weights...');
       await TrackerService.autoFillMissingWeights(userId);
+
+      AppConfig.debugPrint('🔍 Verifying save...');
+      final savedEntry = await TrackerService.getEntryForDate(
+        userId, 
+        _selectedDate.toString().split(' ')[0]
+      );
+      
+      if (savedEntry == null) {
+        throw Exception('Save verification failed - entry not found after save');
+      }
+      
+      if (weight != null && savedEntry.weight == null) {
+        throw Exception('Weight was not saved correctly');
+      }
+      
+      if (_meals.isNotEmpty && savedEntry.meals.isEmpty) {
+        throw Exception('Meals were not saved correctly');
+      }
 
       final newStreak = await TrackerService.getWeightStreak(userId);
       final hasReachedDay7 = await TrackerService.hasReachedDay7Streak(userId);
@@ -338,21 +414,27 @@ class _TrackerPageState extends State<TrackerPage> {
 
       if (mounted) {
         setState(() {
-          _currentEntry = entry;
+          _currentEntry = savedEntry;
           _currentStreak = newStreak;
           _isSaving = false;
         });
+        
+        AppConfig.debugPrint('✅ Save completed successfully!');
+        AppConfig.debugPrint('   New streak: $newStreak days');
+        
         ErrorHandlingService.showSuccess(context, 'Entry saved successfully!');
       }
-    } catch (e) {
-      AppConfig.debugPrint('Error saving entry: $e');
+    } catch (e, stackTrace) {
+      AppConfig.debugPrint('❌ Error saving entry: $e');
+      AppConfig.debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         setState(() => _isSaving = false);
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.databaseError,
-          customMessage: 'Failed to save entry',
+          customMessage: 'Failed to save entry: ${e.toString()}',
           onRetry: _saveEntry,
         );
       }
@@ -633,15 +715,42 @@ class _TrackerPageState extends State<TrackerPage> {
                   }
                 }
 
-                final userId = AuthService.currentUserId;
-                if (userId != null) {
-                  await ProfileService.updateHeight(userId, heightInCm);
-                  setState(() {
-                    _userHeight = heightInCm;
-                  });
+                try {
+                  final userId = AuthService.currentUserId;
+                  if (userId != null) {
+                    AppConfig.debugPrint('📏 Saving height: $heightInCm cm');
+                    
+                    await ProfileService.updateHeight(userId, heightInCm);
+                    
+                    // Verify it was saved
+                    final savedHeight = await ProfileService.getHeight(userId);
+                    if (savedHeight == null || (savedHeight - heightInCm).abs() > 0.1) {
+                      throw Exception('Height verification failed after save');
+                    }
+                    
+                    if (mounted) {
+                      setState(() {
+                        _userHeight = heightInCm;
+                      });
+                      
+                      AppConfig.debugPrint('✅ Height saved and verified: $heightInCm cm');
+                      ErrorHandlingService.showSuccess(context, 'Height saved successfully!');
+                    }
+                  }
+                  
+                  Navigator.pop(context);
+                } catch (e) {
+                  AppConfig.debugPrint('❌ Error saving height: $e');
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to save height: ${e.toString()}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
                 }
-
-                Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -668,6 +777,21 @@ class _TrackerPageState extends State<TrackerPage> {
               icon: Icon(Icons.height),
               tooltip: 'Update Height',
               onPressed: _showHeightSetupDialog,
+            ),
+          // 🔥 DEBUG BUTTON (Remove in production)
+          if (AppConfig.enableDebugPrints)
+            IconButton(
+              icon: Icon(Icons.bug_report),
+              tooltip: 'Debug Storage',
+              onPressed: () async {
+                final userId = AuthService.currentUserId;
+                if (userId != null) {
+                  await TrackerService.debugStorageState(userId);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Check debug logs for storage state')),
+                  );
+                }
+              },
             ),
         ],
       ),

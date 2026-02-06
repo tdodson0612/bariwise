@@ -76,9 +76,11 @@ class TrackerService {
     }
   }
 
-  /// Save a tracker entry
+  /// Save a tracker entry with verification
   static Future<void> saveEntry(String userId, TrackerEntry entry) async {
     try {
+      AppConfig.debugPrint('💾 Saving tracker entry for ${entry.date}');
+      
       final entries = await getEntries(userId);
 
       // Remove existing entry for this date if it exists
@@ -91,12 +93,30 @@ class TrackerService {
       final prefs = await SharedPreferences.getInstance();
       final key = _getStorageKey(userId);
       final jsonString = json.encode(entries.map((e) => e.toJson()).toList());
-      await prefs.setString(key, jsonString);
+      
+      // ✅ VERIFY SAVE OPERATION
+      final saveSuccess = await prefs.setString(key, jsonString);
+      
+      if (!saveSuccess) {
+        throw Exception('Failed to save entry to SharedPreferences');
+      }
+      
+      // ✅ VERIFY DATA WAS ACTUALLY SAVED
+      final savedData = prefs.getString(key);
+      if (savedData == null || savedData != jsonString) {
+        throw Exception('Data verification failed - saved data does not match');
+      }
 
-      AppConfig.debugPrint('✅ Saved tracker entry for ${entry.date}');
+      AppConfig.debugPrint('✅ Saved and verified tracker entry for ${entry.date}');
+      AppConfig.debugPrint('   Weight: ${entry.weight?.toStringAsFixed(1) ?? 'none'} kg');
+      AppConfig.debugPrint('   Meals: ${entry.meals.length}');
+      AppConfig.debugPrint('   Exercise: ${entry.exercise ?? 'none'}');
+      AppConfig.debugPrint('   Water: ${entry.waterIntake ?? 'none'}');
+      AppConfig.debugPrint('   Score: ${entry.dailyScore}');
+      
     } catch (e) {
       AppConfig.debugPrint('❌ Error saving entry: $e');
-      throw Exception('Failed to save tracker entry');
+      throw Exception('Failed to save tracker entry: $e');
     }
   }
 
@@ -118,14 +138,28 @@ class TrackerService {
     }
   }
 
-  /// Get entry for a specific date (returns null if not found)
+  /// Get entry for a specific date with detailed logging (returns null if not found)
   static Future<TrackerEntry?> getEntryForDate(String userId, String date) async {
     try {
       final entries = await getEntries(userId);
+      
+      AppConfig.debugPrint('📋 Looking for entry on $date');
+      AppConfig.debugPrint('   Total entries in storage: ${entries.length}');
+      
       try {
-        return entries.firstWhere((e) => e.date == date);
+        final entry = entries.firstWhere((e) => e.date == date);
+        
+        AppConfig.debugPrint('✅ Found entry for $date:');
+        AppConfig.debugPrint('   Weight: ${entry.weight?.toStringAsFixed(1) ?? 'none'} kg');
+        AppConfig.debugPrint('   Meals: ${entry.meals.length}');
+        AppConfig.debugPrint('   Exercise: ${entry.exercise ?? 'none'}');
+        AppConfig.debugPrint('   Water: ${entry.waterIntake ?? 'none'}');
+        AppConfig.debugPrint('   Score: ${entry.dailyScore}');
+        
+        return entry;
       } catch (e) {
-        return null; // Not found
+        AppConfig.debugPrint('ℹ️ No entry found for $date');
+        return null;
       }
     } catch (e) {
       AppConfig.debugPrint('❌ Error getting entry for date: $e');
@@ -584,6 +618,43 @@ class TrackerService {
       AppConfig.debugPrint('✅ Cleared all tracker data');
     } catch (e) {
       AppConfig.debugPrint('❌ Error clearing tracker data: $e');
+    }
+  }
+
+  // ========================================
+  // DEBUG HELPER
+  // ========================================
+
+  /// Debug method to check storage state
+  static Future<void> debugStorageState(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _getStorageKey(userId);
+      final jsonString = prefs.getString(key);
+      
+      if (jsonString == null) {
+        AppConfig.debugPrint('🔍 DEBUG: No data in storage for user $userId');
+        return;
+      }
+      
+      final List<dynamic> jsonList = json.decode(jsonString);
+      final entries = jsonList
+          .map((json) => TrackerEntry.fromJson(json))
+          .toList();
+      
+      AppConfig.debugPrint('🔍 DEBUG: Storage state for user $userId');
+      AppConfig.debugPrint('   Total entries: ${entries.length}');
+      
+      for (final entry in entries.take(5)) {
+        AppConfig.debugPrint('   - ${entry.date}: ${entry.weight?.toStringAsFixed(1) ?? 'no weight'} kg, ${entry.meals.length} meals, score ${entry.dailyScore}');
+      }
+      
+      if (entries.length > 5) {
+        AppConfig.debugPrint('   ... and ${entries.length - 5} more entries');
+      }
+      
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error checking storage state: $e');
     }
   }
 }

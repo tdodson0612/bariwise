@@ -457,7 +457,7 @@ Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     // Refresh system-wide premium gate
     await PremiumGateController().refresh();
 
-    // Refresh this page’s premium data
+    // Refresh this page's premium data
     await _checkPremiumStatus(forceRefresh: true);
 
     if (mounted) {
@@ -619,7 +619,7 @@ Widget _buildStatusCard() {
     backgroundColor = Colors.amber.shade50;
   } else {
     title = 'Choose Your Plan';
-    subtitle = 'Unlock the full potential of Recipe Scanner';
+    subtitle = 'Unlock the full potential of bariWise';
     icon = Icons.star_outline;
     iconColor = Colors.grey.shade600;
     backgroundColor = Colors.grey.shade50;
@@ -1001,7 +1001,7 @@ Widget _buildAlreadyPurchasedCard() {
         ),
         const SizedBox(height: 8),
         Text(
-          'Enjoy unlimited access to all premium features. Thank you for supporting Recipe Scanner!',
+          'Enjoy unlimited access to all premium features. Thank you for supporting bariWise!',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,

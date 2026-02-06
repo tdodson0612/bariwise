@@ -1,4 +1,4 @@
-// lib/login.dart - DEBUG VERSION WITH COMPREHENSIVE LOGGING
+// lib/login.dart - FIXED: Proper session handling before navigation
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
@@ -36,7 +36,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    _setupAuthListener();
     _loadSavedCredentials();
   }
 
@@ -186,9 +185,18 @@ class _LoginPageState extends State<LoginPage> {
       print('🟢 LOGIN PAGE: ✅ Login successful!');
       print('  - User ID: ${response.user!.id}');
       
-      // Wait for auth state to settle
-      print('🟢 LOGIN PAGE: Waiting 800ms for auth state to settle...');
-      await Future.delayed(const Duration(milliseconds: 800));
+      // 🔥 FIX: Wait longer for auth state to fully settle
+      print('🟢 LOGIN PAGE: Waiting 1500ms for auth state to settle...');
+      await Future.delayed(const Duration(milliseconds: 1500));
+      
+      // 🔥 FIX: Verify session is still valid before navigating
+      final currentSession = Supabase.instance.client.auth.currentSession;
+      if (currentSession == null) {
+        print('🟢 LOGIN PAGE: ❌ Session lost after delay!');
+        throw Exception('Session was not properly established. Please try again.');
+      }
+      
+      print('🟢 LOGIN PAGE: ✅ Session verified after delay');
       
       if (!mounted) {
         print('🟢 LOGIN PAGE: ⚠️ Widget unmounted, aborting navigation');
@@ -198,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
       print('🟢 LOGIN PAGE: Showing success message...');
       ErrorHandlingService.showSuccess(context, 'Welcome back!');
       
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 500));
       
       if (!mounted) {
         print('🟢 LOGIN PAGE: ⚠️ Widget unmounted after success message');
@@ -206,11 +214,9 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       print('🟢 LOGIN PAGE: Navigating to /home...');
-      Navigator.pushNamedAndRemoveUntil(
-        context, 
-        '/home',
-        (route) => false,
-      );
+      
+      // 🔥 FIX: Use pushReplacementNamed to avoid back button issues
+      Navigator.pushReplacementNamed(context, '/home');
       
       print('🟢 LOGIN PAGE: ✅ Navigation complete');
       print('========================================\n');
@@ -255,7 +261,7 @@ class _LoginPageState extends State<LoginPage> {
         email: trimmedEmail,
         password: _password,
       ).timeout(
-        const Duration(seconds: 30), // Increased from 15s
+        const Duration(seconds: 30),
         onTimeout: () {
           print('🟢 SIGNUP PAGE: ❌ TIMEOUT after 30 seconds');
           throw Exception('Connection timed out. Please try again.');
@@ -300,6 +306,24 @@ class _LoginPageState extends State<LoginPage> {
           } else {
             print('🟢 SIGNUP PAGE: ✅ Session exists - auto-login successful!');
             print('  - Token preview: ${response.session!.accessToken.substring(0, 20)}...');
+            
+            // 🔥 FIX: Wait for session to settle before navigating
+            print('🟢 SIGNUP PAGE: Waiting 1500ms for session to settle...');
+            await Future.delayed(const Duration(milliseconds: 1500));
+            
+            // 🔥 FIX: Verify session is still valid
+            final currentSession = Supabase.instance.client.auth.currentSession;
+            if (currentSession == null) {
+              print('🟢 SIGNUP PAGE: ❌ Session lost after delay!');
+              throw Exception('Session was not properly established. Please try logging in.');
+            }
+            
+            print('🟢 SIGNUP PAGE: ✅ Session verified after delay');
+            
+            if (!mounted) {
+              print('🟢 SIGNUP PAGE: ⚠️ Widget unmounted before navigation');
+              return;
+            }
             
             ErrorHandlingService.showSuccess(context, 'Welcome to bari Food Scanner!');
             await Future.delayed(const Duration(milliseconds: 500));
@@ -462,37 +486,6 @@ class _LoginPageState extends State<LoginPage> {
         ],
       ),
     );
-  }
-
-  void _setupAuthListener() {
-    print('🟢 LOGIN PAGE: Setting up auth state listener...');
-    _authSub = AuthService.authStateChanges.listen((data) {
-      final event = data.event;
-      final session = data.session;
-
-      if (!mounted) return;
-
-      print('🟢 LOGIN PAGE: Auth state change detected');
-      print('  - Event: $event');
-      print('  - Session exists: ${session != null}');
-      print('  - User: ${session?.user.email}');
-
-      // ✅ CRITICAL: Only log, don't navigate from here
-      switch (event) {
-        case AuthChangeEvent.signedIn:
-          print('🟢 LOGIN PAGE: 🔐 Auth event: User signed in');
-          break;
-        case AuthChangeEvent.signedOut:
-          print('🟢 LOGIN PAGE: 🔓 Auth event: User signed out');
-          break;
-        case AuthChangeEvent.passwordRecovery:
-          print('🟢 LOGIN PAGE: 🔑 Auth event: Password recovery');
-          break;
-        default:
-          print('🟢 LOGIN PAGE: Auth event: $event');
-          break;
-      }
-    });
   }
 
   void _toggleMode() {

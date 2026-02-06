@@ -1051,12 +1051,25 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
+  // CRITICAL FIX FOR profile_screen.dart
+  // Replace the _loadSurgeryType method with this improved version
+
   Future<void> _loadSurgeryType() async {
     if (!mounted) return;
     
     try {
+      AppConfig.debugPrint('🔍 Loading surgery type...');
+      
       final userId = AuthService.currentUserId;
-      if (userId == null) return;
+      if (userId == null) {
+        AppConfig.debugPrint('⚠️ No user ID available');
+        if (mounted) {
+          setState(() {
+            _currentSurgeryType = 'Not specified';
+          });
+        }
+        return;
+      }
       
       final surgeryType = await ProfileService.getSurgeryType(userId);
       
@@ -1064,9 +1077,13 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() {
           _currentSurgeryType = surgeryType ?? 'Not specified';
         });
+        
+        AppConfig.debugPrint('✅ Surgery type loaded: ${_currentSurgeryType}');
       }
-    } catch (e) {
-      AppConfig.debugPrint('⚠️ Error loading surgery type: $e');
+    } catch (e, stackTrace) {
+      AppConfig.debugPrint('❌ Error loading surgery type: $e');
+      AppConfig.debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         setState(() {
           _currentSurgeryType = 'Not specified';
@@ -2948,35 +2965,51 @@ PremiumGate(
   ),
 ),
 
-// Bariatric Surgery Type Selection
-_sectionContainer(
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          const Icon(Icons.medical_services, color: Colors.blue, size: 24),
-          const SizedBox(width: 8),
-          const Text(
-            'Bariatric Surgery Type',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-      SurgeryTypeSelector(
-        currentValue: _currentSurgeryType ?? 'Not specified',
-        onChanged: (String newType) async {
+const SizedBox(height: 20),
+
+          // Bariatric Surgery Type Selection
+          _sectionContainer(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.medical_services, color: Colors.blue, size: 24),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Bariatric Surgery Type',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SurgeryTypeSelector(
+                  currentValue: _currentSurgeryType ?? 'Not specified',
+                  onChanged: (String newType) async {
                     try {
                       final userId = AuthService.currentUserId;
-                      if (userId == null) return;
+                      if (userId == null) {
+                        AppConfig.debugPrint('❌ Cannot save surgery type: No user ID');
+                        ErrorHandlingService.showSimpleError(
+                          context,
+                          'You must be logged in to update surgery type',
+                        );
+                        return;
+                      }
                       
                       setState(() => _isLoading = true);
                       
+                      AppConfig.debugPrint('💉 Updating surgery type to: $newType');
                       await ProfileService.updateSurgeryType(userId, newType);
+                      
+                      // Verify it was saved
+                      final savedType = await ProfileService.getSurgeryType(userId);
+                      if (savedType != newType) {
+                        throw Exception('Surgery type verification failed - saved value does not match');
+                      }
                       
                       if (mounted) {
                         setState(() {
@@ -2984,15 +3017,21 @@ _sectionContainer(
                           _isLoading = false;
                         });
                         
+                        // Reload scores with new surgery type
                         await _loadTodayScore();
                         await _loadWeeklyScore();
+                        
+                        AppConfig.debugPrint('✅ Surgery type updated and verified: $newType');
                         
                         ErrorHandlingService.showSuccess(
                           context,
                           'Surgery type updated. Scores recalculated.',
                         );
                       }
-                    } catch (e) {
+                    } catch (e, stackTrace) {
+                      AppConfig.debugPrint('❌ Error updating surgery type: $e');
+                      AppConfig.debugPrint('Stack trace: $stackTrace');
+                      
                       if (mounted) {
                         setState(() => _isLoading = false);
                         
@@ -3000,7 +3039,7 @@ _sectionContainer(
                           context: context,
                           error: e,
                           category: ErrorHandlingService.databaseError,
-                          customMessage: 'Failed to update surgery type',
+                          customMessage: 'Failed to update surgery type: ${e.toString()}',
                           onRetry: () async {
                             final userId = AuthService.currentUserId;
                             if (userId == null) return;
@@ -3395,7 +3434,7 @@ _sectionContainer(
             const SizedBox(height: 20),
           ],
 
-          // 🔥 NEW: COOKBOOK SECTION
+          // 🔥 COOKBOOK SECTION
           _sectionContainer(
             child: const CookbookSection(),
           ),
@@ -3439,12 +3478,12 @@ _sectionContainer(
             ),
           ),
           const SizedBox(height: 100),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-        }
+        ],           // closes Column children array
+      ),             // closes Column
+    ),               // closes SingleChildScrollView
+  ),                 // closes RefreshIndicator
+],                   // closes Stack children array
+),                   // closes Stack
+);                   // closes Scaffold body AND return statement
+}                    // closes build method
+}                    // closes _ProfileScreenState class

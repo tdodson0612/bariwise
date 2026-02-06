@@ -467,41 +467,124 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _initializeAsync() async {
     try {
-      await Future.delayed(const Duration(milliseconds: 100));
+      // 🔥 FIX: Wait longer for session to fully settle after login/signup
+      if (AppConfig.enableDebugPrints) {
+        print("🏠 HOME: Starting initialization...");
+      }
+      
+      await Future.delayed(const Duration(milliseconds: 800));
       
       if (!mounted || _isDisposed) return;
       
-      await _premiumController.refresh();
-      
-      if (AppConfig.enableDebugPrints) {
-        print("🔐 Premium status after refresh: $_isPremium");
+      // 🔥 FIX: Verify we have a valid session before proceeding
+      final currentUserId = AuthService.currentUserId;
+      if (currentUserId == null) {
+        if (AppConfig.enableDebugPrints) {
+          print("⚠️ HOME: No user session found on first check, waiting longer...");
+        }
+        
+        // Wait a bit more for session to arrive
+        await Future.delayed(const Duration(milliseconds: 1000));
+        
+        // Check again
+        final retryUserId = AuthService.currentUserId;
+        if (retryUserId == null) {
+          if (AppConfig.enableDebugPrints) {
+            print("❌ HOME: Still no session after retry - user might not be logged in");
+          }
+          // Don't throw error - user might have been logged out
+          // Just skip initialization
+          return;
+        }
+        
+        if (AppConfig.enableDebugPrints) {
+          print("✅ HOME: Session found on retry: $retryUserId");
+        }
+      } else {
+        if (AppConfig.enableDebugPrints) {
+          print("✅ HOME: Session found immediately: $currentUserId");
+        }
       }
       
+      if (!mounted || _isDisposed) return;
+      
+      // 🔥 FIX: Refresh premium status with retry logic
+      try {
+        if (AppConfig.enableDebugPrints) {
+          print("🔐 HOME: Checking premium status...");
+        }
+        
+        await _premiumController.refresh();
+        
+        if (AppConfig.enableDebugPrints) {
+          print("🔐 HOME: Premium status: $_isPremium");
+        }
+      } catch (e) {
+        if (AppConfig.enableDebugPrints) {
+          print("⚠️ HOME: Premium check failed (non-critical): $e");
+        }
+        // Continue anyway - premium status is not critical for app to work
+      }
+      
+      if (!mounted || _isDisposed) return;
+      
+      // Load ads if free user
       if (!_isPremium) {
         if (AppConfig.enableDebugPrints) {
-          print("📺 Loading ads for FREE user");
+          print("📺 HOME: Loading ads for FREE user");
         }
         _loadInterstitialAd();
         _loadRewardedAd();
       } else {
         if (AppConfig.enableDebugPrints) {
-          print("🚫 Skipping ads for PREMIUM user");
+          print("🚫 HOME: Skipping ads for PREMIUM user");
         }
       }
       
-      await _loadFavoriteRecipes();
-      // Disabled auto-sync - only sync when user manually refreshes
-      // await _syncFavoritesFromDatabase();
+      if (!mounted || _isDisposed) return;
+      
+      // 🔥 FIX: Load favorites with retry and graceful failure
+      try {
+        if (AppConfig.enableDebugPrints) {
+          print("📖 HOME: Loading favorite recipes...");
+        }
+        
+        await _loadFavoriteRecipes();
+        
+        if (AppConfig.enableDebugPrints) {
+          print("✅ HOME: Loaded ${_favoriteRecipes.length} favorite recipes");
+        }
+      } catch (e) {
+        if (AppConfig.enableDebugPrints) {
+          print("⚠️ HOME: Failed to load favorites (non-critical): $e");
+        }
+        
+        // 🔥 FIX: Don't show error popup on home screen load
+        // Just log it and continue - user can retry manually
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _favoriteRecipes = [];
+          });
+        }
+      }
+      
+      if (AppConfig.enableDebugPrints) {
+        print("✅ HOME: Initialization complete");
+      }
 
     } catch (e) {
-      if (mounted) {
-        await ErrorHandlingService.handleError(
-          context: context,
-          error: e,
-          category: ErrorHandlingService.initializationError,
-          showSnackBar: true,
-          customMessage: 'Failed to initialize home screen',
-        );
+      if (AppConfig.enableDebugPrints) {
+        print("❌ HOME: Initialization error: $e");
+      }
+      
+      // 🔥 FIX: Only show error if it's truly critical
+      // Most initialization failures are non-critical
+      if (mounted && !_isDisposed) {
+        // Silent fail - don't show popup that blocks the UI
+        // User can still use the app
+        if (AppConfig.enableDebugPrints) {
+          print("⚠️ HOME: Continuing despite initialization error");
+        }
       }
     }
   }

@@ -4,7 +4,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 # App version - increment for each App Store submission
 # Format: MAJOR.MINOR.PATCH+BUILD_NUMBER
-version: 1.0.1+10
+version: 1.0.1+11
 
 # Flutter SDK constraints
 environment:

@@ -1,4 +1,4 @@
-// lib/contact_screen.dart - IMPROVED: Real-time validation & character count
+// lib/contact_screen.dart - IMPROVED: Real-time validation, character count, and fixed email
 import 'package:flutter/material.dart';
 import 'package:bari_wise/services/contact_service.dart';
 import 'widgets/app_drawer.dart';
@@ -16,24 +16,23 @@ class _ContactScreenState extends State<ContactScreen> {
   final TextEditingController _messageController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  // 🔥 NEW: Real-time validation states
+  // 🔥 Real-time validation states
   String? _emailError;
   int _messageLength = 0;
   bool _isEmailValid = false;
+  bool _isSending = false;  // 🔥 NEW: Track sending state
 
   @override
   void initState() {
     super.initState();
-    
-    // 🔥 NEW: Add listeners for real-time updates
+    // 🔥 Add listeners for real-time updates
     _emailController.addListener(_validateEmail);
     _messageController.addListener(_updateMessageLength);
   }
 
-  // 🔥 NEW: Real-time email validation
+  // 🔥 Real-time email validation
   void _validateEmail() {
     final email = _emailController.text.trim();
-    
     setState(() {
       if (email.isEmpty) {
         _emailError = null;
@@ -48,58 +47,156 @@ class _ContactScreenState extends State<ContactScreen> {
     });
   }
 
-  // 🔥 NEW: Real-time message length counter
+  // 🔥 Real-time message length counter
   void _updateMessageLength() {
     setState(() {
       _messageLength = _messageController.text.length;
     });
   }
 
+  // 🔥 IMPROVED: Better error handling and validation
   Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        // Show loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sending message...')),
-        );
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fix the errors before submitting'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-        await ContactService.submitContactMessage(
-          name: _nameController.text,
-          email: _emailController.text,
-          message: _messageController.text,
-        );
+    // Check if already sending
+    if (_isSending) return;
 
-        // Success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Thank you for your message! We\'ll get back to you soon.'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+    setState(() {
+      _isSending = true;
+    });
 
-          // Clear form
-          _nameController.clear();
-          _emailController.clear();
-          _messageController.clear();
-        }
+    try {
+      print('📤 Submitting contact form...');
+      print('Name: ${_nameController.text}');
+      print('Email: ${_emailController.text}');
+      print('Message length: ${_messageController.text.length}');
 
-      } catch (error) {
-        // Error handling
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to send message. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      // Show loading snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Sending message...'),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 30),
+        ),
+      );
+
+      // Submit the form
+      await ContactService.submitContactMessage(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        message: _messageController.text.trim(),
+      );
+
+      print('✅ Contact form submitted successfully');
+
+      if (!mounted) return;
+
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Thank you for your message! We\'ll get back to you soon.'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 4),
+        ),
+      );
+
+      // Clear form
+      _nameController.clear();
+      _emailController.clear();
+      _messageController.clear();
+
+      // Reset validation states
+      setState(() {
+        _emailError = null;
+        _isEmailValid = false;
+        _messageLength = 0;
+      });
+    } catch (error, stackTrace) {
+      print('❌ Error submitting contact form: $error');
+      print('Stack trace: $stackTrace');
+
+      if (!mounted) return;
+
+      // Clear the loading snackbar
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Determine error message
+      String errorMessage = 'Failed to send message. Please try again.';
+      
+      final errorString = error.toString().toLowerCase();
+      if (errorString.contains('network') || errorString.contains('socket')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorString.contains('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (errorString.contains('authentication') || errorString.contains('401')) {
+        errorMessage = 'Authentication error. Please sign out and back in.';
+      }
+
+      // Show error message with retry option
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text(errorMessage)),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: _submitForm,
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
       }
     }
   }
 
   @override
   void dispose() {
+    _emailController.removeListener(_validateEmail);
+    _messageController.removeListener(_updateMessageLength);
     _nameController.dispose();
     _emailController.dispose();
     _messageController.dispose();
@@ -121,7 +218,7 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
         ),
       ),
-      drawer: AppDrawer(currentPage: 'contact'),
+      drawer: const AppDrawer(currentPage: 'contact'),
       body: Stack(
         children: [
           // Background Image
@@ -129,9 +226,11 @@ class _ContactScreenState extends State<ContactScreen> {
             child: Image.asset(
               'assets/backgrounds/background.jpeg',
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(color: Colors.grey[100]);
+              },
             ),
           ),
-          
           // Content
           SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -141,11 +240,11 @@ class _ContactScreenState extends State<ContactScreen> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.95),
+                    color: Colors.white.withAlpha((0.95 * 255).toInt()),
                     borderRadius: BorderRadius.circular(15),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withAlpha((0.1 * 255).toInt()),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -176,18 +275,17 @@ class _ContactScreenState extends State<ContactScreen> {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
                 // Contact Form
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 1.0),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(15),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withAlpha((0.1 * 255).toInt()),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -220,14 +318,14 @@ class _ContactScreenState extends State<ContactScreen> {
                               borderSide: BorderSide(color: Colors.blue, width: 2),
                             ),
                           ),
+                          enabled: !_isSending,
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
+                            if (value == null || value.trim().isEmpty) {
                               return 'Please enter your name';
                             }
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 15),
 
                         // 🔥 IMPROVED: Email Field with real-time validation
@@ -252,9 +350,7 @@ class _ContactScreenState extends State<ContactScreen> {
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderSide: BorderSide(
-                                    color: _emailError != null 
-                                        ? Colors.red 
-                                        : Colors.blue,
+                                    color: _emailError != null ? Colors.red : Colors.blue,
                                     width: 2,
                                   ),
                                 ),
@@ -263,8 +359,9 @@ class _ContactScreenState extends State<ContactScreen> {
                                 ),
                               ),
                               keyboardType: TextInputType.emailAddress,
+                              enabled: !_isSending,
                               validator: (value) {
-                                if (value == null || value.isEmpty) {
+                                if (value == null || value.trim().isEmpty) {
                                   return 'Please enter your email';
                                 }
                                 if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
@@ -273,8 +370,7 @@ class _ContactScreenState extends State<ContactScreen> {
                                 return null;
                               },
                             ),
-                            
-                            // 🔥 NEW: Real-time error message
+                            // 🔥 Real-time error message
                             if (_emailError != null)
                               Padding(
                                 padding: const EdgeInsets.only(left: 12, top: 6),
@@ -286,8 +382,7 @@ class _ContactScreenState extends State<ContactScreen> {
                                   ),
                                 ),
                               ),
-                            
-                            // 🔥 NEW: Success indicator
+                            // 🔥 Success indicator
                             if (_isEmailValid && _emailError == null)
                               Padding(
                                 padding: const EdgeInsets.only(left: 12, top: 6),
@@ -308,7 +403,6 @@ class _ContactScreenState extends State<ContactScreen> {
                               ),
                           ],
                         ),
-
                         const SizedBox(height: 15),
 
                         // 🔥 IMPROVED: Message Field with character counter
@@ -317,31 +411,30 @@ class _ContactScreenState extends State<ContactScreen> {
                           children: [
                             TextFormField(
                               controller: _messageController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Message',
-                                prefixIcon: const Icon(Icons.message),
-                                border: const OutlineInputBorder(),
-                                focusedBorder: const OutlineInputBorder(
+                                prefixIcon: Icon(Icons.message),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
                                   borderSide: BorderSide(color: Colors.blue, width: 2),
                                 ),
                                 alignLabelWithHint: true,
-                                // 🔥 NEW: Character counter in hint
                                 helperText: '', // Reserve space for helper
                               ),
                               maxLines: 5,
-                              maxLength: 500, // Add max length
+                              maxLength: 500,
+                              enabled: !_isSending,
                               validator: (value) {
-                                if (value == null || value.isEmpty) {
+                                if (value == null || value.trim().isEmpty) {
                                   return 'Please enter your message';
                                 }
-                                if (value.length < 10) {
+                                if (value.trim().length < 10) {
                                   return 'Message must be at least 10 characters long';
                                 }
                                 return null;
                               },
                             ),
-                            
-                            // 🔥 NEW: Character count indicator
+                            // 🔥 Character count indicator
                             Padding(
                               padding: const EdgeInsets.only(left: 12, top: 4),
                               child: Row(
@@ -349,18 +442,14 @@ class _ContactScreenState extends State<ContactScreen> {
                                   Icon(
                                     Icons.text_fields,
                                     size: 14,
-                                    color: _messageLength < 10 
-                                        ? Colors.orange 
-                                        : Colors.orange,
+                                    color: _messageLength < 10 ? Colors.orange : Colors.orange,
                                   ),
-                                  SizedBox(width: 4),
+                                  const SizedBox(width: 4),
                                   Text(
                                     '$_messageLength/500 characters',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: _messageLength < 10 
-                                          ? Colors.orange 
-                                          : Colors.orange,
+                                      color: _messageLength < 10 ? Colors.orange : Colors.orange,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -375,8 +464,7 @@ class _ContactScreenState extends State<ContactScreen> {
                                 ],
                               ),
                             ),
-                            
-                            // 🔥 NEW: Progress bar
+                            // 🔥 Progress bar
                             Padding(
                               padding: const EdgeInsets.only(left: 12, top: 8, right: 12),
                               child: ClipRRect(
@@ -385,10 +473,10 @@ class _ContactScreenState extends State<ContactScreen> {
                                   value: (_messageLength / 500).clamp(0.0, 1.0),
                                   backgroundColor: Colors.grey.shade200,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    _messageLength < 10 
-                                        ? Colors.orange 
-                                        : _messageLength > 450 
-                                            ? Colors.red 
+                                    _messageLength < 10
+                                        ? Colors.orange
+                                        : _messageLength > 450
+                                            ? Colors.red
                                             : Colors.orange,
                                   ),
                                   minHeight: 6,
@@ -397,12 +485,11 @@ class _ContactScreenState extends State<ContactScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
 
                         // Submit Button
                         ElevatedButton(
-                          onPressed: _submitForm,
+                          onPressed: _isSending ? null : _submitForm,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
@@ -411,31 +498,40 @@ class _ContactScreenState extends State<ContactScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             elevation: 3,
+                            disabledBackgroundColor: Colors.grey,
                           ),
-                          child: const Text(
-                            'Send Message',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          child: _isSending
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'Send Message',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                         ),
                       ],
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
-                // Contact Details
+                // Contact Details - 🔥 FIXED: Correct email address
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.95),
+                    color: Colors.white.withAlpha((0.95 * 255).toInt()),
                     borderRadius: BorderRadius.circular(15),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withAlpha((0.1 * 255).toInt()),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -450,22 +546,22 @@ class _ContactScreenState extends State<ContactScreen> {
                           fontWeight: FontWeight.bold,
                           color: Colors.blue,
                         ),
-                      ),                
+                      ),
                       const SizedBox(height: 10),
-                      _buildContactRow(Icons.email, 'baridiseasescanner@gmail.com'),                     
+                      // 🔥 FIXED: Changed from baridiseasescanner@gmail.com to bbrc2021bbc1298.442@icloud.com
+                      _buildContactRow(Icons.email, 'bbrc2021bbc1298.442@icloud.com'),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
                 // FAQ Section
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
+                    color: Colors.blue.withAlpha((0.1 * 255).toInt()),
                     borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    border: Border.all(color: Colors.blue.withAlpha((0.3 * 255).toInt())),
                   ),
                   child: const Column(
                     children: [

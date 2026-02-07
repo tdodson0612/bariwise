@@ -543,20 +543,37 @@ class _ProfileScreenState extends State<ProfileScreen>
         imageQuality: 85,
       );
 
-      if (pickedFile == null || !mounted) {
-        AppConfig.debugPrint('⚠️ No image selected or widget unmounted');
+      if (pickedFile == null) {
+        AppConfig.debugPrint('⚠️ No image selected by user');
+        return;  // User cancelled - don't show error
+      }
+
+      if (!mounted) {
+        AppConfig.debugPrint('⚠️ Widget unmounted during image selection');
         return;
       }
 
       AppConfig.debugPrint('📸 Image picked: ${pickedFile.path}');
+
+      // 🔥 ADDED: Verify file exists before uploading
+      final imageFile = File(pickedFile.path);
+      if (!await imageFile.exists()) {
+        throw Exception('Selected image file not found. Please try again.');
+      }
+
+      // 🔥 ADDED: Check file size
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        throw Exception('Selected image is empty. Please choose a different image.');
+      }
+
+      AppConfig.debugPrint('📏 Image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
 
       setState(() {
         _isLoadingPictures = true;
       });
       startedUpload = true;
 
-      final imageFile = File(pickedFile.path);
-      
       AppConfig.debugPrint('🚀 Starting gallery upload...');
       final url = await PictureService.uploadPicture(imageFile);
 
@@ -1533,15 +1550,38 @@ class _ProfileScreenState extends State<ProfileScreen>
         imageQuality: 85,
       );
 
-      if (pickedFile == null || !mounted) return;
+      if (pickedFile == null) {
+        AppConfig.debugPrint('⚠️ No profile image selected by user');
+        return;  // User cancelled - don't show error
+      }
+
+      if (!mounted) {
+        AppConfig.debugPrint('⚠️ Widget unmounted during profile image selection');
+        return;
+      }
+
+      // 🔥 ADDED: Verify file exists before uploading
+      final imageFile = File(pickedFile.path);
+      if (!await imageFile.exists()) {
+        throw Exception('Selected image file not found. Please try again.');
+      }
+
+      // 🔥 ADDED: Check file size
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        throw Exception('Selected image is empty. Please choose a different image.');
+      }
+
+      AppConfig.debugPrint('📏 Profile image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
 
       setState(() {
         _isLoading = true;
       });
 
-      final imageFile = File(pickedFile.path);
+      AppConfig.debugPrint('🚀 Starting profile picture upload...');
       final url = await PictureService.uploadProfilePicture(imageFile);
-
+      
+      AppConfig.debugPrint('✅ Profile picture upload complete: $url');
       if (mounted) {
         setState(() {
           _profileImageUrl = url;
@@ -1585,14 +1625,38 @@ class _ProfileScreenState extends State<ProfileScreen>
         imageQuality: 85,
       );
 
-      if (pickedFile == null || !mounted) return;
+      if (pickedFile == null) {
+        AppConfig.debugPrint('⚠️ No background image selected by user');
+        return;  // User cancelled - don't show error
+      }
+
+      if (!mounted) {
+        AppConfig.debugPrint('⚠️ Widget unmounted during background image selection');
+        return;
+      }
+
+      // 🔥 ADDED: Verify file exists before uploading
+      final imageFile = File(pickedFile.path);
+      if (!await imageFile.exists()) {
+        throw Exception('Selected image file not found. Please try again.');
+      }
+
+      // 🔥 ADDED: Check file size
+      final fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        throw Exception('Selected image is empty. Please choose a different image.');
+      }
+
+      AppConfig.debugPrint('📏 Background image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
 
       setState(() {
         _isLoading = true;
       });
 
-      final imageFile = File(pickedFile.path);
+      AppConfig.debugPrint('🚀 Starting background picture upload...');
       final url = await PictureService.uploadBackgroundPicture(imageFile);
+      
+      AppConfig.debugPrint('✅ Background picture upload complete: $url');
 
       if (mounted) {
         setState(() {

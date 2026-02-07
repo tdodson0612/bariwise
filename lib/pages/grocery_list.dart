@@ -1,4 +1,4 @@
-// lib/pages/grocery_list.dart - ENHANCED with multi-select and action buttons
+// lib/pages/grocery_list.dart - ENHANCED with multi-select, action buttons, and better error handling
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,6 +10,7 @@ import '../services/error_handling_service.dart';
 
 class GroceryListPage extends StatefulWidget {
   final String? initialItem;
+
   const GroceryListPage({super.key, this.initialItem});
 
   @override
@@ -20,8 +21,9 @@ class _GroceryListPageState extends State<GroceryListPage> {
   List<Map<String, TextEditingController>> itemControllers = [];
   bool isLoading = true;
   bool isSaving = false;
-  
-  // ✅ NEW: Multi-select mode
+  String? _errorMessage;  // 🔥 NEW: Track error state
+
+  // ✅ Multi-select mode
   bool isMultiSelectMode = false;
   Set<int> selectedIndices = {};
 
@@ -34,21 +36,50 @@ class _GroceryListPageState extends State<GroceryListPage> {
     _initializeUser();
   }
 
+  // 🔥 IMPROVED: Better error handling in initialization
   Future<void> _initializeUser() async {
+    if (!mounted) return;
+    
     setState(() {
       isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      AuthService.ensureUserAuthenticated();
+      // 🔥 ADDED: Check authentication with better error handling
+      try {
+        AuthService.ensureUserAuthenticated();
+      } catch (e) {
+        print('❌ Authentication check failed: $e');
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
+        }
+        return;
+      }
+
+      // 🔥 IMPROVED: Load grocery list with error handling
       await _loadGroceryList();
 
-      if (widget.initialItem != null && widget.initialItem!.isNotEmpty) {
+      // Add scanned item if provided
+      if (widget.initialItem != null && widget.initialItem!.isNotEmpty && mounted) {
         _addScannedItem(widget.initialItem!);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error initializing grocery list: $e');
+      print('Stack trace: $stackTrace');
+      
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
+        setState(() {
+          _errorMessage = 'Failed to initialize grocery list';
+          // Create empty list so user can still add items
+          itemControllers = [
+            {
+              'quantity': TextEditingController(),
+              'measurement': TextEditingController(),
+              'name': TextEditingController(),
+            }
+          ];
+        });
       }
     } finally {
       if (mounted) {
@@ -60,42 +91,44 @@ class _GroceryListPageState extends State<GroceryListPage> {
   }
 
   void _addScannedItem(String item) {
-    if (mounted) {
-      setState(() {
-        if (itemControllers.isNotEmpty && 
-            itemControllers.last['name']!.text.isEmpty) {
-          itemControllers.last['name']!.dispose();
-          itemControllers.last['quantity']!.dispose();
-          itemControllers.last['measurement']!.dispose();
-          itemControllers.removeLast();
-        }
+    if (!mounted) return;
+    
+    setState(() {
+      // Remove last empty row if exists
+      if (itemControllers.isNotEmpty && 
+          itemControllers.last['name']!.text.isEmpty) {
+        itemControllers.last['name']!.dispose();
+        itemControllers.last['quantity']!.dispose();
+        itemControllers.last['measurement']!.dispose();
+        itemControllers.removeLast();
+      }
 
-        final parsed = _parseItemText(item);
-        itemControllers.add({
-          'quantity': TextEditingController(text: parsed['quantity']!.isEmpty ? '1' : parsed['quantity']),
-          'measurement': TextEditingController(text: parsed['measurement']),
-          'name': TextEditingController(text: parsed['name']),
-        });
-
-        itemControllers.add({
-          'quantity': TextEditingController(),
-          'measurement': TextEditingController(),
-          'name': TextEditingController(),
-        });
+      final parsed = _parseItemText(item);
+      itemControllers.add({
+        'quantity': TextEditingController(text: parsed['quantity']!.isEmpty ? '1' : parsed['quantity']),
+        'measurement': TextEditingController(text: parsed['measurement']),
+        'name': TextEditingController(text: parsed['name']),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ Added "$item" to grocery list'),
-          backgroundColor: Colors.orange,
-          action: SnackBarAction(
-            label: 'Save',
-            textColor: Colors.white,
-            onPressed: _saveGroceryList,
-          ),
+      // Add new empty row
+      itemControllers.add({
+        'quantity': TextEditingController(),
+        'measurement': TextEditingController(),
+        'name': TextEditingController(),
+      });
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Added "$item" to grocery list'),
+        backgroundColor: Colors.orange,
+        action: SnackBarAction(
+          label: 'Save',
+          textColor: Colors.white,
+          onPressed: _saveGroceryList,
         ),
-      );
-    }
+      ),
+    );
   }
 
   Future<List<GroceryItem>?> _getCachedGroceryList() async {
@@ -153,7 +186,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     String name = itemText;
 
     final parts = itemText.trim().split(RegExp(r'\s+'));
-    
+
     if (parts.length >= 3) {
       if (RegExp(r'^[\d.]+$').hasMatch(parts[0])) {
         quantity = parts[0];
@@ -177,125 +210,162 @@ class _GroceryListPageState extends State<GroceryListPage> {
     };
   }
 
+  // 🔥 COMPLETELY REWRITTEN: Much better error handling
   Future<void> _loadGroceryList({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    
+    print('🔄 Loading grocery list (forceRefresh: $forceRefresh)...');
+    
     try {
+      // Try cache first if not forcing refresh
       if (!forceRefresh) {
         final cachedItems = await _getCachedGroceryList();
-        if (cachedItems != null) {
-          if (mounted) {
-            setState(() {
-              itemControllers = cachedItems.map((item) {
-                final parsed = _parseItemText(item.item);
-                return {
-                  'quantity': TextEditingController(text: parsed['quantity']),
-                  'measurement': TextEditingController(text: parsed['measurement']),
-                  'name': TextEditingController(text: parsed['name']),
-                };
-              }).toList();
-
-              if (itemControllers.isEmpty) {
-                itemControllers.add({
-                  'quantity': TextEditingController(),
-                  'measurement': TextEditingController(),
-                  'name': TextEditingController(),
-                });
-              }
-
-              itemControllers.add({
-                'quantity': TextEditingController(),
-                'measurement': TextEditingController(),
-                'name': TextEditingController(),
-              });
-            });
-          }
+        if (cachedItems != null && mounted) {
+          print('✅ Loaded ${cachedItems.length} items from cache');
+          _populateControllersFromItems(cachedItems);
           return;
         }
       }
 
-      final List<GroceryItem> groceryItems = await GroceryService.getGroceryList();
+      // 🔥 IMPROVED: Fetch from service with explicit error handling
+      List<GroceryItem> groceryItems;
+      try {
+        print('🌐 Fetching grocery list from service...');
+        groceryItems = await GroceryService.getGroceryList();
+        print('✅ Fetched ${groceryItems.length} items from service');
+      } catch (e, stackTrace) {
+        print('❌ Error fetching from service: $e');
+        print('Stack trace: $stackTrace');
+        
+        // 🔥 IMPROVED: Try stale cache as fallback
+        final staleItems = await _getCachedGroceryList();
+        if (staleItems != null && mounted) {
+          print('⚠️ Using stale cache as fallback (${staleItems.length} items)');
+          _populateControllersFromItems(staleItems);
+          
+          // Show warning banner
+          setState(() {
+            _errorMessage = 'Using offline data. Some items may be outdated.';
+          });
+          
+          // Show snackbar with retry option
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to load latest grocery list. Showing cached data.'),
+              backgroundColor: Colors.orange,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => _loadGroceryList(forceRefresh: true),
+              ),
+            ),
+          );
+          return;
+        }
+        
+        // 🔥 IMPROVED: No cache available - create empty list
+        print('⚠️ No cache available, creating empty list');
+        if (mounted) {
+          setState(() {
+            itemControllers = [
+              {
+                'quantity': TextEditingController(),
+                'measurement': TextEditingController(),
+                'name': TextEditingController(),
+              }
+            ];
+            _errorMessage = 'Unable to load grocery list. Please check your connection.';
+          });
+          
+          // Show error dialog with better message
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.databaseError,
+            customMessage: 'Unable to load grocery list',
+            onRetry: () => _loadGroceryList(forceRefresh: true),
+          );
+        }
+        return;
+      }
+
+      // 🔥 SUCCESS: Cache the fresh data
       await _cacheGroceryList(groceryItems);
 
       if (mounted) {
+        _populateControllersFromItems(groceryItems);
         setState(() {
-          itemControllers = groceryItems.map((item) {
-            final parsed = _parseItemText(item.item);
-            return {
-              'quantity': TextEditingController(text: parsed['quantity']),
-              'measurement': TextEditingController(text: parsed['measurement']),
-              'name': TextEditingController(text: parsed['name']),
-            };
-          }).toList();
-
-          if (itemControllers.isEmpty) {
-            itemControllers.add({
-              'quantity': TextEditingController(),
-              'measurement': TextEditingController(),
-              'name': TextEditingController(),
-            });
-          }
-
-          itemControllers.add({
-            'quantity': TextEditingController(),
-            'measurement': TextEditingController(),
-            'name': TextEditingController(),
-          });
+          _errorMessage = null;  // Clear any previous errors
         });
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Unexpected error in _loadGroceryList: $e');
+      print('Stack trace: $stackTrace');
+      
       if (mounted) {
-        final staleItems = await _getCachedGroceryList();
-        if (staleItems != null) {
-          setState(() {
-            itemControllers = staleItems.map((item) {
-              final parsed = _parseItemText(item.item);
-              return {
-                'quantity': TextEditingController(text: parsed['quantity']),
-                'measurement': TextEditingController(text: parsed['measurement']),
-                'name': TextEditingController(text: parsed['name']),
-              };
-            }).toList();
-
-            if (itemControllers.isEmpty) {
-              itemControllers.add({
+        setState(() {
+          _errorMessage = 'Unexpected error loading grocery list';
+          // Ensure we have at least one empty row
+          if (itemControllers.isEmpty) {
+            itemControllers = [
+              {
                 'quantity': TextEditingController(),
                 'measurement': TextEditingController(),
                 'name': TextEditingController(),
-              });
-            }
-
-            itemControllers.add({
-              'quantity': TextEditingController(),
-              'measurement': TextEditingController(),
-              'name': TextEditingController(),
-            });
-          });
-          return;
-        }
-
-        setState(() {
-          itemControllers = [{
-            'quantity': TextEditingController(),
-            'measurement': TextEditingController(),
-            'name': TextEditingController(),
-          }];
+              }
+            ];
+          }
         });
-
-        await ErrorHandlingService.handleError(
-          context: context,
-          error: e,
-          category: ErrorHandlingService.databaseError,
-          customMessage: 'Error loading grocery list',
-        );
       }
     }
+  }
+
+  // 🔥 NEW: Helper method to populate controllers from items
+  void _populateControllersFromItems(List<GroceryItem> items) {
+    if (!mounted) return;
+    
+    setState(() {
+      // Dispose existing controllers
+      for (var controllers in itemControllers) {
+        controllers['name']?.dispose();
+        controllers['quantity']?.dispose();
+        controllers['measurement']?.dispose();
+      }
+      
+      // Create new controllers from items
+      itemControllers = items.map((item) {
+        final parsed = _parseItemText(item.item);
+        return {
+          'quantity': TextEditingController(text: parsed['quantity']),
+          'measurement': TextEditingController(text: parsed['measurement']),
+          'name': TextEditingController(text: parsed['name']),
+        };
+      }).toList();
+
+      // Ensure at least one empty row exists
+      if (itemControllers.isEmpty) {
+        itemControllers.add({
+          'quantity': TextEditingController(),
+          'measurement': TextEditingController(),
+          'name': TextEditingController(),
+        });
+      }
+
+      // Add trailing empty row for new items
+      itemControllers.add({
+        'quantity': TextEditingController(),
+        'measurement': TextEditingController(),
+        'name': TextEditingController(),
+      });
+    });
   }
 
   @override
   void dispose() {
     for (var controllers in itemControllers) {
-      controllers['name']!.dispose();
-      controllers['quantity']!.dispose();
-      controllers['measurement']!.dispose();
+      controllers['name']?.dispose();
+      controllers['quantity']?.dispose();
+      controllers['measurement']?.dispose();
     }
     super.dispose();
   }
@@ -313,16 +383,16 @@ class _GroceryListPageState extends State<GroceryListPage> {
   void _removeItem(int index) {
     if (itemControllers.length > 1) {
       setState(() {
-        itemControllers[index]['name']!.dispose();
-        itemControllers[index]['quantity']!.dispose();
-        itemControllers[index]['measurement']!.dispose();
+        itemControllers[index]['name']?.dispose();
+        itemControllers[index]['quantity']?.dispose();
+        itemControllers[index]['measurement']?.dispose();
         itemControllers.removeAt(index);
         selectedIndices.remove(index);
       });
     }
   }
 
-  // ✅ NEW: Toggle multi-select mode
+  // ✅ Toggle multi-select mode
   void _toggleMultiSelectMode() {
     setState(() {
       isMultiSelectMode = !isMultiSelectMode;
@@ -332,7 +402,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
   }
 
-  // ✅ NEW: Toggle item selection
+  // ✅ Toggle item selection
   void _toggleSelection(int index) {
     setState(() {
       if (selectedIndices.contains(index)) {
@@ -343,7 +413,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
   }
 
-  // ✅ NEW: Add selected items to draft recipe
+  // ✅ Add selected items to draft recipe
   Future<void> _addToDraftRecipe() async {
     if (selectedIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -361,12 +431,11 @@ class _GroceryListPageState extends State<GroceryListPage> {
           final name = itemControllers[i]['name']!.text.trim();
           final quantity = itemControllers[i]['quantity']!.text.trim();
           final measurement = itemControllers[i]['measurement']!.text.trim();
-          
+
           List<String> parts = [];
           if (quantity.isNotEmpty) parts.add(quantity);
           if (measurement.isNotEmpty) parts.add(measurement);
           parts.add(name);
-          
           return parts.join(' ');
         })
         .toList();
@@ -379,7 +448,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     );
   }
 
-  // ✅ NEW: Find recipes using selected ingredients
+  // ✅ Find recipes using selected ingredients
   Future<void> _findSuggestedRecipe() async {
     if (selectedIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -404,7 +473,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     );
   }
 
-  // ✅ NEW: Find ingredient substitutes
+  // ✅ Find ingredient substitutes
   Future<void> _findSubstitute() async {
     if (selectedIndices.length != 1) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -433,33 +502,33 @@ class _GroceryListPageState extends State<GroceryListPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'Common substitutes:',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               ..._getCommonSubstitutes(ingredientName).map((sub) => 
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Icon(Icons.swap_horiz, color: Colors.orange, size: 20),
-                      SizedBox(width: 8),
+                      const Icon(Icons.swap_horiz, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           sub['name']!,
-                          style: TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: 14),
                         ),
                       ),
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
                           color: _getHealthScoreColor(sub['healthScore']!),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           '${sub['healthScore']}%',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -476,17 +545,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Close'),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
   }
 
-  // ✅ NEW: Get common substitutes with health scoring
+  // ✅ Get common substitutes with health scoring
   List<Map<String, String>> _getCommonSubstitutes(String ingredient) {
     final lower = ingredient.toLowerCase();
-    
+
     // Simple substitution database (can be expanded or moved to a service)
     final substitutes = <String, List<Map<String, String>>>{
       'ground beef': [
@@ -547,7 +616,10 @@ class _GroceryListPageState extends State<GroceryListPage> {
     return Colors.red;
   }
 
+  // 🔥 IMPROVED: Better error handling in save
   Future<void> _saveGroceryList() async {
+    if (!mounted) return;
+    
     setState(() {
       isSaving = true;
     });
@@ -564,7 +636,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
             if (quantity.isNotEmpty) parts.add(quantity);
             if (measurement.isNotEmpty) parts.add(measurement);
             parts.add(name);
-
             return parts.join(' ');
           })
           .toList();
@@ -581,13 +652,35 @@ class _GroceryListPageState extends State<GroceryListPage> {
         return;
       }
 
-      await GroceryService.saveGroceryList(items);
+      print('💾 Saving ${items.length} items to grocery list...');
+      
+      // 🔥 ADDED: Try-catch around service call
+      try {
+        await GroceryService.saveGroceryList(items);
+        print('✅ Grocery list saved successfully');
+      } catch (e, stackTrace) {
+        print('❌ Error saving to service: $e');
+        print('Stack trace: $stackTrace');
+        throw e;  // Re-throw to be caught by outer try-catch
+      }
+
+      // Invalidate and refresh cache
       await _invalidateGroceryListCache();
       
-      final freshItems = await GroceryService.getGroceryList();
-      await _cacheGroceryList(freshItems);
+      // 🔥 ADDED: Try-catch around cache refresh
+      try {
+        final freshItems = await GroceryService.getGroceryList();
+        await _cacheGroceryList(freshItems);
+      } catch (e) {
+        print('⚠️ Warning: Could not refresh cache after save: $e');
+        // Don't throw - save was successful
+      }
 
       if (mounted) {
+        setState(() {
+          _errorMessage = null;  // Clear any errors on successful save
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ Saved ${items.length} item${items.length == 1 ? '' : 's'}!'),
@@ -596,13 +689,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error in _saveGroceryList: $e');
+      print('Stack trace: $stackTrace');
+      
       if (mounted) {
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.databaseError,
           customMessage: 'Error saving grocery list',
+          onRetry: _saveGroceryList,
         );
       }
     } finally {
@@ -614,6 +711,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
     }
   }
 
+  // 🔥 IMPROVED: Better error handling in clear
   Future<void> _clearGroceryList() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -634,17 +732,29 @@ class _GroceryListPageState extends State<GroceryListPage> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     try {
-      await GroceryService.clearGroceryList();
+      print('🗑️ Clearing grocery list...');
+      
+      // 🔥 ADDED: Try-catch around service call
+      try {
+        await GroceryService.clearGroceryList();
+        print('✅ Grocery list cleared successfully');
+      } catch (e, stackTrace) {
+        print('❌ Error clearing grocery list: $e');
+        print('Stack trace: $stackTrace');
+        throw e;
+      }
+
       await _invalidateGroceryListCache();
 
       if (mounted) {
+        // Dispose existing controllers
         for (var controllers in itemControllers) {
-          controllers['name']!.dispose();
-          controllers['quantity']!.dispose();
-          controllers['measurement']!.dispose();
+          controllers['name']?.dispose();
+          controllers['quantity']?.dispose();
+          controllers['measurement']?.dispose();
         }
 
         setState(() {
@@ -657,6 +767,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
           ];
           selectedIndices.clear();
           isMultiSelectMode = false;
+          _errorMessage = null;  // Clear any errors
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -667,13 +778,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error in _clearGroceryList: $e');
+      print('Stack trace: $stackTrace');
+      
       if (mounted) {
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.databaseError,
           customMessage: 'Error clearing grocery list',
+          onRetry: _clearGroceryList,
         );
       }
     }
@@ -682,7 +797,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
   @override
   Widget build(BuildContext context) {
     final nonEmptyCount = itemControllers.where((c) => c['name']!.text.trim().isNotEmpty).length;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isMultiSelectMode ? '${selectedIndices.length} selected' : 'My Grocery List'),
@@ -690,7 +805,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
         foregroundColor: Colors.white,
         leading: isMultiSelectMode
             ? IconButton(
-                icon: Icon(Icons.close),
+                icon: const Icon(Icons.close),
                 onPressed: _toggleMultiSelectMode,
               )
             : null,
@@ -744,6 +859,39 @@ class _GroceryListPageState extends State<GroceryListPage> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
+                        // 🔥 NEW: Error banner
+                        if (_errorMessage != null)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.warning_amber, color: Colors.orange.shade700),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _errorMessage!,
+                                    style: TextStyle(color: Colors.orange.shade900),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 20),
+                                  onPressed: () {
+                                    setState(() {
+                                      _errorMessage = null;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        
                         // Header
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -801,8 +949,8 @@ class _GroceryListPageState extends State<GroceryListPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
-                        // ✅ NEW: Action buttons when items are selected
+
+                        // ✅ Action buttons when items are selected
                         if (isMultiSelectMode && selectedIndices.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -865,10 +1013,9 @@ class _GroceryListPageState extends State<GroceryListPage> {
                               ],
                             ),
                           ),
-                        
                         if (isMultiSelectMode && selectedIndices.isNotEmpty)
                           const SizedBox(height: 16),
-                        
+
                         // List
                         Expanded(
                           child: Container(
@@ -892,7 +1039,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                     itemBuilder: (context, index) {
                                       final isSelected = selectedIndices.contains(index);
                                       final isEmpty = itemControllers[index]['name']!.text.trim().isEmpty;
-                                      
+
                                       return Padding(
                                         padding: const EdgeInsets.only(bottom: 12),
                                         child: InkWell(
@@ -950,6 +1097,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                     ),
                                                   ),
                                                 const SizedBox(width: 12),
+
                                                 // Quantity field
                                                 SizedBox(
                                                   width: 50,
@@ -983,6 +1131,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                   ),
                                                 ),
                                                 const SizedBox(width: 6),
+
                                                 // Measurement field
                                                 SizedBox(
                                                   width: 55,
@@ -1012,6 +1161,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                   ),
                                                 ),
                                                 const SizedBox(width: 6),
+
                                                 // Item name field
                                                 Expanded(
                                                   child: TextField(
@@ -1041,6 +1191,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                     enabled: !isMultiSelectMode,
                                                   ),
                                                 ),
+
                                                 // Remove button
                                                 if (itemControllers.length > 1 && !isMultiSelectMode)
                                                   Padding(
@@ -1066,7 +1217,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Buttons (hide in multi-select mode)
                         if (!isMultiSelectMode)
                           Container(

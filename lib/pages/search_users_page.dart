@@ -149,7 +149,8 @@ class _SearchUsersPageState extends State<SearchUsersPage>
       if (age > _friendshipCacheDuration.inMilliseconds) return null;
 
       return Map<String, dynamic>.from(data['data']);
-    } catch (_) {
+    } catch (e) {
+      _logger.e('Error loading cached friendship status: $e');
       return null;
     }
   }
@@ -169,18 +170,34 @@ class _SearchUsersPageState extends State<SearchUsersPage>
     }
   }
 
-  // -------------------- 🔥 UPDATED: SUGGESTED FRIENDS --------------------
+  // -------------------- 🔥 FIXED: SUGGESTED FRIENDS WITH ERROR HANDLING --------------------
 
   Future<void> _loadSuggestedFriends() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoadingSuggested = true;
+      _errorMessage = null;  // 🔥 Clear any previous errors
     });
 
     try {
       _logger.d('👥 Loading suggested friends (app owners by email)...');
 
-      // Get users by email
-      final suggested = await UserSearchService.getSuggestedFriendsByEmail(_ownerEmails);
+      // 🔥 ADDED: Wrap in try-catch for better error handling
+      List<Map<String, dynamic>> suggested;
+      try {
+        suggested = await UserSearchService.getSuggestedFriendsByEmail(_ownerEmails);
+      } catch (e) {
+        _logger.e('❌ Error fetching suggested friends from service: $e');
+        
+        if (!mounted) return;
+        setState(() {
+          _suggestedFriends = [];
+          _isLoadingSuggested = false;
+          _errorMessage = 'Unable to load suggested friends. Please check your connection.';
+        });
+        return;
+      }
       
       if (suggested.isEmpty) {
         _logger.w('⚠️ No owner accounts found with emails: $_ownerEmails');
@@ -194,18 +211,34 @@ class _SearchUsersPageState extends State<SearchUsersPage>
 
       _logger.d('✅ Found ${suggested.length} owner accounts');
 
-      // 🔥 NEW: Filter out users who are already friends
+      // 🔥 FIXED: Better error handling for friendship status checks
       final statusMap = <String, Map<String, dynamic>>{};
       final filteredSuggested = <Map<String, dynamic>>[];
       
       for (final user in suggested) {
         final userId = user['id'];
         
-        // Check friendship status
-        var status = await _getCachedFriendshipStatus(userId);
-        if (status == null) {
-          status = await FriendsService.checkFriendshipStatus(userId);
-          await _cacheFriendshipStatus(userId, status);
+        if (userId == null) {
+          _logger.w('⚠️ User missing ID, skipping: ${user['email']}');
+          continue;
+        }
+        
+        // 🔥 ADDED: Try-catch for each friendship status check
+        Map<String, dynamic>? status;
+        try {
+          status = await _getCachedFriendshipStatus(userId);
+          if (status == null) {
+            status = await FriendsService.checkFriendshipStatus(userId);
+            await _cacheFriendshipStatus(userId, status);
+          }
+        } catch (e) {
+          _logger.e('❌ Error checking friendship status for ${user['email']}: $e');
+          // 🔥 Use default status on error
+          status = {
+            'status': 'none',
+            'canSendRequest': true,
+            'isOutgoing': false,
+          };
         }
         
         // Only add to suggested if NOT already friends
@@ -223,6 +256,7 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         _suggestedFriends = filteredSuggested;
         _friendshipStatuses = statusMap;
         _isLoadingSuggested = false;
+        _errorMessage = null;  // 🔥 Clear error on success
       });
 
       if (filteredSuggested.isNotEmpty) {
@@ -231,12 +265,29 @@ class _SearchUsersPageState extends State<SearchUsersPage>
       } else {
         _logger.i('👥 All owners are already friends - no suggestions to show');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       _logger.e('❌ Error loading suggested friends: $e');
+      _logger.e('Stack trace: $stackTrace');
+      
       if (!mounted) return;
       setState(() {
         _isLoadingSuggested = false;
+        _suggestedFriends = [];
+        _errorMessage = 'Error loading suggested friends: ${e.toString()}';
       });
+      
+      // 🔥 ADDED: Show user-friendly error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to load suggested friends. Please try again.'),
+          backgroundColor: Colors.orange,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: _loadSuggestedFriends,
+          ),
+        ),
+      );
     }
   }
 
@@ -260,6 +311,7 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         ),
       );
     } catch (e) {
+      _logger.e('❌ Debug test error: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -276,15 +328,14 @@ class _SearchUsersPageState extends State<SearchUsersPage>
     }
   }
 
-  // -------------------- SEARCH LOGIC --------------------
+  // -------------------- 🔥 FIXED: SEARCH LOGIC WITH ERROR HANDLING --------------------
 
-  // public entrypoint used by onSubmitted / initialQuery
   Future<void> _searchUsers([String? forcedQuery]) async {
     final query = (forcedQuery ?? _searchController.text).trim();
 
     if (query.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter a search term';
+        _errorMessage = null;  // 🔥 Don't show error for empty search
         _searchResults = [];
         _friendshipStatuses = {};
         _hasSearched = false;
@@ -294,6 +345,8 @@ class _SearchUsersPageState extends State<SearchUsersPage>
       return;
     }
 
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -314,34 +367,74 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         results = cachedResults;
         _logger.i('📱 Using cached results: ${results.length} users');
       } else {
-        // 2) Fetch from database
-        results = await UserSearchService.searchUsers(query);
-        _logger.i('📱 Fetched fresh results: ${results.length} users');
-        await _cacheSearchResults(query, results);
+        // 2) 🔥 ADDED: Better error handling for fetch
+        try {
+          results = await UserSearchService.searchUsers(query);
+          _logger.i('📱 Fetched fresh results: ${results.length} users');
+          await _cacheSearchResults(query, results);
+        } catch (e) {
+          _logger.e('❌ Error fetching search results: $e');
+          
+          if (!mounted) return;
+          setState(() {
+            _isLoading = false;
+            _searchResults = [];
+            _errorMessage = 'Search failed. Please check your connection and try again.';
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error searching users. Please try again.'),
+              backgroundColor: Colors.red,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => _searchUsers(query),
+              ),
+            ),
+          );
+          return;
+        }
       }
 
-      // 3) Friendship status per user (with cache)
+      // 3) 🔥 IMPROVED: Friendship status per user with better error handling
       final statusMap = <String, Map<String, dynamic>>{};
       int cachedStatuses = 0;
       int freshStatuses = 0;
+      int failedStatuses = 0;
 
       for (final user in results) {
         final userId = user['id'];
-
-        var status = await _getCachedFriendshipStatus(userId);
-        if (status != null) {
-          cachedStatuses++;
-        } else {
-          status = await FriendsService.checkFriendshipStatus(userId);
-          freshStatuses++;
-          await _cacheFriendshipStatus(userId, status);
+        
+        if (userId == null) {
+          _logger.w('⚠️ User missing ID in search results: ${user['email'] ?? user['username']}');
+          continue;
         }
 
-        statusMap[userId] = status;
+        try {
+          var status = await _getCachedFriendshipStatus(userId);
+          if (status != null) {
+            cachedStatuses++;
+          } else {
+            status = await FriendsService.checkFriendshipStatus(userId);
+            freshStatuses++;
+            await _cacheFriendshipStatus(userId, status);
+          }
+          statusMap[userId] = status;
+        } catch (e) {
+          _logger.e('❌ Error checking friendship status for user $userId: $e');
+          failedStatuses++;
+          // 🔥 Use default status on error
+          statusMap[userId] = {
+            'status': 'none',
+            'canSendRequest': true,
+            'isOutgoing': false,
+          };
+        }
       }
 
       _logger.i(
-          '👥 Friendship statuses: $cachedStatuses cached, $freshStatuses fresh');
+          '👥 Friendship statuses: $cachedStatuses cached, $freshStatuses fresh, $failedStatuses failed');
 
       if (!mounted) return;
       setState(() {
@@ -351,25 +444,34 @@ class _SearchUsersPageState extends State<SearchUsersPage>
 
         if (results.isEmpty) {
           _errorMessage = 'No users found matching "$query"';
+        } else {
+          _errorMessage = null;  // 🔥 Clear error on success
         }
       });
 
       // run fade-in after we have new content
       _fadeController.forward(from: 0.0);
-    } catch (e) {
+    } catch (e, stackTrace) {
       _logger.e('❌ UI search error: $e');
+      _logger.e('Stack trace: $stackTrace');
+      
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Error searching users: $e';
+        _errorMessage = 'Search error. Please try again.';
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error searching users: $e'),
+          content: Text('Error searching users. Please try again.'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _searchUsers(query),
+          ),
         ),
       );
     }
@@ -398,7 +500,7 @@ class _SearchUsersPageState extends State<SearchUsersPage>
     });
   }
 
-  // -------------------- FRIEND REQUESTS --------------------
+  // -------------------- 🔥 IMPROVED: FRIEND REQUESTS WITH BETTER ERROR HANDLING --------------------
 
   Future<void> _sendFriendRequest(String userId) async {
     try {
@@ -421,9 +523,12 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         const SnackBar(
           content: Text('Friend request sent!'),
           backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
         ),
       );
     } on FriendRequestException catch (e) {
+      _logger.w('Friend request exception: ${e.type} - ${e.message}');
+      
       if (!mounted) return;
       
       // 🔥 Pretty green banner for "already sent" case
@@ -441,15 +546,37 @@ class _SearchUsersPageState extends State<SearchUsersPage>
           SnackBar(
             content: Text(e.message),
             backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.e('❌ Error sending friend request: $e');
+      _logger.e('Stack trace: $stackTrace');
+      
       if (!mounted) return;
+      
+      // 🔥 IMPROVED: More helpful error message
+      String errorMessage = 'Failed to send friend request.';
+      
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('network') || errorString.contains('socket')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (errorString.contains('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (errorString.contains('authentication')) {
+        errorMessage = 'Authentication error. Please sign out and back in.';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _sendFriendRequest(userId),
+          ),
         ),
       );
     }
@@ -475,12 +602,25 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         const SnackBar(
           content: Text('Friend request cancelled'),
           backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      _logger.e('❌ Error cancelling friend request: $e');
+      _logger.e('Stack trace: $stackTrace');
+      
       if (!mounted) return;
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(
+          content: Text('Failed to cancel request. Please try again.'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () => _cancelFriendRequest(userId),
+          ),
+        ),
       );
     }
   }
@@ -633,26 +773,38 @@ class _SearchUsersPageState extends State<SearchUsersPage>
           ),
           trailing: _buildFriendshipButton(user),
           onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    UserProfilePage(userId: user['id']),
-              ),
-            );
+            try {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      UserProfilePage(userId: user['id']),
+                ),
+              );
 
-            // Refresh friendship status after returning
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.remove(_getFriendshipCacheKey(user['id']));
+              // Refresh friendship status after returning
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove(_getFriendshipCacheKey(user['id']));
 
-            final freshStatus =
-                await FriendsService.checkFriendshipStatus(user['id']);
-            await _cacheFriendshipStatus(user['id'], freshStatus);
+              final freshStatus =
+                  await FriendsService.checkFriendshipStatus(user['id']);
+              await _cacheFriendshipStatus(user['id'], freshStatus);
 
-            if (!mounted) return;
-            setState(() {
-              _friendshipStatuses[user['id']] = freshStatus;
-            });
+              if (!mounted) return;
+              setState(() {
+                _friendshipStatuses[user['id']] = freshStatus;
+              });
+            } catch (e) {
+              _logger.e('❌ Error navigating to user profile: $e');
+              if (!mounted) return;
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Unable to open profile. Please try again.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           },
         ),
       ),

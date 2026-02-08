@@ -1,5 +1,5 @@
 // lib/pages/tracker_page.dart
-// Updated with unit dropdowns, improved height handling, debugging, and ingredient auto-fill
+// Updated with unit dropdowns, improved height handling with preferences, debugging, and ingredient auto-fill
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +14,7 @@ import '../barihealthbar.dart';
 import '../config/app_config.dart';
 import '../widgets/premium_gate.dart';
 import '../controllers/premium_gate_controller.dart';
+import '../utils/height_utils.dart';
 
 class TrackerPage extends StatefulWidget {
   const TrackerPage({super.key});
@@ -30,6 +31,7 @@ class _TrackerPageState extends State<TrackerPage> {
   TrackerEntry? _currentEntry;
   String? _diseaseType;
   double? _userHeight;
+  String _heightUnitPreference = 'metric'; // 'metric' or 'imperial'
   bool _weightVisible = false;
   bool _weightLossVisible = false;
   int _currentStreak = 0;
@@ -227,6 +229,10 @@ class _TrackerPageState extends State<TrackerPage> {
       final height = await ProfileService.getHeight(userId);
       AppConfig.debugPrint('   Height: ${height?.toStringAsFixed(0) ?? 'none'} cm');
       
+      AppConfig.debugPrint('🔍 Loading height unit preference...');
+      final heightUnitPref = await ProfileService.getHeightUnitPreference(userId);
+      AppConfig.debugPrint('   Height unit preference: $heightUnitPref');
+      
       AppConfig.debugPrint('🔍 Loading privacy settings...');
       final weightVisible = await ProfileService.getWeightVisibility(userId);
       final weightLossVisible = await ProfileService.getWeightLossVisibility(userId);
@@ -259,6 +265,7 @@ class _TrackerPageState extends State<TrackerPage> {
         setState(() {
           _diseaseType = diseaseType ?? 'Other (default scoring)';
           _userHeight = height;
+          _heightUnitPreference = heightUnitPref;
           _weightVisible = weightVisible;
           _weightLossVisible = weightLossVisible;
           _currentStreak = streak;
@@ -549,138 +556,193 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 
   Future<void> _showHeightSetupDialog() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return;
+
+    // Load existing height and preference
+    final existingHeight = await ProfileService.getHeight(userId);
+    final existingPreference = await ProfileService.getHeightUnitPreference(userId);
+
     final feetController = TextEditingController();
     final inchesController = TextEditingController();
     final cmController = TextEditingController();
-    String heightSystem = 'standard'; // 'standard' or 'metric'
+    String heightSystem = existingPreference; // Use saved preference
+
+    // Pre-fill if height exists
+    if (existingHeight != null) {
+      if (existingPreference == 'imperial') {
+        final converted = HeightUtils.cmToFeetInches(existingHeight);
+        feetController.text = converted['feet'].toString();
+        inchesController.text = converted['inches'].toString();
+      } else {
+        cmController.text = existingHeight.toStringAsFixed(0);
+      }
+    }
 
     return showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: existingHeight != null, // Allow dismiss if height already set
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Row(
             children: [
               Icon(Icons.height, color: Colors.blue),
               SizedBox(width: 8),
-              Text('Set Your Height'),
+              Text(existingHeight != null ? 'Update Your Height' : 'Set Your Height'),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Please enter your height. This only needs to be set once.',
-                style: TextStyle(fontSize: 14),
-              ),
-              SizedBox(height: 16),
-              
-              // Unit System Selector
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  existingHeight != null
+                      ? 'Update your height below.'
+                      : 'Please enter your height. This helps with BMI calculations.',
+                  style: TextStyle(fontSize: 14),
                 ),
-                child: DropdownButton<String>(
-                  value: heightSystem,
-                  isExpanded: true,
-                  underline: SizedBox(),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'standard',
-                      child: Row(
-                        children: [
-                          Icon(Icons.straighten, size: 18, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text('Standard (ft/in)'),
-                        ],
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'metric',
-                      child: Row(
-                        children: [
-                          Icon(Icons.straighten, size: 18, color: Colors.orange),
-                          SizedBox(width: 8),
-                          Text('Metric (cm)'),
-                        ],
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() => heightSystem = value);
-                    }
-                  },
-                ),
-              ),
-              
-              SizedBox(height: 16),
-              
-              // Conditional Height Input Fields
-              if (heightSystem == 'standard') ...[
-                // Feet and Inches Input
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: feetController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: InputDecoration(
-                          labelText: 'Feet',
-                          hintText: 'e.g., 5',
-                          border: OutlineInputBorder(),
-                          suffixText: 'ft',
+                SizedBox(height: 16),
+                
+                // Unit System Selector
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: DropdownButton<String>(
+                    value: heightSystem,
+                    isExpanded: true,
+                    underline: SizedBox(),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'metric',
+                        child: Row(
+                          children: [
+                            Icon(Icons.straighten, size: 18, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('Metric (cm)'),
+                          ],
                         ),
                       ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: inchesController,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        decoration: InputDecoration(
-                          labelText: 'Inches',
-                          hintText: 'e.g., 8',
-                          border: OutlineInputBorder(),
-                          suffixText: 'in',
+                      DropdownMenuItem(
+                        value: 'imperial',
+                        child: Row(
+                          children: [
+                            Icon(Icons.straighten, size: 18, color: Colors.orange),
+                            SizedBox(width: 8),
+                            Text('Imperial (ft/in)'),
+                          ],
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                // Centimeters Input
-                TextField(
-                  controller: cmController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Height',
-                    hintText: 'e.g., 173',
-                    border: OutlineInputBorder(),
-                    suffixText: 'cm',
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          heightSystem = value;
+                          
+                          // Convert existing values when switching
+                          if (value == 'imperial' && cmController.text.isNotEmpty) {
+                            final cm = double.tryParse(cmController.text);
+                            if (cm != null) {
+                              final converted = HeightUtils.cmToFeetInches(cm);
+                              feetController.text = converted['feet'].toString();
+                              inchesController.text = converted['inches'].toString();
+                            }
+                          } else if (value == 'metric' && feetController.text.isNotEmpty) {
+                            final feet = int.tryParse(feetController.text) ?? 0;
+                            final inches = int.tryParse(inchesController.text) ?? 0;
+                            final cm = HeightUtils.feetInchesToCm(feet, inches);
+                            cmController.text = cm.toStringAsFixed(0);
+                          }
+                        });
+                      }
+                    },
                   ),
                 ),
+                
+                SizedBox(height: 16),
+                
+                // Conditional Height Input Fields
+                if (heightSystem == 'imperial') ...[
+                  // Feet and Inches Input
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: feetController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            labelText: 'Feet',
+                            hintText: 'e.g., 5',
+                            border: OutlineInputBorder(),
+                            suffixText: 'ft',
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: inchesController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            labelText: 'Inches',
+                            hintText: 'e.g., 8',
+                            border: OutlineInputBorder(),
+                            suffixText: 'in',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Common: 4\'10" - 6\'6"',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ] else ...[
+                  // Centimeters Input
+                  TextField(
+                    controller: cmController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Height',
+                      hintText: 'e.g., 170',
+                      border: OutlineInputBorder(),
+                      suffixText: 'cm',
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Common: 147cm - 198cm',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
           actions: [
+            if (existingHeight != null)
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cancel'),
+              ),
             ElevatedButton(
               onPressed: () async {
                 double? heightInCm;
                 
-                if (heightSystem == 'standard') {
+                if (heightSystem == 'imperial') {
                   // Parse feet and inches
                   final feet = int.tryParse(feetController.text.trim());
                   final inches = int.tryParse(inchesController.text.trim());
@@ -699,9 +761,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     return;
                   }
                   
-                  // Convert to cm: 1 foot = 30.48 cm, 1 inch = 2.54 cm
-                  final totalInches = (feet * 12) + inches;
-                  heightInCm = totalInches * 2.54;
+                  heightInCm = HeightUtils.feetInchesToCm(feet, inches);
                   
                 } else {
                   // Parse centimeters
@@ -715,26 +775,50 @@ class _TrackerPageState extends State<TrackerPage> {
                   }
                 }
 
+                // Validate height range
+                if (!HeightUtils.isValidHeight(heightInCm)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Height must be between 50cm and 250cm'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
                 try {
                   final userId = AuthService.currentUserId;
                   if (userId != null) {
                     AppConfig.debugPrint('📏 Saving height: $heightInCm cm');
+                    AppConfig.debugPrint('📏 Saving preference: $heightSystem');
                     
+                    // Save both height and preference
                     await ProfileService.updateHeight(userId, heightInCm);
+                    await ProfileService.updateHeightUnitPreference(userId, heightSystem);
                     
                     // Verify it was saved
                     final savedHeight = await ProfileService.getHeight(userId);
+                    final savedPreference = await ProfileService.getHeightUnitPreference(userId);
+                    
                     if (savedHeight == null || (savedHeight - heightInCm).abs() > 0.1) {
                       throw Exception('Height verification failed after save');
+                    }
+                    
+                    if (savedPreference != heightSystem) {
+                      throw Exception('Preference verification failed after save');
                     }
                     
                     if (mounted) {
                       setState(() {
                         _userHeight = heightInCm;
+                        _heightUnitPreference = heightSystem;
                       });
                       
-                      AppConfig.debugPrint('✅ Height saved and verified: $heightInCm cm');
-                      ErrorHandlingService.showSuccess(context, 'Height saved successfully!');
+                      AppConfig.debugPrint('✅ Height and preference saved: $heightInCm cm ($heightSystem)');
+                      ErrorHandlingService.showSuccess(
+                        context, 
+                        'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}'
+                      );
                     }
                   }
                   
@@ -775,7 +859,7 @@ class _TrackerPageState extends State<TrackerPage> {
           if (_userHeight != null)
             IconButton(
               icon: Icon(Icons.height),
-              tooltip: 'Update Height',
+              tooltip: 'Height: ${HeightUtils.formatHeight(_userHeight!, _heightUnitPreference)}',
               onPressed: _showHeightSetupDialog,
             ),
           // 🔥 DEBUG BUTTON (Remove in production)
@@ -888,9 +972,31 @@ class _TrackerPageState extends State<TrackerPage> {
                 ),
                 Spacer(),
                 if (_userHeight != null)
-                  Text(
-                    'Height: ${_userHeight!.toStringAsFixed(0)} cm',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  InkWell(
+                    onTap: _showHeightSetupDialog,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.height, size: 14, color: Colors.blue.shade700),
+                          SizedBox(width: 4),
+                          Text(
+                            HeightUtils.formatHeight(_userHeight!, _heightUnitPreference),
+                            style: TextStyle(
+                              fontSize: 12, 
+                              color: Colors.blue.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),

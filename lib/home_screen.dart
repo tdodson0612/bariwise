@@ -2637,7 +2637,7 @@ class _HomePageState extends State<HomePage>
               children: [
                 TextField(
                   controller: postController,
-                  maxLines: 8,
+                  maxLines: 5,
                   autofocus: true,
                   decoration: InputDecoration(
                     hintText: "What's on your mind?",
@@ -2689,16 +2689,12 @@ class _HomePageState extends State<HomePage>
                               DropdownMenuItem(
                                 value: 'public',
                                 child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
+                                  children: [  // ← Removed mainAxisSize: MainAxisSize.min
                                     Icon(Icons.public, size: 16, color: Colors.blue),
-                                    SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'Everyone (Public)',
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(fontSize: 13),
-                                      ),
+                                    SizedBox(width: 8),  // ← Increased spacing from 6 to 8
+                                    Text(
+                                      'Everyone (Public)',  // ← Simple Text, no Flexible
+                                      style: TextStyle(fontSize: 13),
                                     ),
                                   ],
                                 ),
@@ -4541,6 +4537,7 @@ class _HomePageState extends State<HomePage>
   Widget _buildInitialView() {
     return Container(
       decoration: BoxDecoration(
+        color: Colors.black,
         image: DecorationImage(
           image: AssetImage(
             MediaQuery.of(context).size.width > 600

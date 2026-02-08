@@ -8,7 +8,6 @@ import 'database_service_core.dart';
 import 'profile_data_access.dart';
 
 class ProfileService {
-  
   // ==================================================
   // FETCH PROFILE
   // ==================================================
@@ -161,7 +160,7 @@ class ProfileService {
       // Clear cache to force fresh data
       await DatabaseServiceCore.clearCache('cache_user_profile_$userId');
       await DatabaseServiceCore.clearCache('cache_profile_timestamp_$userId');
-      
+
       AppConfig.debugPrint('✅ Surgery type updated to: $surgeryType');
     } catch (e) {
       AppConfig.debugPrint('❌ Error updating surgery type: $e');
@@ -179,7 +178,7 @@ class ProfileService {
   // ==================================================
   // HEIGHT & WEIGHT MANAGEMENT
   // ==================================================
-  
+
   /// Get user's height in cm
   static Future<double?> getHeight(String userId) async {
     try {
@@ -191,7 +190,7 @@ class ProfileService {
       return null;
     }
   }
-  
+
   /// Update user's height in cm
   static Future<void> updateHeight(String userId, double heightCm) async {
     try {
@@ -204,25 +203,81 @@ class ProfileService {
           'updated_at': DateTime.now().toIso8601String(),
         },
       );
-      
+
       // Clear cache to force fresh data
       await DatabaseServiceCore.clearCache('cache_user_profile_$userId');
       await DatabaseServiceCore.clearCache('cache_profile_timestamp_$userId');
-      
+
       AppConfig.debugPrint('✅ Height updated to: ${heightCm}cm');
     } catch (e) {
       AppConfig.debugPrint('❌ Error updating height: $e');
       throw Exception('Failed to update height: $e');
     }
   }
-  
+
   /// Get current user's height
   static Future<double?> getCurrentHeight() async {
     final userId = DatabaseServiceCore.currentUserId;
     if (userId == null) return null;
     return getHeight(userId);
   }
-  
+
+  // ==================================================
+  // HEIGHT UNIT PREFERENCE MANAGEMENT
+  // ==================================================
+
+  /// Get user's height unit preference ('metric' or 'imperial')
+  static Future<String> getHeightUnitPreference(String userId) async {
+    try {
+      final profile = await getUserProfile(userId);
+      final preference = profile?['height_unit_preference'] as String?;
+      return preference ?? 'metric'; // Default to metric
+    } catch (e) {
+      AppConfig.debugPrint('Error getting height unit preference: $e');
+      return 'metric';
+    }
+  }
+
+  /// Update user's height unit preference
+  static Future<void> updateHeightUnitPreference(String userId, String preference) async {
+    try {
+      // Validate preference
+      if (preference != 'metric' && preference != 'imperial') {
+        throw Exception('Invalid height unit preference. Must be "metric" or "imperial".');
+      }
+
+      await DatabaseServiceCore.workerQuery(
+        action: 'update',
+        table: 'profiles',
+        filters: {'id': userId},
+        data: {
+          'height_unit_preference': preference,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Clear cache to force fresh data
+      await DatabaseServiceCore.clearCache('cache_user_profile_$userId');
+      await DatabaseServiceCore.clearCache('cache_profile_timestamp_$userId');
+
+      AppConfig.debugPrint('✅ Height unit preference updated to: $preference');
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error updating height unit preference: $e');
+      throw Exception('Failed to update height unit preference: $e');
+    }
+  }
+
+  /// Get current user's height unit preference
+  static Future<String> getCurrentHeightUnitPreference() async {
+    final userId = DatabaseServiceCore.currentUserId;
+    if (userId == null) return 'metric';
+    return getHeightUnitPreference(userId);
+  }
+
+  // ==================================================
+  // WEIGHT VISIBILITY MANAGEMENT
+  // ==================================================
+
   /// Get weight visibility setting
   static Future<bool> getWeightVisibility(String userId) async {
     try {
@@ -233,7 +288,7 @@ class ProfileService {
       return false;
     }
   }
-  
+
   /// Update weight visibility setting
   static Future<void> updateWeightVisibility(String userId, bool visible) async {
     try {
@@ -246,18 +301,18 @@ class ProfileService {
           'updated_at': DateTime.now().toIso8601String(),
         },
       );
-      
+
       // Clear cache to force fresh data
       await DatabaseServiceCore.clearCache('cache_user_profile_$userId');
       await DatabaseServiceCore.clearCache('cache_profile_timestamp_$userId');
-      
+
       AppConfig.debugPrint('✅ Weight visibility updated to: $visible');
     } catch (e) {
       AppConfig.debugPrint('❌ Error updating weight visibility: $e');
       throw Exception('Failed to update weight visibility: $e');
     }
   }
-  
+
   /// Get current user's weight visibility
   static Future<bool> getCurrentWeightVisibility() async {
     final userId = DatabaseServiceCore.currentUserId;
@@ -275,7 +330,7 @@ class ProfileService {
       return false;
     }
   }
-  
+
   /// Update weight loss visibility setting
   static Future<void> updateWeightLossVisibility(String userId, bool visible) async {
     try {
@@ -288,24 +343,28 @@ class ProfileService {
           'updated_at': DateTime.now().toIso8601String(),
         },
       );
-      
+
       // Clear cache to force fresh data
       await DatabaseServiceCore.clearCache('cache_user_profile_$userId');
       await DatabaseServiceCore.clearCache('cache_profile_timestamp_$userId');
-      
+
       AppConfig.debugPrint('✅ Weight loss visibility updated to: $visible');
     } catch (e) {
       AppConfig.debugPrint('❌ Error updating weight loss visibility: $e');
       throw Exception('Failed to update weight loss visibility: $e');
     }
   }
-  
+
   /// Get current user's weight loss visibility
   static Future<bool> getCurrentWeightLossVisibility() async {
     final userId = DatabaseServiceCore.currentUserId;
     if (userId == null) return false;
     return getWeightLossVisibility(userId);
   }
+
+  // ==================================================
+  // LOCATION MANAGEMENT
+  // ==================================================
 
   /// Update user's location for regional database priority
   static Future<void> updateUserLocation(String userId, String country) async {
@@ -343,7 +402,6 @@ class ProfileService {
     try {
       final profile = await getUserProfile(userId);
       final country = profile?['location_country'] as String?;
-
       return country ?? 'US';
     } catch (e) {
       AppConfig.debugPrint('❌ Error getting user country: $e');

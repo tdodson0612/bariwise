@@ -206,15 +206,15 @@ class FeedPostsService {
         action: 'select',
         table: 'friend_requests',
         filters: {'status': 'accepted'},
-        columns: ['sender', 'receiver'],
+        columns: ['sender_id', 'receiver_id'],
       );
 
       if (friendsResult != null && (friendsResult as List).isNotEmpty) {
         AppConfig.debugPrint('👥 Found ${(friendsResult as List).length} accepted friendships');
         
         for (final friendship in friendsResult) {
-          final sender = friendship['sender']?.toString();
-          final receiver = friendship['receiver']?.toString();
+          final sender = friendship['sender_id']?.toString();
+          final receiver = friendship['receiver_id']?.toString();
           
           if (sender == userId && receiver != null) {
             friendIds.add(receiver);
@@ -231,7 +231,6 @@ class FeedPostsService {
 
     return friendIds;
   }
-
   /// Get public posts ONLY (filter by visibility)
   static Future<List<Map<String, dynamic>>> _getPublicPosts({
     int limit = 100,

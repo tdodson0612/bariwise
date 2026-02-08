@@ -1533,55 +1533,94 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // 🔧 Upload profile picture to Supabase Storage and save URL to database
+
+
   Future<void> _pickImage(ImageSource source) async {
     try {
-      // 🔥 Request correct runtime permission
+      AppConfig.debugPrint('👤 Starting profile image selection (source: $source)');
+      
+      // 🔥 Request permission with detailed logging
+      AppConfig.debugPrint('🔐 Requesting ${source == ImageSource.camera ? 'camera' : 'photos'} permission...');
       final allowed = await requestImagePermission(source);
+      
       if (!allowed) {
+        AppConfig.debugPrint('❌ Permission denied for ${source == ImageSource.camera ? 'camera' : 'photos'}');
         _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
         return;
       }
+      
+      AppConfig.debugPrint('✅ Permission granted');
 
+      // 🔥 Pick image with error handling
+      AppConfig.debugPrint('📸 Opening image picker...');
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(
-        source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 85,
-      );
+      
+      XFile? pickedFile;
+      try {
+        pickedFile = await picker.pickImage(
+          source: source,
+          maxWidth: 1024,
+          maxHeight: 1024,
+          imageQuality: 85,
+        );
+      } catch (pickerError) {
+        AppConfig.debugPrint('❌ Image picker error: $pickerError');
+        
+        // Check for permission-related picker errors
+        if (pickerError.toString().contains('photo_access_denied') ||
+            pickerError.toString().contains('camera_access_denied')) {
+          _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
+          return;
+        }
+        
+        throw Exception('Failed to open image picker: $pickerError');
+      }
 
       if (pickedFile == null) {
-        AppConfig.debugPrint('⚠️ No profile image selected by user');
+        AppConfig.debugPrint('⚠️ No profile image selected by user (cancelled)');
         return;  // User cancelled - don't show error
       }
+
+      AppConfig.debugPrint('✅ Image picked: ${pickedFile.path}');
 
       if (!mounted) {
         AppConfig.debugPrint('⚠️ Widget unmounted during profile image selection');
         return;
       }
 
-      // 🔥 ADDED: Verify file exists before uploading
+      // 🔥 Verify file exists
       final imageFile = File(pickedFile.path);
       if (!await imageFile.exists()) {
+        AppConfig.debugPrint('❌ Image file does not exist at path: ${pickedFile.path}');
         throw Exception('Selected image file not found. Please try again.');
       }
+      
+      AppConfig.debugPrint('✅ Image file exists');
 
-      // 🔥 ADDED: Check file size
+      // 🔥 Check file size
       final fileSize = await imageFile.length();
+      AppConfig.debugPrint('📏 Profile image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      
       if (fileSize == 0) {
+        AppConfig.debugPrint('❌ Image file is empty (0 bytes)');
         throw Exception('Selected image is empty. Please choose a different image.');
       }
-
-      AppConfig.debugPrint('📏 Profile image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        AppConfig.debugPrint('❌ Image file too large: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+        throw Exception('Image too large (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB). Maximum 10 MB allowed.');
+      }
 
       setState(() {
         _isLoading = true;
       });
 
       AppConfig.debugPrint('🚀 Starting profile picture upload...');
+      
       final url = await PictureService.uploadProfilePicture(imageFile);
       
       AppConfig.debugPrint('✅ Profile picture upload complete: $url');
+      
       if (mounted) {
         setState(() {
           _profileImageUrl = url;
@@ -1590,17 +1629,84 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         ErrorHandlingService.showSuccess(context, 'Profile picture updated!');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppConfig.debugPrint('❌ Error in _pickImage: $e');
+      AppConfig.debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
 
+        // 🔥 Better error categorization
+        final errorString = e.toString().toLowerCase();
+        
+        // Permission errors
+        if (errorString.contains('permission') || 
+            errorString.contains('access_denied') ||
+            errorString.contains('authorization')) {
+          AppConfig.debugPrint('⚠️ Detected permission error, showing permission dialog');
+          _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
+          return;
+        }
+        
+        // File not found
+        if (errorString.contains('file not found') ||
+            errorString.contains('no such file')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Image file not found. Please try selecting again.',
+            onRetry: () => _pickImage(source),
+          );
+          return;
+        }
+        
+        // File empty
+        if (errorString.contains('empty') || errorString.contains('0 bytes')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Selected image is empty. Please choose a different image.',
+            onRetry: () => _pickImage(source),
+          );
+          return;
+        }
+        
+        // File too large
+        if (errorString.contains('too large') || errorString.contains('10 mb')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Image too large. Please choose a smaller image (max 10 MB).',
+            onRetry: () => _pickImage(source),
+          );
+          return;
+        }
+        
+        // Upload/network errors
+        if (errorString.contains('upload') || 
+            errorString.contains('network') ||
+            errorString.contains('timeout')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.networkError,
+            customMessage: 'Upload failed. Please check your connection and try again.',
+            onRetry: () => _pickImage(source),
+          );
+          return;
+        }
+        
+        // Generic error
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.imageError,
-          customMessage: 'Unable to upload profile picture',
+          customMessage: 'Unable to upload profile picture: ${e.toString()}',
           onRetry: () => _pickImage(source),
         );
       }
@@ -1608,52 +1714,90 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // 🔧 Upload background to Supabase Storage and save URL to database
+  // Replace the _pickBackgroundImage method in profile_screen.dart with this:
+
   Future<void> _pickBackgroundImage(ImageSource source) async {
     try {
-      // 🔥 Request correct runtime permission
+      AppConfig.debugPrint('🎨 Starting background image selection (source: $source)');
+      
+      // 🔥 IMPROVED: Request permission with detailed logging
+      AppConfig.debugPrint('🔐 Requesting ${source == ImageSource.camera ? 'camera' : 'photos'} permission...');
       final allowed = await requestImagePermission(source);
+      
       if (!allowed) {
+        AppConfig.debugPrint('❌ Permission denied for ${source == ImageSource.camera ? 'camera' : 'photos'}');
         _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
         return;
       }
+      
+      AppConfig.debugPrint('✅ Permission granted');
 
+      // 🔥 IMPROVED: Pick image with detailed logging
+      AppConfig.debugPrint('📸 Opening image picker...');
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(
-        source: source,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
-      );
+      
+      XFile? pickedFile;
+      try {
+        pickedFile = await picker.pickImage(
+          source: source,
+          maxWidth: 1920,
+          maxHeight: 1920,
+          imageQuality: 85,
+        );
+      } catch (pickerError) {
+        AppConfig.debugPrint('❌ Image picker error: $pickerError');
+        
+        // Check for specific picker errors
+        if (pickerError.toString().contains('photo_access_denied') ||
+            pickerError.toString().contains('camera_access_denied')) {
+          _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
+          return;
+        }
+        
+        throw Exception('Failed to open image picker: $pickerError');
+      }
 
       if (pickedFile == null) {
-        AppConfig.debugPrint('⚠️ No background image selected by user');
+        AppConfig.debugPrint('⚠️ No background image selected by user (cancelled)');
         return;  // User cancelled - don't show error
       }
+
+      AppConfig.debugPrint('✅ Image picked: ${pickedFile.path}');
 
       if (!mounted) {
         AppConfig.debugPrint('⚠️ Widget unmounted during background image selection');
         return;
       }
 
-      // 🔥 ADDED: Verify file exists before uploading
+      // 🔥 IMPROVED: Verify file exists with detailed error
       final imageFile = File(pickedFile.path);
       if (!await imageFile.exists()) {
+        AppConfig.debugPrint('❌ Image file does not exist at path: ${pickedFile.path}');
         throw Exception('Selected image file not found. Please try again.');
       }
+      
+      AppConfig.debugPrint('✅ Image file exists');
 
-      // 🔥 ADDED: Check file size
+      // 🔥 IMPROVED: Check file size with detailed logging
       final fileSize = await imageFile.length();
+      AppConfig.debugPrint('📏 Background image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      
       if (fileSize == 0) {
+        AppConfig.debugPrint('❌ Image file is empty (0 bytes)');
         throw Exception('Selected image is empty. Please choose a different image.');
       }
-
-      AppConfig.debugPrint('📏 Background image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+      
+      if (fileSize > 10 * 1024 * 1024) {
+        AppConfig.debugPrint('❌ Image file too large: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
+        throw Exception('Image too large (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB). Maximum 10 MB allowed.');
+      }
 
       setState(() {
         _isLoading = true;
       });
 
       AppConfig.debugPrint('🚀 Starting background picture upload...');
+      
       final url = await PictureService.uploadBackgroundPicture(imageFile);
       
       AppConfig.debugPrint('✅ Background picture upload complete: $url');
@@ -1666,17 +1810,84 @@ class _ProfileScreenState extends State<ProfileScreen>
 
         ErrorHandlingService.showSuccess(context, 'Background updated!');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      AppConfig.debugPrint('❌ Error in _pickBackgroundImage: $e');
+      AppConfig.debugPrint('Stack trace: $stackTrace');
+      
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
 
+        // 🔥 IMPROVED: Better error categorization
+        final errorString = e.toString().toLowerCase();
+        
+        // Check if it's a permission error
+        if (errorString.contains('permission') || 
+            errorString.contains('access_denied') ||
+            errorString.contains('authorization')) {
+          AppConfig.debugPrint('⚠️ Detected permission error, showing permission dialog');
+          _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
+          return;
+        }
+        
+        // Check if it's a file not found error
+        if (errorString.contains('file not found') ||
+            errorString.contains('no such file')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Image file not found. Please try selecting again.',
+            onRetry: () => _pickBackgroundImage(source),
+          );
+          return;
+        }
+        
+        // Check if it's a file empty error
+        if (errorString.contains('empty') || errorString.contains('0 bytes')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Selected image is empty. Please choose a different image.',
+            onRetry: () => _pickBackgroundImage(source),
+          );
+          return;
+        }
+        
+        // Check if it's a file too large error
+        if (errorString.contains('too large') || errorString.contains('10 mb')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.validationError,
+            customMessage: 'Image too large. Please choose a smaller image (max 10 MB).',
+            onRetry: () => _pickBackgroundImage(source),
+          );
+          return;
+        }
+        
+        // Check if it's an upload error
+        if (errorString.contains('upload') || 
+            errorString.contains('network') ||
+            errorString.contains('timeout')) {
+          await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            category: ErrorHandlingService.networkError,
+            customMessage: 'Upload failed. Please check your connection and try again.',
+            onRetry: () => _pickBackgroundImage(source),
+          );
+          return;
+        }
+        
+        // Generic error
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
           category: ErrorHandlingService.imageError,
-          customMessage: 'Unable to update background',
+          customMessage: 'Unable to update background: ${e.toString()}',
           onRetry: () => _pickBackgroundImage(source),
         );
       }

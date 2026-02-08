@@ -1,31 +1,50 @@
 // lib/services/favorite_recipes_service.dart
-// ✅ FIXED: Enhanced duplicate prevention and better error handling
+// ✅ FIXED: Backward-compatible method names + enhanced implementation
 
 import 'dart:convert';
 import '../models/favorite_recipe.dart';
+import '../services/database_service_core.dart';
+import '../services/auth_service.dart';
 import '../config/app_config.dart';
-import 'database_service_core.dart';
-import 'auth_service.dart';
 
+/// Service for managing favorite recipes
+/// 
+/// Features:
+/// - Silent failure for auth errors (no popups on login)
+/// - Robust duplicate prevention
+/// - Caching for better performance
+/// - Graceful degradation when database is unavailable
+/// - Backward-compatible method names
 class FavoriteRecipesService {
-  static const String _CACHE_KEY = 'cache_favorite_recipes';
+  static const String _CACHE_KEY = 'favorite_recipes_cache';
+  static const Duration _CACHE_DURATION = Duration(minutes: 5);
+  
+  // In-memory cache to prevent duplicate checks during rapid operations
+  static final Map<String, DateTime> _recentOperations = {};
+  static const Duration _OPERATION_COOLDOWN = Duration(milliseconds: 500);
 
-  // --------------------------------------------------
-  // GET FAVORITE RECIPES (with caching)
-  // --------------------------------------------------
+  // ==================== BACKWARD-COMPATIBLE PUBLIC API ====================
+
+  /// Get all favorite recipes for the current user
+  /// Returns empty list instead of throwing on auth errors
   static Future<List<FavoriteRecipe>> getFavoriteRecipes() async {
     final userId = AuthService.currentUserId;
-    if (userId == null) return [];
+    
+    // Silent return for no session - don't throw error
+    if (userId == null) {
+      AppConfig.debugPrint('⚠️ getFavoriteRecipes: No user session - returning empty list');
+      return [];
+    }
 
     try {
       // Try cache first
-      final cached = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      final cached = await _getCachedFavorites();
       if (cached != null) {
-        final list = jsonDecode(cached) as List;
-        return list.map((e) => FavoriteRecipe.fromJson(e)).toList();
+        AppConfig.debugPrint('✅ Loaded ${cached.length} favorites from cache');
+        return cached;
       }
 
-      // Fetch from Worker
+      // Fetch from database
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'favorite_recipes',
@@ -35,23 +54,64 @@ class FavoriteRecipesService {
         ascending: false,
       );
 
+      if (response == null) {
+        AppConfig.debugPrint('⚠️ Worker returned null for favorites');
+        return [];
+      }
+
       final recipes = (response as List)
           .map((e) => FavoriteRecipe.fromJson(e))
           .toList();
 
-      // Cache for next time
-      await DatabaseServiceCore.cacheData(_CACHE_KEY, jsonEncode(response));
+      AppConfig.debugPrint('✅ Loaded ${recipes.length} favorites from database');
+
+      // Cache the results
+      await _cacheFavorites(recipes);
 
       return recipes;
+      
+    } on SessionExpiredException {
+      // Session expired - return empty list, don't throw
+      AppConfig.debugPrint('⚠️ Session expired loading favorites - returning empty list');
+      return [];
+      
     } catch (e) {
-      throw Exception('Failed to load favorite recipes: $e');
+      AppConfig.debugPrint('❌ Error loading favorites: $e');
+      
+      // Check if it's an auth/session error
+      if (_isAuthError(e)) {
+        // Silent failure for auth errors - just return empty list
+        return [];
+      }
+      
+      // For other errors, try to return cached data if available
+      final cached = await _getCachedFavorites(ignoreExpiry: true);
+      if (cached != null) {
+        AppConfig.debugPrint('⚠️ Returning stale cache due to error');
+        return cached;
+      }
+      
+      // Last resort: return empty list (better than crashing)
+      AppConfig.debugPrint('⚠️ Returning empty list due to error: $e');
+      return [];
     }
   }
 
-  // --------------------------------------------------
-  // ✅ IMPROVED: CHECK IF RECIPE IS ALREADY FAVORITED
-  // Now checks BOTH recipe_id AND recipe_name for better accuracy
-  // --------------------------------------------------
+  /// ✅ BACKWARD COMPATIBLE: Get favorite recipes count
+  static Future<int> getFavoriteRecipesCount() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return 0;
+
+    try {
+      final recipes = await getFavoriteRecipes();
+      return recipes.length;
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error getting favorite recipes count: $e');
+      return 0;
+    }
+  }
+
+  /// ✅ BACKWARD COMPATIBLE: Find existing favorite by recipe_id or recipe_name
   static Future<FavoriteRecipe?> findExistingFavorite({
     int? recipeId,
     String? recipeName,
@@ -103,14 +163,13 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // ✅ FIXED: ADD FAVORITE RECIPE (enhanced duplicate prevention)
-  // --------------------------------------------------
+  /// ✅ BACKWARD COMPATIBLE: Add favorite recipe (original signature)
   static Future<FavoriteRecipe> addFavoriteRecipe(
     String recipeName,
     String ingredients,
     String directions, {
     int? recipeId, // Optional recipe_id from recipe_master
+    String? description, // Optional description
   }) async {
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
@@ -131,6 +190,13 @@ class FavoriteRecipesService {
       throw Exception('This recipe is already in your favorites!');
     }
 
+    // Check if operation was done recently (prevent duplicates from rapid taps)
+    final operationKey = 'add_$trimmedName';
+    if (_isRecentOperation(operationKey)) {
+      AppConfig.debugPrint('⚠️ Duplicate add operation detected, throwing error');
+      throw Exception('This recipe is already in your favorites!');
+    }
+
     try {
       final data = <String, dynamic>{
         'user_id': AuthService.currentUserId!,
@@ -145,6 +211,11 @@ class FavoriteRecipesService {
         data['recipe_id'] = recipeId;
       }
 
+      // Include description if available
+      if (description != null && description.trim().isNotEmpty) {
+        data['description'] = description.trim();
+      }
+
       final response = await DatabaseServiceCore.workerQuery(
         action: 'insert',
         table: 'favorite_recipes',
@@ -155,7 +226,10 @@ class FavoriteRecipesService {
       final row = (response as List).first;
 
       // Clear cache to force refresh
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await _clearCache();
+
+      // Record operation to prevent duplicates
+      _recordOperation(operationKey);
 
       return FavoriteRecipe.fromJson(row);
       
@@ -197,12 +271,17 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // REMOVE FAVORITE
-  // --------------------------------------------------
+  /// ✅ BACKWARD COMPATIBLE: Remove favorite by ID
   static Future<void> removeFavoriteRecipe(int recipeId) async {
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
+    }
+
+    // Check if operation was done recently
+    final operationKey = 'remove_$recipeId';
+    if (_isRecentOperation(operationKey)) {
+      AppConfig.debugPrint('⚠️ Duplicate remove operation detected, ignoring');
+      return;
     }
 
     try {
@@ -215,7 +294,10 @@ class FavoriteRecipesService {
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await _clearCache();
+      
+      // Record operation
+      _recordOperation(operationKey);
       
     } catch (e) {
       AppConfig.debugPrint('❌ Error removing favorite: $e');
@@ -223,9 +305,9 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // ✅ IMPROVED: CHECK IF FAVORITED (supports both recipe_id and name)
-  // --------------------------------------------------
+  // ==================== ADDITIONAL PUBLIC METHODS ====================
+
+  /// Check if a recipe is favorited (by recipe_id or name)
   static Future<bool> isRecipeFavorited({
     int? recipeId,
     String? recipeName,
@@ -247,9 +329,65 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // ✅ NEW: BULK CHECK FAVORITES (efficient for lists)
-  // --------------------------------------------------
+  /// Get favorite by recipe name
+  static Future<FavoriteRecipe?> getFavoriteByName(String recipeName) async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return null;
+
+    try {
+      final response = await DatabaseServiceCore.workerQuery(
+        action: 'select',
+        table: 'favorite_recipes',
+        columns: ['*'],
+        filters: {
+          'user_id': userId,
+          'recipe_name': recipeName,
+        },
+        limit: 1,
+      );
+
+      if (response == null || (response as List).isEmpty) {
+        return null;
+      }
+
+      return FavoriteRecipe.fromJson((response as List).first);
+      
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error getting favorite by name: $e');
+      return null;
+    }
+  }
+
+  /// Get favorite by recipe ID
+  static Future<FavoriteRecipe?> getFavoriteByRecipeId(int recipeId) async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return null;
+
+    try {
+      final response = await DatabaseServiceCore.workerQuery(
+        action: 'select',
+        table: 'favorite_recipes',
+        columns: ['*'],
+        filters: {
+          'user_id': userId,
+          'recipe_id': recipeId,
+        },
+        limit: 1,
+      );
+
+      if (response == null || (response as List).isEmpty) {
+        return null;
+      }
+
+      return FavoriteRecipe.fromJson((response as List).first);
+      
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error getting favorite by recipe ID: $e');
+      return null;
+    }
+  }
+
+  /// Bulk check favorites by recipe names (efficient for lists)
   static Future<Set<String>> getFavoritedRecipeNames() async {
     final userId = AuthService.currentUserId;
     if (userId == null) return {};
@@ -274,9 +412,7 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // ✅ NEW: BULK CHECK BY IDs (for recipe_master integration)
-  // --------------------------------------------------
+  /// Bulk check by IDs (for recipe_master integration)
   static Future<Set<int>> getFavoritedRecipeIds() async {
     final userId = AuthService.currentUserId;
     if (userId == null) return {};
@@ -302,9 +438,64 @@ class FavoriteRecipesService {
     }
   }
 
-  // --------------------------------------------------
-  // ✅ NEW: CLEAR ALL FAVORITES (useful for testing/reset)
-  // --------------------------------------------------
+  /// Update a favorite recipe
+  static Future<bool> updateFavorite({
+    required int favoriteId,
+    String? recipeName,
+    String? description,
+    String? ingredients,
+    String? directions,
+  }) async {
+    final userId = AuthService.currentUserId;
+    
+    if (userId == null) {
+      AppConfig.debugPrint('⚠️ Cannot update favorite: No user session');
+      return false;
+    }
+
+    try {
+      final updates = <String, dynamic>{
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+      
+      if (recipeName != null) updates['recipe_name'] = recipeName;
+      if (description != null) updates['description'] = description;
+      if (ingredients != null) updates['ingredients'] = ingredients;
+      if (directions != null) updates['directions'] = directions;
+
+      await DatabaseServiceCore.workerQuery(
+        action: 'update',
+        table: 'favorite_recipes',
+        data: updates,
+        filters: {
+          'id': favoriteId,
+          'user_id': userId,
+        },
+      );
+
+      AppConfig.debugPrint('✅ Updated favorite: $favoriteId');
+
+      // Clear cache
+      await _clearCache();
+
+      return true;
+      
+    } on SessionExpiredException {
+      AppConfig.debugPrint('⚠️ Session expired updating favorite');
+      return false;
+      
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error updating favorite: $e');
+      
+      if (_isAuthError(e)) {
+        return false;
+      }
+      
+      throw Exception('Failed to update favorite: ${e.toString()}');
+    }
+  }
+
+  /// Clear all favorites (useful for testing/reset)
   static Future<void> clearAllFavorites() async {
     final userId = AuthService.currentUserId;
     if (userId == null) {
@@ -318,26 +509,144 @@ class FavoriteRecipesService {
         filters: {'user_id': userId},
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await _clearCache();
       
     } catch (e) {
       AppConfig.debugPrint('❌ Error clearing favorites: $e');
       throw Exception('Failed to clear favorites. Please try again.');
     }
   }
-  // --------------------------------------------------
-  // ✅ NEW: GET FAVORITE RECIPES COUNT (for ProfileScreen)
-  // --------------------------------------------------
-  static Future<int> getFavoriteRecipesCount() async {
-    final userId = AuthService.currentUserId;
-    if (userId == null) return 0;
 
+  /// Clear all caches and in-memory data (useful for logout)
+  static Future<void> clearAll() async {
+    _recentOperations.clear();
+    await _clearCache();
+    AppConfig.debugPrint('✅ Cleared all favorite recipes data');
+  }
+
+  // ==================== PRIVATE HELPER METHODS ====================
+
+  /// Check if recipe exists in favorites
+  static Future<bool> _checkIfExists(String recipeName, String userId) async {
     try {
-      final recipes = await getFavoriteRecipes();
-      return recipes.length;
+      final response = await DatabaseServiceCore.workerQuery(
+        action: 'select',
+        table: 'favorite_recipes',
+        columns: ['id'],
+        filters: {
+          'user_id': userId,
+          'recipe_name': recipeName,
+        },
+        limit: 1,
+      );
+
+      return response != null && (response as List).isNotEmpty;
     } catch (e) {
-      AppConfig.debugPrint('⚠️ Error getting favorite recipes count: $e');
-      return 0;
+      AppConfig.debugPrint('⚠️ Error checking if favorite exists: $e');
+      return false; // Assume it doesn't exist on error
     }
   }
+
+  /// Check if an operation was performed recently
+  static bool _isRecentOperation(String operationKey) {
+    final lastOperation = _recentOperations[operationKey];
+    if (lastOperation == null) {
+      return false;
+    }
+    
+    final timeSince = DateTime.now().difference(lastOperation);
+    return timeSince < _OPERATION_COOLDOWN;
+  }
+
+  /// Record an operation to prevent duplicates
+  static void _recordOperation(String operationKey) {
+    _recentOperations[operationKey] = DateTime.now();
+    
+    // Clean up old operations (keep last 50)
+    if (_recentOperations.length > 50) {
+      final sortedEntries = _recentOperations.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      _recentOperations.clear();
+      _recentOperations.addEntries(sortedEntries.take(50));
+    }
+  }
+
+  /// Check if an error is authentication-related
+  static bool _isAuthError(dynamic error) {
+    final errorString = error.toString().toLowerCase();
+    return errorString.contains('session') ||
+           errorString.contains('jwt') ||
+           errorString.contains('auth') ||
+           errorString.contains('token') ||
+           errorString.contains('unauthorized') ||
+           errorString.contains('not authenticated');
+  }
+
+  /// Get cached favorites
+  static Future<List<FavoriteRecipe>?> _getCachedFavorites({bool ignoreExpiry = false}) async {
+    try {
+      final cachedJson = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      if (cachedJson == null) {
+        return null;
+      }
+
+      final cacheData = jsonDecode(cachedJson) as Map<String, dynamic>;
+      final timestamp = DateTime.parse(cacheData['timestamp'] as String);
+      final recipes = (cacheData['recipes'] as List)
+          .map((e) => FavoriteRecipe.fromCache(e))
+          .toList();
+
+      // Check if cache is expired
+      if (!ignoreExpiry) {
+        final age = DateTime.now().difference(timestamp);
+        if (age > _CACHE_DURATION) {
+          AppConfig.debugPrint('⚠️ Cache expired (${age.inMinutes}m old)');
+          return null;
+        }
+      }
+
+      return recipes;
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error reading cache: $e');
+      await _clearCache(); // Clear corrupted cache
+      return null;
+    }
+  }
+
+  /// Cache favorites
+  static Future<void> _cacheFavorites(List<FavoriteRecipe> recipes) async {
+    try {
+      final cacheData = {
+        'timestamp': DateTime.now().toIso8601String(),
+        'recipes': recipes.map((r) => r.toCache()).toList(),
+      };
+      
+      await DatabaseServiceCore.cacheData(
+        _CACHE_KEY,
+        jsonEncode(cacheData),
+      );
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Failed to cache favorites: $e');
+      // Non-critical, continue
+    }
+  }
+
+  /// Clear the cache
+  static Future<void> _clearCache() async {
+    try {
+      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Failed to clear cache: $e');
+      // Non-critical
+    }
+  }
+}
+
+/// Custom exception for session expiration
+class SessionExpiredException implements Exception {
+  final String message;
+  SessionExpiredException([this.message = 'Session expired']);
+  
+  @override
+  String toString() => message;
 }

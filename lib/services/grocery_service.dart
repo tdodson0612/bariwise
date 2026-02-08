@@ -1,35 +1,89 @@
 // lib/services/grocery_service.dart
-// Handles grocery list CRUD, parsing, formatting, and adding ingredients from recipes.
-
+// ✅ COMPLETE VERSION: All methods with correct column name "item_name"
 
 import '../models/grocery_item.dart';
-
-import 'auth_service.dart';              // currentUserId + auth check
-import 'database_service_core.dart';     // workerQuery + cache helpers
+import 'auth_service.dart';
+import 'database_service_core.dart';
 
 class GroceryService {
   // ==================================================
   // GET GROCERY LIST
   // ==================================================
   static Future<List<GroceryItem>> getGroceryList() async {
+    print('📋 GroceryService.getGroceryList() called');
+    
     final userId = AuthService.currentUserId;
-    if (userId == null) return [];
+    print('👤 Current userId: $userId');
+    
+    if (userId == null || userId.isEmpty) {
+      print('❌ No userId available - returning empty list');
+      return [];
+    }
 
     try {
+      print('🔍 Querying grocery_items table...');
+      
+      // RLS policies will filter by user automatically
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'grocery_items',
         columns: ['*'],
-        filters: {'user_id': userId},
         orderBy: 'order_index',
         ascending: true,
       );
 
-      return (response as List)
-          .map((json) => GroceryItem.fromJson(json))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to load grocery list: $e');
+      print('✅ Worker query response type: ${response.runtimeType}');
+      print('📦 Response data: $response');
+
+      if (response == null) {
+        print('⚠️ Worker returned null - returning empty list');
+        return [];
+      }
+
+      if (response is! List) {
+        print('⚠️ Worker returned non-list: ${response.runtimeType}');
+        return [];
+      }
+
+      final items = <GroceryItem>[];
+      for (var i = 0; i < response.length; i++) {
+        try {
+          final json = response[i];
+          if (json is Map<String, dynamic>) {
+            print('Parsing item $i: $json');
+            final item = GroceryItem.fromJson(json);
+            if (item.isValid()) {
+              items.add(item);
+            } else {
+              print('⚠️ Skipping invalid item at index $i: $json');
+            }
+          } else {
+            print('⚠️ Item at index $i is not a Map: ${json.runtimeType}');
+          }
+        } catch (e, stackTrace) {
+          print('⚠️ Error parsing item at index $i: $e');
+          print('Stack trace: $stackTrace');
+          // Continue processing other items
+        }
+      }
+
+      print('✅ Successfully loaded ${items.length} grocery items');
+      return items;
+
+    } catch (e, stackTrace) {
+      print('❌ Error in getGroceryList: $e');
+      print('Stack trace: $stackTrace');
+      
+      final errorMsg = e.toString();
+      if (errorMsg.contains('table') || errorMsg.contains('column')) {
+        throw Exception('Database schema error: $e');
+      } else if (errorMsg.contains('auth') || errorMsg.contains('session')) {
+        throw Exception('Authentication error: Please log in again. Error: $e');
+      } else if (errorMsg.contains('network') || errorMsg.contains('timeout')) {
+        throw Exception('Network error: Please check your internet connection. Error: $e');
+      } else {
+        throw Exception('Failed to load grocery list: $e');
+      }
     }
   }
 
@@ -37,40 +91,62 @@ class GroceryService {
   // SAVE LIST (Clear + Insert all)
   // ==================================================
   static Future<void> saveGroceryList(List<String> items) async {
-    if (AuthService.currentUserId == null) {
+    print('💾 GroceryService.saveGroceryList() called with ${items.length} items');
+    
+    final userId = AuthService.currentUserId;
+    if (userId == null || userId.isEmpty) {
       throw Exception('Please sign in to continue');
     }
 
-    final userId = AuthService.currentUserId!;
+    print('👤 Saving for user: $userId');
 
     try {
-      // Delete existing
+      // Delete existing items (RLS will ensure we only delete our own)
+      print('🗑️ Deleting existing grocery items...');
       await DatabaseServiceCore.workerQuery(
         action: 'delete',
         table: 'grocery_items',
-        filters: {'user_id': userId},
       );
+      print('✅ Deleted existing items');
 
-      // Insert new list
+      // Insert new items
       if (items.isNotEmpty) {
-        final rows = items.asMap().entries.map((entry) {
-          return {
-            'user_id': userId,
-            'item': entry.value,
-            'order_index': entry.key,
-            'created_at': DateTime.now().toIso8601String(),
-          };
-        }).toList();
+        print('📝 Inserting ${items.length} new items...');
+        
+        for (var i = 0; i < items.length; i++) {
+          final item = items[i];
+          if (item.trim().isEmpty) {
+            print('⚠️ Skipping empty item at index $i');
+            continue;
+          }
 
-        for (final item in rows) {
-          await DatabaseServiceCore.workerQuery(
-            action: 'insert',
-            table: 'grocery_items',
-            data: item,
-          );
+          try {
+            final data = {
+              'item_name': item.trim(),  // ✅ Correct column name
+              'order_index': i,
+              'created_at': DateTime.now().toIso8601String(),
+            };
+
+            print('📤 Inserting item $i: ${item.trim()}');
+            await DatabaseServiceCore.workerQuery(
+              action: 'insert',
+              table: 'grocery_items',
+              data: data,
+            );
+          } catch (e) {
+            print('⚠️ Error inserting item $i ("$item"): $e');
+            // Continue with other items
+          }
         }
+        
+        print('✅ Successfully inserted items');
+      } else {
+        print('ℹ️ No items to insert (list is empty)');
       }
-    } catch (e) {
+
+    } catch (e, stackTrace) {
+      print('❌ Error in saveGroceryList: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('Failed to save grocery list: $e');
     }
   }
@@ -79,17 +155,25 @@ class GroceryService {
   // CLEAR LIST
   // ==================================================
   static Future<void> clearGroceryList() async {
+    print('🗑️ GroceryService.clearGroceryList() called');
+    
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
 
+    final userId = AuthService.currentUserId!;
+    print('👤 Clearing for user: $userId');
+
     try {
+      // RLS will ensure we only delete our own items
       await DatabaseServiceCore.workerQuery(
         action: 'delete',
         table: 'grocery_items',
-        filters: {'user_id': AuthService.currentUserId!},
       );
-    } catch (e) {
+      print('✅ Successfully cleared grocery list');
+    } catch (e, stackTrace) {
+      print('❌ Error in clearGroceryList: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('Failed to clear grocery list: $e');
     }
   }
@@ -98,13 +182,17 @@ class GroceryService {
   // ADD SINGLE ITEM
   // ==================================================
   static Future<void> addToGroceryList(String item, {String? quantity}) async {
+    print('➕ GroceryService.addToGroceryList() called: "$item" (qty: $quantity)');
+    
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
 
     final userId = AuthService.currentUserId!;
+    print('👤 Adding for user: $userId');
 
     try {
+      // Get current items to determine order index
       final currentItems = await getGroceryList();
       final newOrderIndex = currentItems.length;
 
@@ -112,17 +200,22 @@ class GroceryService {
           ? '$quantity x $item'
           : item;
 
+      print('📤 Adding item: "$formatted" at index $newOrderIndex');
+
       await DatabaseServiceCore.workerQuery(
         action: 'insert',
         table: 'grocery_items',
         data: {
-          'user_id': userId,
-          'item': formatted,
+          'item_name': formatted.trim(),  // ✅ Correct column name
           'order_index': newOrderIndex,
           'created_at': DateTime.now().toIso8601String(),
         },
       );
-    } catch (e) {
+
+      print('✅ Successfully added item to grocery list');
+    } catch (e, stackTrace) {
+      print('❌ Error in addToGroceryList: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('Failed to add item: $e');
     }
   }
@@ -193,6 +286,8 @@ class GroceryService {
     String recipeName,
     String ingredients,
   ) async {
+    print('📝 Adding recipe "$recipeName" ingredients to shopping list');
+    
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
@@ -204,6 +299,7 @@ class GroceryService {
           .toList();
 
       final newItems = _parseIngredients(ingredients);
+      print('🔍 Parsed ${newItems.length} ingredients from recipe');
 
       final added = <String>[];
       final skipped = <String>[];
@@ -242,6 +338,8 @@ class GroceryService {
 
       await saveGroceryList(updatedList);
 
+      print('✅ Added ${added.length} items, skipped ${skipped.length} duplicates');
+
       return {
         'added': added.length,
         'skipped': skipped.length,
@@ -249,7 +347,9 @@ class GroceryService {
         'skippedItems': skipped,
         'recipeName': recipeName,
       };
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Error in addRecipeToShoppingList: $e');
+      print('Stack trace: $stackTrace');
       throw Exception('Failed to add recipe ingredients: $e');
     }
   }
@@ -261,8 +361,39 @@ class GroceryService {
     try {
       final items = await getGroceryList();
       return items.length;
-    } catch (_) {
+    } catch (e) {
+      print('⚠️ Error getting shopping list count: $e');
       return 0;
+    }
+  }
+
+  // ==================================================
+  // TEST DATABASE CONNECTION
+  // ==================================================
+  static Future<bool> testDatabaseConnection() async {
+    try {
+      print('🧪 Testing database connection...');
+      
+      final userId = AuthService.currentUserId;
+      if (userId == null) {
+        print('❌ No user ID - cannot test connection');
+        return false;
+      }
+
+      // Try a simple query
+      final response = await DatabaseServiceCore.workerQuery(
+        action: 'select',
+        table: 'grocery_items',
+        columns: ['id'],
+        limit: 1,
+      );
+
+      print('✅ Database connection test successful');
+      print('Response type: ${response.runtimeType}');
+      return true;
+    } catch (e) {
+      print('❌ Database connection test failed: $e');
+      return false;
     }
   }
 }

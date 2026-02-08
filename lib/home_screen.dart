@@ -471,53 +471,40 @@ class _HomePageState extends State<HomePage>
         print("🏠 HOME: Starting initialization...");
       }
       
-      // 🔥 CHANGED: Reduced delay from 800ms to 500ms
+      // Wait a bit for session to be ready
       await Future.delayed(const Duration(milliseconds: 500));
       
       if (!mounted || _isDisposed) return;
       
-      // 🔥 FIX: Verify we have a valid session before proceeding
+      // Verify we have a valid session before proceeding
       final currentUserId = AuthService.currentUserId;
       if (currentUserId == null) {
         if (AppConfig.enableDebugPrints) {
-          print("⚠️ HOME: No user session found on first check, waiting longer...");
+          print("⚠️ HOME: No user session found, skipping favorite load");
         }
         
-        // 🔥 CHANGED: Reduced retry delay from 1000ms to 700ms
-        await Future.delayed(const Duration(milliseconds: 700));
-        
-        // Check again
-        final retryUserId = AuthService.currentUserId;
-        if (retryUserId == null) {
-          if (AppConfig.enableDebugPrints) {
-            print("❌ HOME: Still no session after retry - user might not be logged in");
-          }
-          // Don't throw error - user might have been logged out
-          // Just skip initialization and set empty favorites
-          if (mounted && !_isDisposed) {
-            setState(() => _favoriteRecipes = []);
-          }
-          return;
+        // Set empty favorites and continue
+        if (mounted && !_isDisposed) {
+          setState(() => _favoriteRecipes = []);
         }
         
-        // 🔥 REMOVED: Duplicate code block below
-        if (AppConfig.enableDebugPrints) {
-          print("✅ HOME: Session found on retry: $retryUserId");
+        // Still load ads and feed even without favorites
+        if (!_isPremium) {
+          _loadInterstitialAd();
+          _loadRewardedAd();
         }
-      } else {
-        if (AppConfig.enableDebugPrints) {
-          print("✅ HOME: Session found immediately: $currentUserId");
-        }
+        
+        return; // Exit early - don't try to load favorites without a session
+      }
+      
+      if (AppConfig.enableDebugPrints) {
+        print("✅ HOME: Session found: $currentUserId");
       }
       
       if (!mounted || _isDisposed) return;
       
-      // 🔥 FIX: Refresh premium status with retry logic
+      // Refresh premium status
       try {
-        if (AppConfig.enableDebugPrints) {
-          print("🔐 HOME: Checking premium status...");
-        }
-        
         await _premiumController.refresh();
         
         if (AppConfig.enableDebugPrints) {
@@ -527,7 +514,6 @@ class _HomePageState extends State<HomePage>
         if (AppConfig.enableDebugPrints) {
           print("⚠️ HOME: Premium check failed (non-critical): $e");
         }
-        // Continue anyway - premium status is not critical for app to work
       }
       
       if (!mounted || _isDisposed) return;
@@ -539,38 +525,24 @@ class _HomePageState extends State<HomePage>
         }
         _loadInterstitialAd();
         _loadRewardedAd();
-      } else {
-        if (AppConfig.enableDebugPrints) {
-          print("🚫 HOME: Skipping ads for PREMIUM user");
-        }
       }
       
       if (!mounted || _isDisposed) return;
       
-      // 🔥 FIX: Load favorites with retry and graceful failure
-      try {
+      // Load favorites in background (non-blocking)
+      _loadFavoriteRecipes().then((_) {
         if (AppConfig.enableDebugPrints) {
-          print("📖 HOME: Loading favorite recipes...");
+          print("✅ HOME: Favorites loaded successfully");
         }
-        
-        await _loadFavoriteRecipes();
-        
-        if (AppConfig.enableDebugPrints) {
-          print("✅ HOME: Loaded ${_favoriteRecipes.length} favorite recipes");
-        }
-      } catch (e) {
+      }).catchError((e) {
         if (AppConfig.enableDebugPrints) {
           print("⚠️ HOME: Failed to load favorites (non-critical): $e");
         }
-        
-        // 🔥 FIX: Don't show error popup on home screen load
-        // Just log it and continue - user can retry manually
+        // Don't show error - just set empty list
         if (mounted && !_isDisposed) {
-          setState(() {
-            _favoriteRecipes = [];
-          });
+          setState(() => _favoriteRecipes = []);
         }
-      }
+      });
       
       if (AppConfig.enableDebugPrints) {
         print("✅ HOME: Initialization complete");
@@ -581,17 +553,14 @@ class _HomePageState extends State<HomePage>
         print("❌ HOME: Initialization error: $e");
       }
       
-      // 🔥 FIX: Only show error if it's truly critical
-      // Most initialization failures are non-critical
+      // Silent fail - user can still use the app
       if (mounted && !_isDisposed) {
-        // Silent fail - don't show popup that blocks the UI
-        // User can still use the app
-        if (AppConfig.enableDebugPrints) {
-          print("⚠️ HOME: Continuing despite initialization error");
-        }
+        setState(() => _favoriteRecipes = []);
       }
     }
   }
+
+  
 
   void _loadInterstitialAd() {
     if (_isDisposed || _isPremium) {
@@ -855,8 +824,20 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _loadFavoriteRecipes() async {
+    // Add safety check at the start
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (AppConfig.enableDebugPrints) {
+        print('⚠️ Cannot load favorites: No user ID');
+      }
+      if (mounted && !_isDisposed) {
+        setState(() => _favoriteRecipes = []);
+      }
+      return;
+    }
+
     try {
-      AppConfig.debugPrint('📖 HOME: Starting to load favorite recipes...');
+      AppConfig.debugPrint('📖 HOME: Starting to load favorite recipes for user: $userId');
       
       final recipes = await FavoriteRecipesService.getFavoriteRecipes();
       
@@ -866,25 +847,22 @@ class _HomePageState extends State<HomePage>
         setState(() => _favoriteRecipes = recipes);
       }
     } catch (e) {
-      AppConfig.debugPrint('❌ HOME: Error loading favorites: $e');  // 🔥 ADDED logging
-      AppConfig.debugPrint('❌ HOME: Error type: ${e.runtimeType}');  // 🔥 ADDED error type
+      AppConfig.debugPrint('❌ HOME: Error loading favorites: $e');
       
-      if (mounted) {
-        // 🔥 CHANGED: Only show error if it's NOT a session/auth issue
-        if (!e.toString().toLowerCase().contains('session') && 
-            !e.toString().toLowerCase().contains('jwt')) {
-          await ErrorHandlingService.handleError(
-            context: context,
-            error: e,
-            category: ErrorHandlingService.databaseError,
-            showSnackBar: true,
-            customMessage: 'Failed to load favorite recipes',
-          );
-        } else {
-          // 🔥 ADDED: For session errors, just set empty list and log
-          AppConfig.debugPrint('⚠️ HOME: Session error loading favorites - skipping error popup');
-          setState(() => _favoriteRecipes = []);
-        }
+      // Only set empty list, don't show error popup
+      if (mounted && !_isDisposed) {
+        setState(() => _favoriteRecipes = []);
+      }
+      
+      // Only show error if it's NOT a session/auth issue
+      final errorString = e.toString().toLowerCase();
+      if (!errorString.contains('session') && 
+          !errorString.contains('jwt') &&
+          !errorString.contains('no user') &&
+          !errorString.contains('not authenticated')) {
+        
+        // Log the error but don't show popup on home screen
+        AppConfig.debugPrint('⚠️ HOME: Non-auth error loading favorites: $e');
       }
     }
   }

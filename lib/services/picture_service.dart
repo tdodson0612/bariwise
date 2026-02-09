@@ -158,7 +158,7 @@ class PictureService {
       AppConfig.debugPrint('📤 Uploading background picture to: background-pictures/$filePath');
 
       final publicUrl = await DatabaseServiceCore.workerStorageUpload(
-        bucket: 'background-pictures',
+        bucket: 'profile-backgrounds',
         path: filePath,
         base64Data: base64Image,
         contentType: 'image/jpeg',
@@ -239,7 +239,7 @@ class PictureService {
 
       // Upload to R2 via Worker
       final publicUrl = await DatabaseServiceCore.workerStorageUpload(
-        bucket: 'photo-album',
+        bucket: 'user-gallery',
         path: filePath,
         base64Data: base64Image,
         contentType: 'image/jpeg',
@@ -377,7 +377,7 @@ class PictureService {
 
       // Upload to R2 via Worker
       final publicUrl = await DatabaseServiceCore.workerStorageUpload(
-        bucket: 'feed-photos',
+        bucket: 'recipe-images',
         path: filePath,
         base64Data: base64Image,
         contentType: 'image/jpeg',

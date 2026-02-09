@@ -1,4 +1,4 @@
-// lib/pages/grocery_list.dart - ENHANCED with multi-select, action buttons, and better error handling
+// lib/pages/grocery_list.dart - IMPROVED LAYOUT: 2 rows per item with larger fields
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +21,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
   List<Map<String, TextEditingController>> itemControllers = [];
   bool isLoading = true;
   bool isSaving = false;
-  String? _errorMessage;  // 🔥 NEW: Track error state
+  String? _errorMessage;
 
   // ✅ Multi-select mode
   bool isMultiSelectMode = false;
@@ -30,13 +30,31 @@ class _GroceryListPageState extends State<GroceryListPage> {
   // Cache configuration
   static const Duration _listCacheDuration = Duration(minutes: 5);
 
+  // 🔥 MEASUREMENT UNITS DROPDOWN
+  final List<String> _measurementUnits = [
+    'oz',
+    'lb',
+    'g',
+    'kg',
+    'cup',
+    'tbsp',
+    'tsp',
+    'ml',
+    'L',
+    'piece',
+    'can',
+    'bag',
+    'box',
+    'bunch',
+    'pkg',
+  ];
+
   @override
   void initState() {
     super.initState();
     _initializeUser();
   }
 
-  // 🔥 IMPROVED: Better error handling in initialization
   Future<void> _initializeUser() async {
     if (!mounted) return;
     
@@ -46,7 +64,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
 
     try {
-      // 🔥 ADDED: Check authentication with better error handling
       try {
         AuthService.ensureUserAuthenticated();
       } catch (e) {
@@ -57,10 +74,8 @@ class _GroceryListPageState extends State<GroceryListPage> {
         return;
       }
 
-      // 🔥 IMPROVED: Load grocery list with error handling
       await _loadGroceryList();
 
-      // Add scanned item if provided
       if (widget.initialItem != null && widget.initialItem!.isNotEmpty && mounted) {
         _addScannedItem(widget.initialItem!);
       }
@@ -71,7 +86,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
       if (mounted) {
         setState(() {
           _errorMessage = 'Failed to initialize grocery list';
-          // Create empty list so user can still add items
           itemControllers = [
             {
               'quantity': TextEditingController(),
@@ -94,7 +108,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     if (!mounted) return;
     
     setState(() {
-      // Remove last empty row if exists
       if (itemControllers.isNotEmpty && 
           itemControllers.last['name']!.text.isEmpty) {
         itemControllers.last['name']!.dispose();
@@ -110,7 +123,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         'name': TextEditingController(text: parsed['name']),
       });
 
-      // Add new empty row
       itemControllers.add({
         'quantity': TextEditingController(),
         'measurement': TextEditingController(),
@@ -210,14 +222,12 @@ class _GroceryListPageState extends State<GroceryListPage> {
     };
   }
 
-  // 🔥 COMPLETELY REWRITTEN: Much better error handling
   Future<void> _loadGroceryList({bool forceRefresh = false}) async {
     if (!mounted) return;
     
     print('🔄 Loading grocery list (forceRefresh: $forceRefresh)...');
     
     try {
-      // Try cache first if not forcing refresh
       if (!forceRefresh) {
         final cachedItems = await _getCachedGroceryList();
         if (cachedItems != null && mounted) {
@@ -227,7 +237,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         }
       }
 
-      // 🔥 IMPROVED: Fetch from service with explicit error handling
       List<GroceryItem> groceryItems;
       try {
         print('🌐 Fetching grocery list from service...');
@@ -237,18 +246,15 @@ class _GroceryListPageState extends State<GroceryListPage> {
         print('❌ Error fetching from service: $e');
         print('Stack trace: $stackTrace');
         
-        // 🔥 IMPROVED: Try stale cache as fallback
         final staleItems = await _getCachedGroceryList();
         if (staleItems != null && mounted) {
           print('⚠️ Using stale cache as fallback (${staleItems.length} items)');
           _populateControllersFromItems(staleItems);
           
-          // Show warning banner
           setState(() {
             _errorMessage = 'Using offline data. Some items may be outdated.';
           });
           
-          // Show snackbar with retry option
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Failed to load latest grocery list. Showing cached data.'),
@@ -263,7 +269,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
           return;
         }
         
-        // 🔥 IMPROVED: No cache available - create empty list
         print('⚠️ No cache available, creating empty list');
         if (mounted) {
           setState(() {
@@ -277,7 +282,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
             _errorMessage = 'Unable to load grocery list. Please check your connection.';
           });
           
-          // Show error dialog with better message
           await ErrorHandlingService.handleError(
             context: context,
             error: e,
@@ -289,13 +293,12 @@ class _GroceryListPageState extends State<GroceryListPage> {
         return;
       }
 
-      // 🔥 SUCCESS: Cache the fresh data
       await _cacheGroceryList(groceryItems);
 
       if (mounted) {
         _populateControllersFromItems(groceryItems);
         setState(() {
-          _errorMessage = null;  // Clear any previous errors
+          _errorMessage = null;
         });
       }
     } catch (e, stackTrace) {
@@ -305,7 +308,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
       if (mounted) {
         setState(() {
           _errorMessage = 'Unexpected error loading grocery list';
-          // Ensure we have at least one empty row
           if (itemControllers.isEmpty) {
             itemControllers = [
               {
@@ -320,19 +322,16 @@ class _GroceryListPageState extends State<GroceryListPage> {
     }
   }
 
-  // 🔥 NEW: Helper method to populate controllers from items
   void _populateControllersFromItems(List<GroceryItem> items) {
     if (!mounted) return;
     
     setState(() {
-      // Dispose existing controllers
       for (var controllers in itemControllers) {
         controllers['name']?.dispose();
         controllers['quantity']?.dispose();
         controllers['measurement']?.dispose();
       }
       
-      // Create new controllers from items
       itemControllers = items.map((item) {
         final parsed = _parseItemText(item.item);
         return {
@@ -342,7 +341,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         };
       }).toList();
 
-      // Ensure at least one empty row exists
       if (itemControllers.isEmpty) {
         itemControllers.add({
           'quantity': TextEditingController(),
@@ -351,7 +349,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         });
       }
 
-      // Add trailing empty row for new items
       itemControllers.add({
         'quantity': TextEditingController(),
         'measurement': TextEditingController(),
@@ -392,7 +389,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     }
   }
 
-  // ✅ Toggle multi-select mode
   void _toggleMultiSelectMode() {
     setState(() {
       isMultiSelectMode = !isMultiSelectMode;
@@ -402,7 +398,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
   }
 
-  // ✅ Toggle item selection
   void _toggleSelection(int index) {
     setState(() {
       if (selectedIndices.contains(index)) {
@@ -413,7 +408,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
   }
 
-  // ✅ Add selected items to draft recipe
   Future<void> _addToDraftRecipe() async {
     if (selectedIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -440,7 +434,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         })
         .toList();
 
-    // Navigate to submit recipe with pre-filled ingredients
     Navigator.pushNamed(
       context,
       '/submit-recipe',
@@ -448,7 +441,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     );
   }
 
-  // ✅ Find recipes using selected ingredients
   Future<void> _findSuggestedRecipe() async {
     if (selectedIndices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -465,7 +457,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
         .map((i) => itemControllers[i]['name']!.text.trim())
         .toList();
 
-    // Navigate to recipe search with these ingredients as keywords
     Navigator.pushNamed(
       context,
       '/home',
@@ -473,7 +464,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     );
   }
 
-  // ✅ Find ingredient substitutes
   Future<void> _findSubstitute() async {
     if (selectedIndices.length != 1) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -492,7 +482,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
       return;
     }
 
-    // Show substitution dialog
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -552,11 +541,9 @@ class _GroceryListPageState extends State<GroceryListPage> {
     );
   }
 
-  // ✅ Get common substitutes with health scoring
   List<Map<String, String>> _getCommonSubstitutes(String ingredient) {
     final lower = ingredient.toLowerCase();
 
-    // Simple substitution database (can be expanded or moved to a service)
     final substitutes = <String, List<Map<String, String>>>{
       'ground beef': [
         {'name': 'Ground turkey', 'healthScore': '85'},
@@ -590,19 +577,16 @@ class _GroceryListPageState extends State<GroceryListPage> {
       ],
     };
 
-    // Check for exact matches first
     if (substitutes.containsKey(lower)) {
       return substitutes[lower]!;
     }
 
-    // Check for partial matches
     for (final key in substitutes.keys) {
       if (lower.contains(key) || key.contains(lower)) {
         return substitutes[key]!;
       }
     }
 
-    // Default generic substitutes
     return [
       {'name': 'No specific substitutes found', 'healthScore': '50'},
       {'name': 'Try searching online for "$ingredient alternatives"', 'healthScore': '50'},
@@ -616,7 +600,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     return Colors.red;
   }
 
-  // 🔥 IMPROVED: Better error handling in save
   Future<void> _saveGroceryList() async {
     if (!mounted) return;
     
@@ -654,31 +637,27 @@ class _GroceryListPageState extends State<GroceryListPage> {
 
       print('💾 Saving ${items.length} items to grocery list...');
       
-      // 🔥 ADDED: Try-catch around service call
       try {
         await GroceryService.saveGroceryList(items);
         print('✅ Grocery list saved successfully');
       } catch (e, stackTrace) {
         print('❌ Error saving to service: $e');
         print('Stack trace: $stackTrace');
-        throw e;  // Re-throw to be caught by outer try-catch
+        throw e;
       }
 
-      // Invalidate and refresh cache
       await _invalidateGroceryListCache();
       
-      // 🔥 ADDED: Try-catch around cache refresh
       try {
         final freshItems = await GroceryService.getGroceryList();
         await _cacheGroceryList(freshItems);
       } catch (e) {
         print('⚠️ Warning: Could not refresh cache after save: $e');
-        // Don't throw - save was successful
       }
 
       if (mounted) {
         setState(() {
-          _errorMessage = null;  // Clear any errors on successful save
+          _errorMessage = null;
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -711,7 +690,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     }
   }
 
-  // 🔥 IMPROVED: Better error handling in clear
   Future<void> _clearGroceryList() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -737,7 +715,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     try {
       print('🗑️ Clearing grocery list...');
       
-      // 🔥 ADDED: Try-catch around service call
       try {
         await GroceryService.clearGroceryList();
         print('✅ Grocery list cleared successfully');
@@ -750,7 +727,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
       await _invalidateGroceryListCache();
 
       if (mounted) {
-        // Dispose existing controllers
         for (var controllers in itemControllers) {
           controllers['name']?.dispose();
           controllers['quantity']?.dispose();
@@ -767,7 +743,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
           ];
           selectedIndices.clear();
           isMultiSelectMode = false;
-          _errorMessage = null;  // Clear any errors
+          _errorMessage = null;
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -859,7 +835,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        // 🔥 NEW: Error banner
                         if (_errorMessage != null)
                           Container(
                             width: double.infinity,
@@ -892,7 +867,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
                             ),
                           ),
                         
-                        // Header
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -950,7 +924,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // ✅ Action buttons when items are selected
                         if (isMultiSelectMode && selectedIndices.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -1016,7 +989,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                         if (isMultiSelectMode && selectedIndices.isNotEmpty)
                           const SizedBox(height: 16),
 
-                        // List
+                        // 🔥 IMPROVED LIST WITH 2-ROW LAYOUT
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(16),
@@ -1041,172 +1014,202 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                       final isEmpty = itemControllers[index]['name']!.text.trim().isEmpty;
 
                                       return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
+                                        padding: const EdgeInsets.only(bottom: 16),
                                         child: InkWell(
                                           onTap: isMultiSelectMode && !isEmpty
                                               ? () => _toggleSelection(index)
                                               : null,
                                           child: Container(
-                                            padding: const EdgeInsets.all(8),
+                                            padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
                                               color: isSelected 
                                                   ? Colors.blue.shade50 
-                                                  : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(8),
+                                                  : Colors.grey.shade50,
+                                              borderRadius: BorderRadius.circular(12),
                                               border: Border.all(
                                                 color: isSelected 
                                                     ? Colors.blue.shade300 
-                                                    : Colors.transparent,
+                                                    : Colors.grey.shade300,
                                                 width: 2,
                                               ),
                                             ),
-                                            child: Row(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                // ✅ Checkbox in multi-select mode
-                                                if (isMultiSelectMode && !isEmpty)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(right: 8),
-                                                    child: Checkbox(
-                                                      value: isSelected,
-                                                      onChanged: (val) => _toggleSelection(index),
-                                                      activeColor: Colors.blue,
-                                                    ),
-                                                  )
-                                                else
-                                                  // Row number in normal mode
-                                                  Container(
-                                                    width: 35,
-                                                    height: 35,
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.blue.shade100,
-                                                      shape: BoxShape.circle,
-                                                      border: Border.all(
-                                                        color: Colors.blue.shade300,
-                                                        width: 1,
-                                                      ),
-                                                    ),
-                                                    child: Center(
-                                                      child: Text(
-                                                        '${index + 1}',
-                                                        style: TextStyle(
-                                                          fontSize: 14,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.blue.shade700,
+                                                // 🔥 ROW 1: Number/Checkbox + Quantity + Measurement + Delete
+                                                Row(
+                                                  children: [
+                                                    // Number or Checkbox
+                                                    if (isMultiSelectMode && !isEmpty)
+                                                      Checkbox(
+                                                        value: isSelected,
+                                                        onChanged: (val) => _toggleSelection(index),
+                                                        activeColor: Colors.blue,
+                                                      )
+                                                    else
+                                                      Container(
+                                                        width: 40,
+                                                        height: 40,
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.blue.shade100,
+                                                          shape: BoxShape.circle,
+                                                          border: Border.all(
+                                                            color: Colors.blue.shade300,
+                                                            width: 2,
+                                                          ),
+                                                        ),
+                                                        child: Center(
+                                                          child: Text(
+                                                            '${index + 1}',
+                                                            style: TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.blue.shade700,
+                                                            ),
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
-                                                  ),
-                                                const SizedBox(width: 12),
+                                                    const SizedBox(width: 12),
 
-                                                // Quantity field
-                                                SizedBox(
-                                                  width: 50,
-                                                  child: TextField(
-                                                    controller: itemControllers[index]['quantity'],
-                                                    decoration: InputDecoration(
-                                                      hintText: 'Qty',
-                                                      hintStyle: const TextStyle(fontSize: 11),
-                                                      border: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: BorderSide(color: Colors.grey.shade300),
+                                                    // 🔥 QUANTITY (perfect size)
+                                                    SizedBox(
+                                                      width: 70,
+                                                      child: TextField(
+                                                        controller: itemControllers[index]['quantity'],
+                                                        decoration: InputDecoration(
+                                                          labelText: 'Qty',
+                                                          labelStyle: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey.shade700,
+                                                          ),
+                                                          border: OutlineInputBorder(
+                                                            borderRadius: BorderRadius.circular(8),
+                                                            borderSide: BorderSide(color: Colors.grey.shade400),
+                                                          ),
+                                                          focusedBorder: OutlineInputBorder(
+                                                            borderRadius: BorderRadius.circular(8),
+                                                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                                                          ),
+                                                          contentPadding: const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 14,
+                                                          ),
+                                                          filled: true,
+                                                          fillColor: Colors.white,
+                                                        ),
+                                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                        inputFormatters: [
+                                                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                                                        ],
+                                                        style: const TextStyle(fontSize: 15),
+                                                        textAlign: TextAlign.center,
+                                                        enabled: !isMultiSelectMode,
                                                       ),
-                                                      focusedBorder: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: const BorderSide(color: Colors.blue, width: 2),
-                                                      ),
-                                                      contentPadding: const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 8,
-                                                      ),
-                                                      filled: true,
-                                                      fillColor: Colors.grey.shade50,
                                                     ),
-                                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                                    inputFormatters: [
-                                                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                                                    ],
-                                                    style: const TextStyle(fontSize: 13),
-                                                    textAlign: TextAlign.center,
-                                                    enabled: !isMultiSelectMode,
-                                                  ),
+                                                    const SizedBox(width: 12),
+
+                                                    // 🔥 MEASUREMENT (MUCH BIGGER with dropdown)
+                                                    Expanded(
+                                                      child: DropdownButtonFormField<String>(
+                                                        value: itemControllers[index]['measurement']!.text.isEmpty 
+                                                            ? null 
+                                                            : (_measurementUnits.contains(itemControllers[index]['measurement']!.text)
+                                                                ? itemControllers[index]['measurement']!.text
+                                                                : null),
+                                                        decoration: InputDecoration(
+                                                          labelText: 'Unit',
+                                                          labelStyle: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors.grey.shade700,
+                                                          ),
+                                                          border: OutlineInputBorder(
+                                                            borderRadius: BorderRadius.circular(8),
+                                                            borderSide: BorderSide(color: Colors.grey.shade400),
+                                                          ),
+                                                          focusedBorder: OutlineInputBorder(
+                                                            borderRadius: BorderRadius.circular(8),
+                                                            borderSide: const BorderSide(color: Colors.blue, width: 2),
+                                                          ),
+                                                          contentPadding: const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 14,
+                                                          ),
+                                                          filled: true,
+                                                          fillColor: Colors.white,
+                                                        ),
+                                                        items: _measurementUnits.map((unit) {
+                                                          return DropdownMenuItem<String>(
+                                                            value: unit,
+                                                            child: Text(
+                                                              unit,
+                                                              style: const TextStyle(fontSize: 15),
+                                                            ),
+                                                          );
+                                                        }).toList(),
+                                                        onChanged: isMultiSelectMode 
+                                                            ? null 
+                                                            : (value) {
+                                                                if (value != null) {
+                                                                  itemControllers[index]['measurement']!.text = value;
+                                                                }
+                                                              },
+                                                        hint: const Text('Select', style: TextStyle(fontSize: 14)),
+                                                      ),
+                                                    ),
+
+                                                    // Delete button
+                                                    if (itemControllers.length > 1 && !isMultiSelectMode)
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(left: 8),
+                                                        child: IconButton(
+                                                          icon: Icon(
+                                                            Icons.remove_circle,
+                                                            color: Colors.red.shade400,
+                                                            size: 28,
+                                                          ),
+                                                          padding: EdgeInsets.zero,
+                                                          constraints: const BoxConstraints(),
+                                                          onPressed: () => _removeItem(index),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
-                                                const SizedBox(width: 6),
-
-                                                // Measurement field
-                                                SizedBox(
-                                                  width: 55,
-                                                  child: TextField(
-                                                    controller: itemControllers[index]['measurement'],
-                                                    decoration: InputDecoration(
-                                                      hintText: 'Unit',
-                                                      hintStyle: const TextStyle(fontSize: 11),
-                                                      border: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: BorderSide(color: Colors.grey.shade300),
-                                                      ),
-                                                      focusedBorder: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: const BorderSide(color: Colors.blue, width: 2),
-                                                      ),
-                                                      contentPadding: const EdgeInsets.symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 8,
-                                                      ),
-                                                      filled: true,
-                                                      fillColor: Colors.grey.shade50,
+                                                
+                                                const SizedBox(height: 12),
+                                                
+                                                // 🔥 ROW 2: ITEM NAME (full width, larger)
+                                                TextField(
+                                                  controller: itemControllers[index]['name'],
+                                                  decoration: InputDecoration(
+                                                    labelText: 'Item Name',
+                                                    labelStyle: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey.shade700,
                                                     ),
-                                                    style: const TextStyle(fontSize: 13),
-                                                    textAlign: TextAlign.center,
-                                                    enabled: !isMultiSelectMode,
+                                                    hintText: 'Enter item name...',
+                                                    border: OutlineInputBorder(
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      borderSide: BorderSide(color: Colors.grey.shade400),
+                                                    ),
+                                                    focusedBorder: OutlineInputBorder(
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      borderSide: const BorderSide(color: Colors.blue, width: 2),
+                                                    ),
+                                                    contentPadding: const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 16,
+                                                    ),
+                                                    filled: true,
+                                                    fillColor: Colors.white,
                                                   ),
+                                                  style: const TextStyle(fontSize: 16),
+                                                  onChanged: (text) {
+                                                    if (index == itemControllers.length - 1 && text.isNotEmpty) {
+                                                      _addNewItem();
+                                                    }
+                                                  },
+                                                  enabled: !isMultiSelectMode,
                                                 ),
-                                                const SizedBox(width: 6),
-
-                                                // Item name field
-                                                Expanded(
-                                                  child: TextField(
-                                                    controller: itemControllers[index]['name'],
-                                                    decoration: InputDecoration(
-                                                      hintText: 'Enter item name...',
-                                                      border: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: BorderSide(color: Colors.grey.shade300),
-                                                      ),
-                                                      focusedBorder: OutlineInputBorder(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        borderSide: const BorderSide(color: Colors.blue, width: 2),
-                                                      ),
-                                                      contentPadding: const EdgeInsets.symmetric(
-                                                        horizontal: 12,
-                                                        vertical: 8,
-                                                      ),
-                                                      filled: true,
-                                                      fillColor: Colors.grey.shade50,
-                                                    ),
-                                                    onChanged: (text) {
-                                                      if (index == itemControllers.length - 1 && text.isNotEmpty) {
-                                                        _addNewItem();
-                                                      }
-                                                    },
-                                                    enabled: !isMultiSelectMode,
-                                                  ),
-                                                ),
-
-                                                // Remove button
-                                                if (itemControllers.length > 1 && !isMultiSelectMode)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(left: 6),
-                                                    child: IconButton(
-                                                      icon: Icon(
-                                                        Icons.remove_circle,
-                                                        color: Colors.red.shade400,
-                                                        size: 22,
-                                                      ),
-                                                      padding: EdgeInsets.zero,
-                                                      constraints: const BoxConstraints(),
-                                                      onPressed: () => _removeItem(index),
-                                                    ),
-                                                  ),
                                               ],
                                             ),
                                           ),
@@ -1218,7 +1221,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Buttons (hide in multi-select mode)
                         if (!isMultiSelectMode)
                           Container(
                             padding: const EdgeInsets.all(16),

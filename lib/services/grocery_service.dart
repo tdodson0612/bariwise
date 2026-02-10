@@ -1,5 +1,5 @@
 // lib/services/grocery_service.dart
-// ✅ COMPLETE VERSION: All methods with correct column name "item_name"
+// ✅ ENHANCED VERSION: Detailed logging + explicit user_id in inserts
 
 import '../models/grocery_item.dart';
 import 'auth_service.dart';
@@ -88,66 +88,122 @@ class GroceryService {
   }
 
   // ==================================================
-  // SAVE LIST (Clear + Insert all)
+  // SAVE LIST (Clear + Insert all) - ENHANCED WITH DETAILED LOGGING
   // ==================================================
   static Future<void> saveGroceryList(List<String> items) async {
-    print('💾 GroceryService.saveGroceryList() called with ${items.length} items');
+    print('\n========================================');
+    print('💾 GroceryService.saveGroceryList() START');
+    print('========================================');
+    print('📊 Items to save: ${items.length}');
     
     final userId = AuthService.currentUserId;
+    print('👤 Current userId: $userId');
+    
     if (userId == null || userId.isEmpty) {
+      print('❌ No userId - cannot save');
       throw Exception('Please sign in to continue');
     }
 
-    print('👤 Saving for user: $userId');
+    print('📋 Items list: $items');
 
     try {
-      // Delete existing items (RLS will ensure we only delete our own)
-      print('🗑️ Deleting existing grocery items...');
-      await DatabaseServiceCore.workerQuery(
-        action: 'delete',
-        table: 'grocery_items',
-      );
-      print('✅ Deleted existing items');
-
-      // Insert new items
-      if (items.isNotEmpty) {
-        print('📝 Inserting ${items.length} new items...');
-        
-        for (var i = 0; i < items.length; i++) {
-          final item = items[i];
-          if (item.trim().isEmpty) {
-            print('⚠️ Skipping empty item at index $i');
-            continue;
-          }
-
-          try {
-            final data = {
-              'item_name': item.trim(),  // ✅ Correct column name
-              'order_index': i,
-              'created_at': DateTime.now().toIso8601String(),
-            };
-
-            print('📤 Inserting item $i: ${item.trim()}');
-            await DatabaseServiceCore.workerQuery(
-              action: 'insert',
-              table: 'grocery_items',
-              data: data,
-            );
-          } catch (e) {
-            print('⚠️ Error inserting item $i ("$item"): $e');
-            // Continue with other items
-          }
-        }
-        
-        print('✅ Successfully inserted items');
-      } else {
-        print('ℹ️ No items to insert (list is empty)');
+      // STEP 1: Delete existing items
+      print('\n--- STEP 1: DELETE EXISTING ITEMS ---');
+      print('🗑️ Calling delete query...');
+      try {
+        final deleteResult = await DatabaseServiceCore.workerQuery(
+          action: 'delete',
+          table: 'grocery_items',
+        );
+        print('✅ Delete successful');
+        print('📦 Delete result: $deleteResult');
+      } catch (deleteError, deleteStack) {
+        print('❌ DELETE FAILED!');
+        print('❌ Error: $deleteError');
+        print('❌ Stack: $deleteStack');
+        throw Exception('Failed to clear existing items: $deleteError');
       }
 
+      // STEP 2: Insert new items
+      if (items.isEmpty) {
+        print('\nℹ️ No items to insert (list is empty)');
+        print('========================================\n');
+        return;
+      }
+
+      print('\n--- STEP 2: INSERT NEW ITEMS ---');
+      print('📝 Inserting ${items.length} items...');
+      
+      for (var i = 0; i < items.length; i++) {
+        final item = items[i];
+        
+        print('\n➡️ Processing item $i of ${items.length}');
+        print('   Raw value: "$item"');
+        
+        if (item.trim().isEmpty) {
+          print('   ⚠️ Empty - skipping');
+          continue;
+        }
+
+        try {
+          final data = {
+            'user_id': userId,  // ✅ EXPLICITLY include user_id
+            'item_name': item.trim(),  // ✅ Correct column name
+            'order_index': i,
+            'created_at': DateTime.now().toIso8601String(),
+          };
+
+          print('   📤 Data to insert: $data');
+          
+          final insertResult = await DatabaseServiceCore.workerQuery(
+            action: 'insert',
+            table: 'grocery_items',
+            data: data,
+          );
+          
+          print('   ✅ Insert successful');
+          print('   📦 Result: $insertResult');
+          
+        } catch (itemError, itemStack) {
+          print('   ❌ INSERT FAILED for item $i!');
+          print('   ❌ Item: "$item"');
+          print('   ❌ Error: $itemError');
+          print('   ❌ Stack: $itemStack');
+          
+          // Stop on first error to diagnose
+          throw Exception('Failed to insert item "$item": $itemError');
+        }
+      }
+      
+      print('\n✅ ALL ITEMS INSERTED SUCCESSFULLY');
+      print('========================================\n');
+
     } catch (e, stackTrace) {
-      print('❌ Error in saveGroceryList: $e');
+      print('\n❌❌❌ FINAL ERROR IN saveGroceryList ❌❌❌');
+      print('Error: $e');
       print('Stack trace: $stackTrace');
-      throw Exception('Failed to save grocery list: $e');
+      print('========================================\n');
+      
+      // Analyze error and provide helpful message
+      final errorStr = e.toString().toLowerCase();
+      
+      if (errorStr.contains('user_id') && errorStr.contains('null')) {
+        throw Exception('User ID is null. Please log out and log back in.');
+      } else if (errorStr.contains('user_id') && errorStr.contains('foreign key')) {
+        throw Exception('User account not found. Please log out and log back in.');
+      } else if (errorStr.contains('rls') || errorStr.contains('policy')) {
+        throw Exception('Permission denied. RLS policy blocking insert. Check policies in Supabase.');
+      } else if (errorStr.contains('permission denied')) {
+        throw Exception('Permission denied. Check RLS policies in Supabase.');
+      } else if (errorStr.contains('column') && errorStr.contains('item_name')) {
+        throw Exception('Database schema error: item_name column issue: $e');
+      } else if (errorStr.contains('column')) {
+        throw Exception('Database schema error: $e');
+      } else if (errorStr.contains('null value') && errorStr.contains('violates not-null')) {
+        throw Exception('Required field is null: $e');
+      } else {
+        throw Exception('Failed to save grocery list: $e');
+      }
     }
   }
 
@@ -179,7 +235,7 @@ class GroceryService {
   }
 
   // ==================================================
-  // ADD SINGLE ITEM
+  // ADD SINGLE ITEM - ENHANCED WITH EXPLICIT USER_ID
   // ==================================================
   static Future<void> addToGroceryList(String item, {String? quantity}) async {
     print('➕ GroceryService.addToGroceryList() called: "$item" (qty: $quantity)');
@@ -206,6 +262,7 @@ class GroceryService {
         action: 'insert',
         table: 'grocery_items',
         data: {
+          'user_id': userId,  // ✅ EXPLICITLY include user_id
           'item_name': formatted.trim(),  // ✅ Correct column name
           'order_index': newOrderIndex,
           'created_at': DateTime.now().toIso8601String(),

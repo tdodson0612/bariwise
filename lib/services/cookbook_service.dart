@@ -254,4 +254,56 @@ class CookbookService {
       return 0;
     }
   }
+
+  // Submit cookbook recipe for community review
+  static Future<void> submitRecipeForReview(CookbookRecipe recipe) async {
+    if (AuthService.currentUserId == null) {
+      throw Exception('Please sign in to continue');
+    }
+
+    try {
+      // First, create a draft recipe
+      final draftRecipeId = await DatabaseServiceCore.workerQuery(
+        action: 'insert',
+        table: 'draft_recipes',
+        data: {
+          'user_id': AuthService.currentUserId!,
+          'title': recipe.recipeName,
+          'ingredients': recipe.ingredients,
+          'instructions': recipe.directions,
+          'servings': recipe.servings ?? 1,
+          'nutrition': recipe.nutrition?.toJsonString(),
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Get the ID from the response
+      final draftId = (draftRecipeId as List).first['id'];
+
+      // Then submit it for review
+      await DatabaseServiceCore.workerQuery(
+        action: 'insert',
+        table: 'submitted_recipes',
+        data: {
+          'user_id': AuthService.currentUserId!,
+          'draft_recipe_id': draftId,
+          'status': 'pending',
+          'submitted_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      AppConfig.debugPrint('✅ Recipe submitted for review successfully');
+      
+    } catch (e) {
+      final errorStr = e.toString().toLowerCase();
+      
+      if (errorStr.contains('already submitted') || 
+          errorStr.contains('duplicate key')) {
+        throw Exception('This recipe has already been submitted for review!');
+      }
+      
+      AppConfig.debugPrint('❌ Error submitting recipe for review: $e');
+      throw Exception('Failed to submit recipe for review. Please try again.');
+    }
+  }
 }

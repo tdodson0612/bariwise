@@ -1,4 +1,4 @@
-// lib/widgets/cookbook_section.dart - COMPLETE WITH NUTRITION TABS
+// lib/widgets/cookbook_section.dart - COMPLETE WITH NUTRITION TABS AND SUBMIT BUTTON
 import 'package:flutter/material.dart';
 import 'package:bari_wise/widgets/nutrition_facts_label.dart';
 import 'package:bari_wise/models/nutrition_info.dart';
@@ -16,7 +16,6 @@ class CookbookSection extends StatefulWidget {
 class _CookbookSectionState extends State<CookbookSection> {
   List<CookbookRecipe> _recipes = [];
   bool _isLoading = true;
-  bool _isExpanded = true;
 
   @override
   void initState() {
@@ -87,6 +86,96 @@ class _CookbookSectionState extends State<CookbookSection> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to remove: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _submitRecipeForReview(CookbookRecipe recipe) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Submit to Community'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Submit "${recipe.recipeName}" for bariatric expert review?'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                      const SizedBox(width: 6),
+                      Text(
+                        'What happens next:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '• Our bariatric experts will review your recipe\n'
+                    '• If approved, it will be shared with the community\n'
+                    '• You\'ll be notified of the decision\n'
+                    '• Your recipe stays in your cookbook either way',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Submit for Review'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await CookbookService.submitRecipeForReview(recipe);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recipe submitted for review! Check "Submitted" tab for status.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to submit: ${e.toString()}'),
               backgroundColor: Colors.red,
             ),
           );
@@ -166,13 +255,8 @@ class _CookbookSectionState extends State<CookbookSection> {
                           Expanded(
                             child: TabBarView(
                               children: [
-                                // Tab 1: Recipe
                                 _buildRecipeTab(recipe, scrollController),
-                                
-                                // Tab 2: Nutrition
                                 _buildNutritionTab(recipe, scrollController),
-                                
-                                // Tab 3: Notes
                                 _buildNotesTab(recipe, scrollController),
                               ],
                             ),
@@ -197,21 +281,52 @@ class _CookbookSectionState extends State<CookbookSection> {
                   ],
                 ),
                 child: SafeArea(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _deleteRecipe(recipe.id, recipe.recipeName);
-                    },
-                    icon: const Icon(Icons.delete, color: Colors.white),
-                    label: const Text(
-                      'Remove from Cookbook',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
+                  child: Column(
+                    children: [
+                      // Submit to Community button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _submitRecipeForReview(recipe);
+                          },
+                          icon: const Icon(Icons.send, color: Colors.white),
+                          label: const Text(
+                            'Submit to Community',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 8),
+                      
+                      // Remove button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _deleteRecipe(recipe.id, recipe.recipeName);
+                          },
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          label: const Text(
+                            'Remove from Cookbook',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -548,10 +663,13 @@ class _CookbookSectionState extends State<CookbookSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // Header with navigation to My Cookbook page
           InkWell(
-            onTap: () {
-              setState(() => _isExpanded = !_isExpanded);
+            onTap: () async {
+              // Navigate to full My Cookbook page
+              await Navigator.pushNamed(context, '/cookbook');
+              // Refresh recipes when returning
+              _loadRecipes();
             },
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -569,94 +687,139 @@ class _CookbookSectionState extends State<CookbookSection> {
                     ),
                   ],
                 ),
-                Icon(
-                  _isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.grey[600],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'View All',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.orange.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: Colors.orange.shade700,
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
           
-          // Content
-          if (_isExpanded) ...[
-            const SizedBox(height: 16),
+          // Content - Always show preview (no expand/collapse)
+          const SizedBox(height: 16),
             
-            if (_isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(),
-                ),
-              )
-            else if (_recipes.isEmpty)
-              Center(
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.menu_book,
-                      size: 50,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No recipes in your cookbook yet',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Add recipes by clicking the bookmark button',
-                      style: TextStyle(
-                        color: Colors.grey[500],
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              )
-            else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _recipes.length,
-                itemBuilder: (context, index) {
-                  final recipe = _recipes[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      onTap: () => _showRecipeDetails(recipe),
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.orange,
-                        child: Icon(Icons.restaurant, color: Colors.white, size: 20),
-                      ),
-                      title: Text(
-                        recipe.recipeName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        '${recipe.ingredients.split(',').take(2).join(', ')}...',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                            onPressed: () => _deleteRecipe(recipe.id, recipe.recipeName),
-                          ),
-                          const Icon(Icons.arrow_forward_ios, size: 14),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+          if (_isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
               ),
-          ],
+            )
+          else if (_recipes.isEmpty)
+            Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.menu_book,
+                    size: 50,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No recipes in your cookbook yet',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Create recipes to save them here',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Navigator.pushNamed(context, '/submit-recipe');
+                      _loadRecipes();
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create Recipe'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            // Show preview of first 3 recipes
+            Column(
+              children: [
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _recipes.length > 3 ? 3 : _recipes.length,
+                  itemBuilder: (context, index) {
+                    final recipe = _recipes[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        onTap: () => _showRecipeDetails(recipe),
+                        leading: const CircleAvatar(
+                          backgroundColor: Colors.orange,
+                          child: Icon(Icons.restaurant, color: Colors.white, size: 20),
+                        ),
+                        title: Text(
+                          recipe.recipeName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${recipe.ingredients.split(',').take(2).join(', ')}...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      ),
+                    );
+                  },
+                ),
+                
+                // Show "View All" button if more than 3 recipes
+                if (_recipes.length > 3) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        await Navigator.pushNamed(context, '/cookbook');
+                        _loadRecipes();
+                      },
+                      icon: const Icon(Icons.menu_book),
+                      label: Text('View All ${_recipes.length} Recipes'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange,
+                        side: const BorderSide(color: Colors.orange),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
         ],
       ),
     );

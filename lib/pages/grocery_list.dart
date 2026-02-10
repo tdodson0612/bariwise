@@ -1,4 +1,4 @@
-// lib/pages/grocery_list.dart - IMPROVED LAYOUT: 2 rows per item with larger fields
+// lib/pages/grocery_list.dart - FIXED: Keyboard doesn't cover input fields
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +27,9 @@ class _GroceryListPageState extends State<GroceryListPage> {
   bool isMultiSelectMode = false;
   Set<int> selectedIndices = {};
 
+  // ✅ Scroll controller to auto-scroll when keyboard appears
+  final ScrollController _scrollController = ScrollController();
+
   // Cache configuration
   static const Duration _listCacheDuration = Duration(minutes: 5);
 
@@ -53,6 +56,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
   void initState() {
     super.initState();
     _initializeUser();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    for (var controllers in itemControllers) {
+      controllers['name']?.dispose();
+      controllers['quantity']?.dispose();
+      controllers['measurement']?.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> _initializeUser() async {
@@ -357,16 +371,6 @@ class _GroceryListPageState extends State<GroceryListPage> {
     });
   }
 
-  @override
-  void dispose() {
-    for (var controllers in itemControllers) {
-      controllers['name']?.dispose();
-      controllers['quantity']?.dispose();
-      controllers['measurement']?.dispose();
-    }
-    super.dispose();
-  }
-
   void _addNewItem() {
     setState(() {
       itemControllers.add({
@@ -374,6 +378,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
         'measurement': TextEditingController(),
         'name': TextEditingController(),
       });
+    });
+    
+    // ✅ Scroll to bottom after adding new item
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
@@ -816,6 +831,8 @@ class _GroceryListPageState extends State<GroceryListPage> {
           ],
         ],
       ),
+      // ✅ FIX: Prevent keyboard from covering input
+      resizeToAvoidBottomInset: true,
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
@@ -829,10 +846,18 @@ class _GroceryListPageState extends State<GroceryListPage> {
                     },
                   ),
                 ),
+                // ✅ FIX: Use SingleChildScrollView for entire content
                 RefreshIndicator(
                   onRefresh: () => _loadGroceryList(forceRefresh: true),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 16,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 100, // ✅ Extra padding for keyboard
+                    ),
                     child: Column(
                       children: [
                         if (_errorMessage != null)
@@ -989,16 +1014,17 @@ class _GroceryListPageState extends State<GroceryListPage> {
                         if (isMultiSelectMode && selectedIndices.isNotEmpty)
                           const SizedBox(height: 16),
 
-                        // 🔥 IMPROVED LIST WITH 2-ROW LAYOUT
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withAlpha((0.9 * 255).toInt()),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: itemControllers.isEmpty
-                                ? const Center(
+                        // 🔥 ITEMS LIST
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha((0.9 * 255).toInt()),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: itemControllers.isEmpty
+                              ? const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(32),
                                     child: Text(
                                       'No items yet. Start adding groceries!',
                                       style: TextStyle(
@@ -1006,10 +1032,12 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                         color: Colors.grey,
                                       ),
                                     ),
-                                  )
-                                : ListView.builder(
-                                    itemCount: itemControllers.length,
-                                    itemBuilder: (context, index) {
+                                  ),
+                                )
+                              : Column(
+                                  children: List.generate(
+                                    itemControllers.length,
+                                    (index) {
                                       final isSelected = selectedIndices.contains(index);
                                       final isEmpty = itemControllers[index]['name']!.text.trim().isEmpty;
 
@@ -1036,7 +1064,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                // 🔥 ROW 1: Number/Checkbox + Quantity + Measurement + Delete
+                                                // ROW 1: Number/Checkbox + Quantity + Measurement + Delete
                                                 Row(
                                                   children: [
                                                     // Number or Checkbox
@@ -1071,7 +1099,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                       ),
                                                     const SizedBox(width: 12),
 
-                                                    // 🔥 QUANTITY (perfect size)
+                                                    // QUANTITY
                                                     SizedBox(
                                                       width: 70,
                                                       child: TextField(
@@ -1108,7 +1136,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                     ),
                                                     const SizedBox(width: 12),
 
-                                                    // 🔥 MEASUREMENT (MUCH BIGGER with dropdown)
+                                                    // MEASUREMENT DROPDOWN
                                                     Expanded(
                                                       child: DropdownButtonFormField<String>(
                                                         value: itemControllers[index]['measurement']!.text.isEmpty 
@@ -1177,7 +1205,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                 
                                                 const SizedBox(height: 12),
                                                 
-                                                // 🔥 ROW 2: ITEM NAME (full width, larger)
+                                                // ROW 2: ITEM NAME (full width)
                                                 TextField(
                                                   controller: itemControllers[index]['name'],
                                                   decoration: InputDecoration(
@@ -1209,6 +1237,22 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                                     }
                                                   },
                                                   enabled: !isMultiSelectMode,
+                                                  // ✅ Auto-scroll when field is focused
+                                                  onTap: () {
+                                                    Future.delayed(const Duration(milliseconds: 500), () {
+                                                      if (_scrollController.hasClients) {
+                                                        final double offset = (index * 150.0).clamp(
+                                                          0.0, 
+                                                          _scrollController.position.maxScrollExtent,
+                                                        );
+                                                        _scrollController.animateTo(
+                                                          offset,
+                                                          duration: const Duration(milliseconds: 300),
+                                                          curve: Curves.easeOut,
+                                                        );
+                                                      }
+                                                    });
+                                                  },
                                                 ),
                                               ],
                                             ),
@@ -1217,7 +1261,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
                                       );
                                     },
                                   ),
-                          ),
+                                ),
                         ),
                         const SizedBox(height: 16),
 
@@ -1275,6 +1319,8 @@ class _GroceryListPageState extends State<GroceryListPage> {
                               ],
                             ),
                           ),
+                        // ✅ Extra spacing at bottom for keyboard
+                        const SizedBox(height: 200),
                       ],
                     ),
                   ),

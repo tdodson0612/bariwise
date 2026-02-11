@@ -24,6 +24,7 @@ import 'package:bari_wise/widgets/app_drawer.dart';
 import 'package:bari_wise/config/app_config.dart';
 import 'package:bari_wise/widgets/menu_icon_with_badge.dart';
 import 'package:bari_wise/services/favorite_recipes_service.dart';
+import 'package:bari_wise/services/friends_service.dart'; // 🔥 NEW
 import 'widgets/auto_barcode_scanner.dart';
 import 'widgets/day7_congrats_popup.dart';
 import 'services/tracker_service.dart';
@@ -32,7 +33,6 @@ import 'package:bari_wise/models/draft_recipe.dart';
 import 'package:bari_wise/services/draft_recipes_service.dart';
 import 'services/picture_service.dart';
 import 'package:bari_wise/widgets/tutorial_overlay.dart';
-
 
 class Recipe {
   final String title;
@@ -283,16 +283,13 @@ class _HomePageState extends State<HomePage>
   bool _showInitialView = true;
   NutritionInfo? _currentNutrition;
   bool _showTutorial = false;
-
-  String _defaultPostVisibility = 'public'; // Default visibility for new posts
+  String _defaultPostVisibility = 'public';
 
   // Feed pagination state
   bool _isLoadingMorePosts = false;
   bool _hasMorePosts = true;
   int _currentFeedOffset = 0;
   static const int _postsPerPage = 10;
-
-  // Scroll controller for feed
   final ScrollController _feedScrollController = ScrollController();
 
   // Like state tracking
@@ -303,6 +300,13 @@ class _HomePageState extends State<HomePage>
   Map<String, bool> _savedPosts = {};
   final Map<String, TextEditingController> _commentControllers = {};
 
+  // 🔥 NEW: Comment like tracking
+  Map<String, Map<String, bool>> _commentLikeStatus = {};
+  Map<String, Map<String, int>> _commentLikeCounts = {};
+
+  // 🔥 NEW: Reply tracking
+  Map<String, String?> _replyingToCommentId = {};
+  Map<String, Map<String, bool>> _expandedReplies = {};
 
 
   late final PremiumGateController _premiumController;
@@ -406,13 +410,20 @@ class _HomePageState extends State<HomePage>
   }
 
   @override
+  @override
   void dispose() {
     _isDisposed = true;
     _premiumController.removeListener(_onPremiumStateChanged);
     _interstitialAd?.dispose();
     _rewardedAd?.dispose();
     _searchController.dispose();
-    _feedScrollController.dispose(); // 🔥 NEW
+    _feedScrollController.dispose();
+    
+    // 🔥 NEW: Dispose comment controllers
+    for (var controller in _commentControllers.values) {
+      controller.dispose();
+    }
+    
     super.dispose();
   }
 
@@ -2251,29 +2262,290 @@ class _HomePageState extends State<HomePage>
         setState(() {
           _postComments[postId] = comments;
         });
+        
+        // 🔥 NEW: Load like data for all comments and replies
+        await _loadCommentLikeData(postId, comments);
       }
     } catch (e) {
       AppConfig.debugPrint('❌ Error loading comments: $e');
     }
   }
 
-  Future<void> _postComment(String postId) async {
+  // 🔥 NEW: Load like data for all comments in a post
+  Future<void> _loadCommentLikeData(String postId, List<Map<String, dynamic>> comments) async {
+    try {
+      for (final comment in comments) {
+        final commentId = comment['id']?.toString();
+        if (commentId == null) continue;
+
+        final results = await Future.wait([
+          FeedPostsService.hasUserLikedComment(commentId),
+          FeedPostsService.getCommentLikeCount(commentId),
+        ]);
+
+        if (mounted) {
+          setState(() {
+            _commentLikeStatus.putIfAbsent(postId, () => {});
+            _commentLikeCounts.putIfAbsent(postId, () => {});
+            
+            _commentLikeStatus[postId]![commentId] = results[0] as bool;
+            _commentLikeCounts[postId]![commentId] = results[1] as int;
+          });
+        }
+
+        // Also load like data for replies
+        final replies = comment['replies'] as List<Map<String, dynamic>>?;
+        if (replies != null && replies.isNotEmpty) {
+          await _loadCommentLikeData(postId, replies);
+        }
+      }
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error loading comment like data: $e');
+    }
+  }
+
+  // 🔥 NEW: Toggle like on a comment
+  Future<void> _toggleCommentLike(String postId, String commentId) async {
+    try {
+      final isCurrentlyLiked = _commentLikeStatus[postId]?[commentId] ?? false;
+      final currentCount = _commentLikeCounts[postId]?[commentId] ?? 0;
+
+      setState(() {
+        _commentLikeStatus.putIfAbsent(postId, () => {});
+        _commentLikeCounts.putIfAbsent(postId, () => {});
+        
+        _commentLikeStatus[postId]![commentId] = !isCurrentlyLiked;
+        _commentLikeCounts[postId]![commentId] = isCurrentlyLiked 
+          ? (currentCount - 1).clamp(0, 999999) 
+          : currentCount + 1;
+      });
+
+      if (isCurrentlyLiked) {
+        await FeedPostsService.unlikeComment(commentId);
+      } else {
+        await FeedPostsService.likeComment(commentId);
+      }
+
+      final actualCount = await FeedPostsService.getCommentLikeCount(commentId);
+      if (mounted) {
+        setState(() {
+          _commentLikeCounts[postId]![commentId] = actualCount;
+        });
+      }
+
+    } catch (e) {
+      final isCurrentlyLiked = _commentLikeStatus[postId]?[commentId] ?? false;
+      final currentCount = _commentLikeCounts[postId]?[commentId] ?? 0;
+      
+      setState(() {
+        _commentLikeStatus[postId]![commentId] = !isCurrentlyLiked;
+        _commentLikeCounts[postId]![commentId] = isCurrentlyLiked 
+          ? currentCount + 1 
+          : (currentCount - 1).clamp(0, 999999);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update like: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // 🔥 NEW: Start replying to a comment
+  void _startReplyToComment(String postId, String commentId, String commenterUsername) {
+    setState(() {
+      _replyingToCommentId[postId] = commentId;
+    });
+
     final controller = _commentControllers[postId];
-    if (controller == null || controller.text.trim().isEmpty) return;
+    if (controller != null) {
+      controller.text = '@$commenterUsername ';
+      Future.delayed(Duration(milliseconds: 100), () {
+        if (mounted) {
+          FocusScope.of(context).requestFocus(FocusNode());
+        }
+      });
+    }
+  }
+
+  // 🔥 NEW: Cancel reply
+  void _cancelReply(String postId) {
+    setState(() {
+      _replyingToCommentId[postId] = null;
+    });
+    
+    final controller = _commentControllers[postId];
+    if (controller != null) {
+      controller.clear();
+    }
+  }
+
+  // 🔥 NEW: Toggle reply visibility for a comment
+  void _toggleReplies(String postId, String commentId) {
+    setState(() {
+      _expandedReplies.putIfAbsent(postId, () => {});
+      _expandedReplies[postId]![commentId] = !(_expandedReplies[postId]?[commentId] ?? false);
+    });
+  }
+
+  // 🔥 NEW: Extract tagged user IDs from content (mentions with @)
+  Future<List<String>> _extractTaggedUserIds(String content) async {
+    final taggedUserIds = <String>[];
+    
+    try {
+      final mentionPattern = RegExp(r'@(\w+)');
+      final matches = mentionPattern.allMatches(content);
+      
+      final usernames = matches.map((m) => m.group(1)!).toSet();
+      
+      if (usernames.isEmpty) return [];
+
+      // 🔥 FIXED: Use getFriends() instead of searchUsers()
+      final allFriends = await FriendsService.getFriends();
+      
+      for (final username in usernames) {
+        try {
+          // Find matching friend by username
+          final matchedFriend = allFriends.firstWhere(
+            (friend) => friend['username']?.toString().toLowerCase() == username.toLowerCase(),
+            orElse: () => {},
+          );
+          
+          if (matchedFriend.isNotEmpty) {
+            final userId = matchedFriend['id']?.toString();
+            if (userId != null) {
+              taggedUserIds.add(userId);
+              AppConfig.debugPrint('✅ Tagged user found: $username ($userId)');
+            }
+          } else {
+            AppConfig.debugPrint('⚠️ User not in friends list: $username');
+          }
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Could not find user: $username');
+        }
+      }
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error extracting tagged users: $e');
+    }
+    
+    return taggedUserIds;
+  }
+
+  // 🔥 NEW: Show friend picker dialog for tagging
+  Future<List<String>> _showFriendPickerDialog() async {
+    try {
+      final friends = await FriendsService.getFriends();
+      
+      if (friends.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You don\'t have any friends yet to tag'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return [];
+      }
+
+      final selected = await showDialog<List<String>>(
+        context: context,
+        builder: (context) => _FriendPickerDialog(friends: friends),
+      );
+
+      return selected ?? [];
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading friends: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return [];
+    }
+  }
+
+  // 🔥 NEW: Show photo picker for comment attachment
+  Future<void> _pickCommentPhoto(String postId) async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
+      );
+
+      if (pickedFile == null) return;
+
+      final File imageFile = File(pickedFile.path);
+      
+      await _postCommentOrReply(postId, photoFile: imageFile);
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to pick photo: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _postComment(String postId) async {
+    await _postCommentOrReply(postId);
+  }
+
+  // 🔥 UPDATED: Post a comment or reply
+  Future<void> _postCommentOrReply(String postId, {File? photoFile}) async {
+    final controller = _commentControllers[postId];
+    if (controller == null) return;
+    
+    final content = controller.text.trim();
+    final parentCommentId = _replyingToCommentId[postId];
+    
+    if (content.isEmpty && photoFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please write something or add a photo'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
     try {
+      String? photoUrl;
+      
+      if (photoFile != null) {
+        setState(() => _isLoading = true);
+        
+        photoUrl = await PictureService.uploadFeedPhoto(photoFile);
+        
+        setState(() => _isLoading = false);
+      }
+
+      final taggedUserIds = await _extractTaggedUserIds(content);
+
       await FeedPostsService.addComment(
         postId: postId,
-        content: controller.text.trim(),
+        content: content,
+        parentCommentId: parentCommentId,
+        photoUrl: photoUrl,
+        taggedUserIds: taggedUserIds.isNotEmpty ? taggedUserIds : null,
       );
 
       controller.clear();
+      _cancelReply(postId);
       await _loadComments(postId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Comment posted!'),
+            content: Text(parentCommentId != null ? 'Reply posted!' : 'Comment posted!'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -2282,7 +2554,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to post comment: ${e.toString()}'),
+            content: Text('Failed to post: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -5768,5 +6040,63 @@ class _HomePageState extends State<HomePage>
       'unit': unit,
       'name': name.trim(),
     };
+  }
+}
+// 🔥 NEW: Friend Picker Dialog - ADD THIS AT THE END OF THE FILE
+class _FriendPickerDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> friends;
+
+  const _FriendPickerDialog({required this.friends});
+
+  @override
+  State<_FriendPickerDialog> createState() => _FriendPickerDialogState();
+}
+
+class _FriendPickerDialogState extends State<_FriendPickerDialog> {
+  final Set<String> _selectedFriendIds = {};
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Tag Friends'),
+      content: Container(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: widget.friends.length,
+          itemBuilder: (context, index) {
+            final friend = widget.friends[index];
+            final friendId = friend['id']?.toString() ?? '';
+            final friendUsername = friend['username']?.toString() ?? 'Unknown';
+            final isSelected = _selectedFriendIds.contains(friendId);
+
+            return CheckboxListTile(
+              title: Text(friendUsername),
+              value: isSelected,
+              activeColor: Colors.orange,
+              onChanged: (selected) {
+                setState(() {
+                  if (selected == true) {
+                    _selectedFriendIds.add(friendId);
+                  } else {
+                    _selectedFriendIds.remove(friendId);
+                  }
+                });
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _selectedFriendIds.toList()),
+          child: Text('Done'),
+        ),
+      ],
+    );
   }
 }

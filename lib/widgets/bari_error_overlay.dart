@@ -1,9 +1,9 @@
-// lib/widgets/levi_error_overlay.dart
+// lib/widgets/bari_error_overlay.dart
 import 'package:flutter/material.dart';
 import 'dart:async';
 
-/// Levi the bari character showing error messages in a cute way
-class LeviErrorOverlay extends StatefulWidget {
+/// barry the belly character showing error messages in a cute way
+class BariErrorOverlay extends StatefulWidget {
   final String title;
   final String message;
   final String? helpText;
@@ -14,7 +14,7 @@ class LeviErrorOverlay extends StatefulWidget {
   final VoidCallback? onNavigate;
   final String? actionButtonText;
 
-  const LeviErrorOverlay({
+  const BariErrorOverlay({
     super.key,
     required this.title,
     required this.message,
@@ -28,10 +28,10 @@ class LeviErrorOverlay extends StatefulWidget {
   });
 
   @override
-  State<LeviErrorOverlay> createState() => _LeviErrorOverlayState();
+  State<BariErrorOverlay> createState() => _BariErrorOverlayState();
 }
 
-class _LeviErrorOverlayState extends State<LeviErrorOverlay>
+class _BariErrorOverlayState extends State<BariErrorOverlay>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;

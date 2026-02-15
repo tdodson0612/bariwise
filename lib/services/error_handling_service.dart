@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../logger.dart';
-import '../widgets/levi_error_overlay.dart';
+import '../widgets/bari_error_overlay.dart';
 
 /// Centralized error handling service for the entire app
 /// Apple-compliant: No technical jargon, user-friendly messages, retry options
@@ -365,11 +365,11 @@ class ErrorHandlingService {
       actionCallback = null;
     }
 
-    // Show Levi error overlay
+    // Show Bari error overlay
     showDialog(
       context: context,
       barrierDismissible: false, // Must tap button to dismiss
-      builder: (dialogContext) => LeviErrorOverlay(
+      builder: (dialogContext) => BariErrorOverlay(
         title: errorInfo.title,
         message: customMessage ?? errorInfo.message,
         helpText: errorInfo.userMessage,
@@ -562,7 +562,7 @@ class ErrorHandlingService {
           children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 12),
-            Expanded(child: Text('🫀 $message')), // Levi heart emoji
+            Expanded(child: Text('🫀 $message')), // Bari heart emoji
           ],
         ),
         backgroundColor: Colors.red.shade400,
@@ -587,7 +587,7 @@ class ErrorHandlingService {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '🫀 $message', // Levi heart emoji
+                '🫀 $message', // Bari heart emoji
                 style: const TextStyle(fontSize: 15),
               ),
             ),

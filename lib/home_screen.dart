@@ -4949,105 +4949,66 @@ class _HomePageState extends State<HomePage>
                       ),
                     ),
 
-                    SingleChildScrollView(
-                      controller: _feedScrollController,
-                      child: Column(
-                        children: [
-                          // Your 4 buttons row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _buildActionButton(
-                                key: _autoButtonKey,
-                                icon: Icons.qr_code_scanner,
-                                label: 'Auto',
-                                color: Colors.purple.shade600,
-                                onPressed: _isScanning ? null : _autoScanBarcode,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              _buildActionButton(
-                                key: _scanButtonKey,
-                                icon: Icons.camera_alt,
-                                label: 'Scan',
-                                color: Colors.orange.shade600,
-                                onPressed: _isScanning ? null : _takePhoto,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              _buildActionButton(
-                                key: _manualButtonKey,
-                                icon: Icons.edit_outlined,
-                                label: 'Code',
-                                color: Colors.blue.shade600,
-                                onPressed: () => Navigator.pushNamed(context, '/manual-barcode-entry'),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              _buildActionButton(
-                                key: _lookupButtonKey,
-                                icon: Icons.search,
-                                label: 'Search',
-                                color: Colors.orange.shade800,
-                                onPressed: () => Navigator.pushNamed(context, '/nutrition-search'),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Tutorial button
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              print('🎓 Tutorial button pressed');
-                              // Scroll to top before showing tutorial
-                              _feedScrollController.animateTo(
-                                0,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                              setState(() {
-                                _showTutorial = true;
-                              });
-                            },
-                            icon: const Icon(Icons.help_outline),
-                            label: const Text('Tutorial'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade700,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(25),
-                              ),
-                            ),
-                          ),
-
-                          // ... rest of your homepage content
-                        ],
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildActionButton(
+                          key: _autoButtonKey,
+                          icon: Icons.qr_code_scanner,
+                          label: 'Auto',
+                          color: Colors.purple.shade600,
+                          onPressed: _isScanning ? null : _autoScanBarcode,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        _buildActionButton(
+                          key: _scanButtonKey,
+                          icon: Icons.camera_alt,
+                          label: 'Scan',
+                          color: Colors.orange.shade600,
+                          onPressed: _isScanning ? null : _takePhoto,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        _buildActionButton(
+                          key: _manualButtonKey,
+                          icon: Icons.edit_outlined,
+                          label: 'Code',
+                          color: Colors.blue.shade600,
+                          onPressed: () => Navigator.pushNamed(context, '/manual-barcode-entry'),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        _buildActionButton(
+                          key: _lookupButtonKey,
+                          icon: Icons.search,
+                          label: 'Search',
+                          color: Colors.orange.shade800,
+                          onPressed: () => Navigator.pushNamed(context, '/nutrition-search'),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        _feedScrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                        setState(() => _showTutorial = true);
+                      },
+                      icon: const Icon(Icons.help_outline),
+                      label: const Text('Tutorial'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                        ),
                       ),
-                    )
+                    ),
 
                 ],
-              ),
-            ),
-            const SizedBox(height: 16),
-  
-            ElevatedButton.icon(
-              onPressed: () {
-                print('🎓 Tutorial button pressed');
-                print('📍 Current _showTutorial state: $_showTutorial');
-                setState(() {
-                  _showTutorial = true;
-                });
-                print('✅ Tutorial state set to: $_showTutorial');
-              },
-              icon: const Icon(Icons.help_outline),
-              label: const Text('Tutorial'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
               ),
             ),
 

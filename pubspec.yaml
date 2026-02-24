@@ -1,3 +1,5 @@
+# pubspec.yaml - Flutter project configuration for BariWise app
+
 name: bari_wise
 description: A Flutter app to scan food barcodes, show nutrition info, and discover healthy recipes for bari health.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -88,6 +90,7 @@ flutter:
   # Asset configuration
   assets:
     - .env
+    - assets/backgrounds/background.jpeg
     - assets/backgrounds/splash_screen.jpeg
     - assets/backgrounds/login_background.jpeg
     - assets/backgrounds/home_background.jpeg

@@ -1,3 +1,5 @@
+//android/app/build.gradle.kts
+
 import java.util.Properties
 import java.io.FileInputStream
 
@@ -58,8 +60,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            minifyEnabled = true
-            shrinkResources = true
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {

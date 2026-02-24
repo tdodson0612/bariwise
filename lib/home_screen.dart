@@ -4527,14 +4527,17 @@ class _HomePageState extends State<HomePage>
                                     : Colors.orange.shade700,
                                 ),
                                 SizedBox(width: 3),
-                                Text(
-                                  visibility == 'public' ? 'Public' : 'Friends',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w600,
-                                    color: visibility == 'public' 
-                                      ? Colors.blue.shade700 
-                                      : Colors.orange.shade700,
+                                Flexible(
+                                  child: Text(
+                                    visibility == 'public' ? 'Public' : 'Friends',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: visibility == 'public' 
+                                        ? Colors.blue.shade700 
+                                        : Colors.orange.shade700,
+                                    ),
                                   ),
                                 ),
                               ],

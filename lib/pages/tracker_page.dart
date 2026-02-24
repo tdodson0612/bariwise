@@ -107,46 +107,49 @@ class _TrackerPageState extends State<TrackerPage> {
             const Text('Important Disclaimer'),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'This health tracker is for educational and informational purposes only.',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '• This is NOT a substitute for professional medical advice\n'
-                '• Always consult your physician before making health decisions\n'
-                '• Scores are estimates based on general nutrition guidelines\n'
-                '• Your doctor\'s recommendations take priority\n'
-                '• All data is stored locally on your device',
-                style: TextStyle(height: 1.5),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This health tracker is for educational and informational purposes only.',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'If you experience medical symptoms, seek immediate professional care.',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                const SizedBox(height: 12),
+                const Text(
+                  '• This is NOT a substitute for professional medical advice\n'
+                  '• Always consult your physician before making health decisions\n'
+                  '• Scores are estimates based on general nutrition guidelines\n'
+                  '• Your doctor\'s recommendations take priority\n'
+                  '• All data is stored locally on your device',
+                  style: TextStyle(height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'If you experience medical symptoms, seek immediate professional care.',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: [

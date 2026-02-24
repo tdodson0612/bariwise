@@ -1,153 +1,191 @@
 // lib/services/user_search_service.dart
-// Handles searching for users by username, email, first/last name
 
+import 'dart:async';
 import '../config/app_config.dart';
-import 'auth_service.dart';             // For ensureLoggedIn + currentUserId
-import 'database_service_core.dart';    // Worker query
+import 'auth_service.dart';
+import 'database_service_core.dart';
 
 class UserSearchService {
+
   // ==================================================
-  // SEARCH USERS (LOCAL FILTERING)
+  // SEARCH USERS
   // ==================================================
-  
+
   static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     AuthService.ensureLoggedIn();
 
     final search = query.trim().toLowerCase();
     if (search.isEmpty) return [];
 
-    try {
-      // Fetch all users (Worker cannot do OR filtering)
-      final response = await DatabaseServiceCore.workerQuery(
-        action: 'select',
-        table: 'profiles',
-        columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url', 'profile_picture_url'],
-        limit: 200,
-      );
+    List<dynamic> users = [];
 
-      final List<dynamic> users = response as List;
-      final currentId = AuthService.currentUserId;
-      final List<Map<String, dynamic>> results = [];
+    // Two attempts with a short delay between them
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await DatabaseServiceCore.workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'email', 'username', 'first_name', 'last_name',
+                    'avatar_url', 'profile_picture_url'],
+          limit: 200,
+        ).timeout(const Duration(seconds: 15));
 
-      for (var user in users) {
-        // Skip yourself
-        if (user['id'] == currentId) continue;
+        users = response as List;
+        break; // success — exit retry loop
 
-        final email = (user['email'] ?? '').toLowerCase();
-        final username = (user['username'] ?? '').toLowerCase();
-        final first = (user['first_name'] ?? '').toLowerCase();
-        final last = (user['last_name'] ?? '').toLowerCase();
-
-        if (email.contains(search) ||
-            username.contains(search) ||
-            first.contains(search) ||
-            last.contains(search)) {
-          results.add(user);
+      } on TimeoutException {
+        AppConfig.debugPrint('⏱️ searchUsers attempt ${attempt + 1} timed out');
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Search timed out. Please check your connection and try again.');
+        }
+      } catch (e) {
+        AppConfig.debugPrint('❌ searchUsers attempt ${attempt + 1} failed: $e');
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Search failed. Please check your connection and try again.');
         }
       }
-
-      return results;
-    } catch (e) {
-      AppConfig.debugPrint('❌ Failed to search users: $e');
-      throw Exception('Failed to search users: $e');
     }
+
+    final currentId = AuthService.currentUserId;
+    final results = <Map<String, dynamic>>[];
+
+    for (final user in users) {
+      if (user['id'] == currentId) continue;
+
+      final email    = (user['email']      ?? '').toLowerCase();
+      final username = (user['username']   ?? '').toLowerCase();
+      final first    = (user['first_name'] ?? '').toLowerCase();
+      final last     = (user['last_name']  ?? '').toLowerCase();
+
+      if (email.contains(search) ||
+          username.contains(search) ||
+          first.contains(search) ||
+          last.contains(search)) {
+        results.add(Map<String, dynamic>.from(user));
+      }
+    }
+
+    AppConfig.debugPrint('✅ searchUsers("$search"): ${results.length} results');
+    return results;
   }
 
   // ==================================================
-  // GET SUGGESTED FRIENDS (APP OWNERS BY ID)
+  // GET SUGGESTED FRIENDS BY EMAIL
   // ==================================================
-  
-  static Future<List<Map<String, dynamic>>> getSuggestedFriends(List<String> ownerIds) async {
+
+  static Future<List<Map<String, dynamic>>> getSuggestedFriendsByEmail(
+      List<String> emails) async {
     AuthService.ensureLoggedIn();
 
-    try {
-      AppConfig.debugPrint('👥 Fetching suggested friends (app owners)...');
+    final normalizedEmails = emails.map((e) => e.toLowerCase().trim()).toList();
+    List<dynamic> users = [];
 
-      final response = await DatabaseServiceCore.workerQuery(
-        action: 'select',
-        table: 'profiles',
-        columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url', 'profile_picture_url'],
-        limit: 200,
-      );
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await DatabaseServiceCore.workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'email', 'username', 'first_name', 'last_name',
+                    'avatar_url', 'profile_picture_url'],
+          limit: 200,
+        ).timeout(const Duration(seconds: 15));
 
-      final List<dynamic> users = response as List;
-      final currentId = AuthService.currentUserId;
+        users = response as List;
+        break;
 
-      // Filter to only include owner accounts (and not current user)
-      final List<Map<String, dynamic>> suggested = [];
-      for (var user in users) {
-        if (user['id'] != currentId && ownerIds.contains(user['id'])) {
-          suggested.add(user);
+      } on TimeoutException {
+        AppConfig.debugPrint('⏱️ getSuggestedFriendsByEmail attempt ${attempt + 1} timed out');
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Request timed out. Please try again.');
+        }
+      } catch (e) {
+        AppConfig.debugPrint('❌ getSuggestedFriendsByEmail attempt ${attempt + 1} failed: $e');
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Failed to load suggested friends. Please try again.');
         }
       }
-
-      AppConfig.debugPrint('✅ Found ${suggested.length} suggested friends');
-      return suggested;
-    } catch (e) {
-      AppConfig.debugPrint('❌ Failed to fetch suggested friends: $e');
-      throw Exception('Failed to fetch suggested friends: $e');
     }
+
+    final currentId = AuthService.currentUserId;
+    final results = <Map<String, dynamic>>[];
+
+    for (final user in users) {
+      if (user['id'] == currentId) continue;
+      final userEmail = (user['email'] ?? '').toLowerCase().trim();
+      if (normalizedEmails.contains(userEmail)) {
+        results.add(Map<String, dynamic>.from(user));
+        AppConfig.debugPrint('  ✅ Matched: $userEmail (${user['username'] ?? 'no username'})');
+      }
+    }
+
+    AppConfig.debugPrint('✅ getSuggestedFriendsByEmail: ${results.length}/${emails.length} found');
+    return results;
   }
 
   // ==================================================
-  // 🔥 NEW: GET SUGGESTED FRIENDS BY EMAIL
+  // GET SUGGESTED FRIENDS BY ID (kept for compatibility)
   // ==================================================
-  
-  static Future<List<Map<String, dynamic>>> getSuggestedFriendsByEmail(List<String> emails) async {
+
+  static Future<List<Map<String, dynamic>>> getSuggestedFriends(
+      List<String> ownerIds) async {
     AuthService.ensureLoggedIn();
 
-    try {
-      AppConfig.debugPrint('🔍 Looking up users by emails: $emails');
+    List<dynamic> users = [];
 
-      // Fetch all users
-      final response = await DatabaseServiceCore.workerQuery(
-        action: 'select',
-        table: 'profiles',
-        columns: ['id', 'email', 'username', 'first_name', 'last_name', 'avatar_url', 'profile_picture_url'],
-        limit: 200,
-      );
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await DatabaseServiceCore.workerQuery(
+          action: 'select',
+          table: 'profiles',
+          columns: ['id', 'email', 'username', 'first_name', 'last_name',
+                    'avatar_url', 'profile_picture_url'],
+          limit: 200,
+        ).timeout(const Duration(seconds: 15));
 
-      final List<dynamic> users = response as List;
-      final currentId = AuthService.currentUserId;
+        users = response as List;
+        break;
 
-      // Filter to only include users with matching emails (and not current user)
-      final List<Map<String, dynamic>> suggested = [];
-      final normalizedEmails = emails.map((e) => e.toLowerCase().trim()).toList();
-
-      for (var user in users) {
-        final userEmail = (user['email'] ?? '').toLowerCase().trim();
-        
-        // Skip yourself
-        if (user['id'] == currentId) {
-          AppConfig.debugPrint('  ⏭️ Skipping self: $userEmail');
-          continue;
+      } on TimeoutException {
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Request timed out. Please try again.');
         }
-
-        // Check if this user's email matches any of the target emails
-        if (normalizedEmails.contains(userEmail)) {
-          suggested.add(user);
-          AppConfig.debugPrint('  ✅ Found match: $userEmail (${user['username'] ?? 'no username'})');
+      } catch (e) {
+        if (attempt < 1) {
+          await Future.delayed(const Duration(milliseconds: 800));
+        } else {
+          throw Exception('Failed to load suggested friends. Please try again.');
         }
       }
-
-      AppConfig.debugPrint('✅ Found ${suggested.length} users from ${emails.length} emails');
-      
-      if (suggested.isEmpty) {
-        AppConfig.debugPrint('⚠️ WARNING: No users found with emails: $emails');
-        AppConfig.debugPrint('   Make sure these emails exist in the database!');
-      }
-
-      return suggested;
-    } catch (e) {
-      AppConfig.debugPrint('❌ Failed to get suggested friends by email: $e');
-      throw Exception('Failed to get suggested friends by email: $e');
     }
+
+    final currentId = AuthService.currentUserId;
+    final results = <Map<String, dynamic>>[];
+
+    for (final user in users) {
+      if (user['id'] == currentId) continue;
+      if (ownerIds.contains(user['id'])) {
+        results.add(Map<String, dynamic>.from(user));
+      }
+    }
+
+    AppConfig.debugPrint('✅ getSuggestedFriends: ${results.length} found');
+    return results;
   }
 
   // ==================================================
-  // DEBUG SEARCH TEST (DEVELOPER TOOL)
+  // DEBUG TEST
   // ==================================================
-  
+
   static Future<void> debugTestUserSearch() async {
     AuthService.ensureLoggedIn();
 
@@ -155,7 +193,6 @@ class UserSearchService {
       AppConfig.debugPrint('🔍 DEBUG: Starting user search test...');
       AppConfig.debugPrint('📝 Current user ID: ${AuthService.currentUserId}');
 
-      // --- Fetch a few users ---
       AppConfig.debugPrint('\n--- TEST 1: Fetching sample users ---');
       final allUsers = await DatabaseServiceCore.workerQuery(
         action: 'select',
@@ -169,22 +206,21 @@ class UserSearchService {
           .toList();
 
       AppConfig.debugPrint('Found ${list.length} users:');
-      for (var user in list) {
-        AppConfig.debugPrint("  👤 ${user['username'] ?? user['email']}");
+      for (final user in list) {
+        AppConfig.debugPrint('  👤 ${user['username'] ?? user['email']}');
       }
 
-      // --- Perform sample search ---
       AppConfig.debugPrint('\n--- TEST 2: Searching for "test" ---');
       final results = await searchUsers('test');
       AppConfig.debugPrint('Search returned ${results.length} result(s).');
 
-      // --- Test email lookup ---
-      AppConfig.debugPrint('\n--- TEST 3: Testing email lookup ---');
-      final testEmails = ['terryd0612@gmail.com', 'bbrc2021bbc1298.442@icloud.com'];
+      AppConfig.debugPrint('\n--- TEST 3: Email lookup ---');
+      const testEmails = ['terryd0612@gmail.com', 'bbrc2021bbc1298.442@icloud.com'];
       final emailResults = await getSuggestedFriendsByEmail(testEmails);
       AppConfig.debugPrint('Email lookup returned ${emailResults.length} result(s).');
-      for (var user in emailResults) {
-        AppConfig.debugPrint("  👤 ${user['email']} - ${user['first_name'] ?? 'No name'} ${user['last_name'] ?? ''}");
+      for (final user in emailResults) {
+        AppConfig.debugPrint(
+            '  👤 ${user['email']} — ${user['first_name'] ?? 'No name'} ${user['last_name'] ?? ''}');
       }
 
       AppConfig.debugPrint('\n✅ DEBUG TEST COMPLETED.');

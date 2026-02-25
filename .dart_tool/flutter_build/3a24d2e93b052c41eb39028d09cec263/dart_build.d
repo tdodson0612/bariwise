@@ -1,0 +1,1 @@
+ C:\\Users\\Default.DESKTOP-PJGMVFB\\.vscode\\REALPROJECTS\\bariwise\\.dart_tool\\flutter_build\\3a24d2e93b052c41eb39028d09cec263\\dart_build_result.json: 

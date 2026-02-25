@@ -3,6 +3,7 @@
 class TrackerEntry {
   final String date; // YYYY-MM-DD format
   final List<Map<String, dynamic>> meals;
+  final List<Map<String, dynamic>> supplements;
   final String? exercise;
   final String? waterIntake;
   final double? weight; // Weight in kg (nullable for days without weight tracking)
@@ -11,6 +12,7 @@ class TrackerEntry {
   TrackerEntry({
     required this.date,
     this.meals = const [],
+    this.supplements = const [],
     this.exercise,
     this.waterIntake,
     this.weight,
@@ -19,6 +21,9 @@ class TrackerEntry {
 
   // Convenience getter for meal count
   int get mealCount => meals.length;
+
+  // Convenience getter for supplement count
+  int get supplementCount => supplements.length;
 
   // ========================================
   // JSON SERIALIZATION
@@ -29,6 +34,7 @@ class TrackerEntry {
     return {
       'date': date,
       'meals': meals,
+      'supplements': supplements,
       'exercise': exercise,
       'waterIntake': waterIntake,
       'weight': weight,
@@ -40,9 +46,14 @@ class TrackerEntry {
   factory TrackerEntry.fromJson(Map<String, dynamic> json) {
     return TrackerEntry(
       date: json['date'] as String,
-      meals: json['meals'] != null 
+      meals: json['meals'] != null
           ? List<Map<String, dynamic>>.from(
-              (json['meals'] as List).map((m) => Map<String, dynamic>.from(m))
+              (json['meals'] as List).map((m) => Map<String, dynamic>.from(m)),
+            )
+          : [],
+      supplements: json['supplements'] != null
+          ? List<Map<String, dynamic>>.from(
+              (json['supplements'] as List).map((s) => Map<String, dynamic>.from(s)),
             )
           : [],
       exercise: json['exercise'] as String?,
@@ -59,6 +70,7 @@ class TrackerEntry {
   TrackerEntry copyWith({
     String? date,
     List<Map<String, dynamic>>? meals,
+    List<Map<String, dynamic>>? supplements,
     String? exercise,
     String? waterIntake,
     double? weight,
@@ -67,6 +79,7 @@ class TrackerEntry {
     return TrackerEntry(
       date: date ?? this.date,
       meals: meals ?? this.meals,
+      supplements: supplements ?? this.supplements,
       exercise: exercise ?? this.exercise,
       waterIntake: waterIntake ?? this.waterIntake,
       weight: weight ?? this.weight,
@@ -89,6 +102,6 @@ class TrackerEntry {
 
   @override
   String toString() {
-    return 'TrackerEntry(date: $date, meals: ${meals.length}, weight: ${weight?.toStringAsFixed(1)}kg, score: $dailyScore)';
+    return 'TrackerEntry(date: $date, meals: ${meals.length}, supplements: ${supplements.length}, weight: ${weight?.toStringAsFixed(1)}kg, score: $dailyScore)';
   }
 }

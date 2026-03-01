@@ -1,5 +1,25 @@
 // lib/models/tracker_entry.dart
 
+/// Kept for backward-compatible JSON deserialization of existing stored data.
+/// New code uses List<Map<String, dynamic>> with a 'notes' key instead.
+class SupplementEntry {
+  final String name;
+  final String amount; // e.g. "500mg", "1 tablet", "2 capsules"
+
+  SupplementEntry({required this.name, required this.amount});
+
+  Map<String, dynamic> toJson() => {'name': name, 'amount': amount};
+
+  factory SupplementEntry.fromJson(Map<String, dynamic> json) =>
+      SupplementEntry(
+        name: json['name'] as String? ?? '',
+        amount: json['amount'] as String? ?? '',
+      );
+
+  SupplementEntry copyWith({String? name, String? amount}) =>
+      SupplementEntry(name: name ?? this.name, amount: amount ?? this.amount);
+}
+
 class TrackerEntry {
   final String date; // YYYY-MM-DD format
   final List<Map<String, dynamic>> meals;
@@ -19,17 +39,14 @@ class TrackerEntry {
     required this.dailyScore,
   });
 
-  // Convenience getter for meal count
+  // Convenience getters
   int get mealCount => meals.length;
-
-  // Convenience getter for supplement count
   int get supplementCount => supplements.length;
 
   // ========================================
   // JSON SERIALIZATION
   // ========================================
 
-  /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
     return {
       'date': date,
@@ -42,7 +59,6 @@ class TrackerEntry {
     };
   }
 
-  /// Create from JSON
   factory TrackerEntry.fromJson(Map<String, dynamic> json) {
     return TrackerEntry(
       date: json['date'] as String,
@@ -53,7 +69,11 @@ class TrackerEntry {
           : [],
       supplements: json['supplements'] != null
           ? List<Map<String, dynamic>>.from(
-              (json['supplements'] as List).map((s) => Map<String, dynamic>.from(s)),
+              (json['supplements'] as List).map((s) {
+                final map = Map<String, dynamic>.from(s as Map);
+                map.putIfAbsent('notes', () => '');
+                return map;
+              }),
             )
           : [],
       exercise: json['exercise'] as String?,
@@ -64,7 +84,7 @@ class TrackerEntry {
   }
 
   // ========================================
-  // COPY WITH (for updates)
+  // COPY WITH
   // ========================================
 
   TrackerEntry copyWith({

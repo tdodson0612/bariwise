@@ -1,5 +1,6 @@
 // lib/pages/tracker_page.dart
-// Updated with supplement tracker, unit dropdowns, improved height handling with preferences, debugging, and ingredient auto-fill
+// Updated with supplement tracker, unit dropdowns, improved height handling with preferences,
+// nutrition summary section, bariatric supplement chips, and debugging
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,8 +53,6 @@ class _TrackerPageState extends State<TrackerPage> {
   static const String _PREF_WATER_UNIT = 'tracker_water_unit_';
 
   List<Map<String, dynamic>> _meals = [];
-
-  // ── Supplements ──────────────────────────────────────────────
   List<Map<String, dynamic>> _supplements = [];
 
   @override
@@ -138,12 +137,14 @@ class _TrackerPageState extends State<TrackerPage> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber, color: Colors.orange.shade700, size: 20),
+                    Icon(Icons.warning_amber,
+                        color: Colors.orange.shade700, size: 20),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
                         'If you experience medical symptoms, seek immediate professional care.',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -182,13 +183,14 @@ class _TrackerPageState extends State<TrackerPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = AuthService.currentUserId ?? '';
-      
+
       setState(() {
         _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'kg';
-        _exerciseUnit = prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
+        _exerciseUnit =
+            prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
         _waterUnit = prefs.getString('$_PREF_WATER_UNIT$userId') ?? 'cups';
       });
-      
+
       AppConfig.debugPrint('📋 Loaded unit preferences:');
       AppConfig.debugPrint('   Weight: $_weightUnit');
       AppConfig.debugPrint('   Exercise: $_exerciseUnit');
@@ -213,29 +215,31 @@ class _TrackerPageState extends State<TrackerPage> {
     setState(() => _isLoading = true);
     try {
       AppConfig.debugPrint('📂 Loading tracker data...');
-      
+
       await _loadUnitPreferences();
 
       final userId = AuthService.currentUserId;
       if (userId == null) throw Exception('User not logged in');
       AppConfig.debugPrint('   User ID: $userId');
 
-      // Load profile data
       AppConfig.debugPrint('🔍 Loading surgery type...');
       final diseaseType = await ProfileService.getSurgeryType(userId);
       AppConfig.debugPrint('   Surgery type: ${diseaseType ?? 'none'}');
 
       AppConfig.debugPrint('🔍 Loading height...');
       final height = await ProfileService.getHeight(userId);
-      AppConfig.debugPrint('   Height: ${height?.toStringAsFixed(0) ?? 'none'} cm');
+      AppConfig.debugPrint(
+          '   Height: ${height?.toStringAsFixed(0) ?? 'none'} cm');
 
       AppConfig.debugPrint('🔍 Loading height unit preference...');
-      final heightUnitPref = await ProfileService.getHeightUnitPreference(userId);
+      final heightUnitPref =
+          await ProfileService.getHeightUnitPreference(userId);
       AppConfig.debugPrint('   Height unit preference: $heightUnitPref');
 
       AppConfig.debugPrint('🔍 Loading privacy settings...');
       final weightVisible = await ProfileService.getWeightVisibility(userId);
-      final weightLossVisible = await ProfileService.getWeightLossVisibility(userId);
+      final weightLossVisible =
+          await ProfileService.getWeightLossVisibility(userId);
       AppConfig.debugPrint('   Weight visible: $weightVisible');
       AppConfig.debugPrint('   Weight loss visible: $weightLossVisible');
 
@@ -246,7 +250,8 @@ class _TrackerPageState extends State<TrackerPage> {
       AppConfig.debugPrint('🔍 Auto-filling missing weights...');
       await TrackerService.autoFillMissingWeights(userId);
 
-      AppConfig.debugPrint('🔍 Loading entry for ${_selectedDate.toString().split(' ')[0]}...');
+      AppConfig.debugPrint(
+          '🔍 Loading entry for ${_selectedDate.toString().split(' ')[0]}...');
       final dateString = _selectedDate.toString().split(' ')[0];
       final entry = await TrackerService.getEntryForDate(userId, dateString);
 
@@ -255,7 +260,8 @@ class _TrackerPageState extends State<TrackerPage> {
         AppConfig.debugPrint('   Meals: ${entry.meals.length}');
         AppConfig.debugPrint('   Exercise: ${entry.exercise ?? 'none'}');
         AppConfig.debugPrint('   Water: ${entry.waterIntake ?? 'none'}');
-        AppConfig.debugPrint('   Weight: ${entry.weight?.toStringAsFixed(1) ?? 'none'} kg');
+        AppConfig.debugPrint(
+            '   Weight: ${entry.weight?.toStringAsFixed(1) ?? 'none'} kg');
         AppConfig.debugPrint('   Score: ${entry.dailyScore}');
       } else {
         AppConfig.debugPrint('ℹ️ No entry found for this date');
@@ -270,16 +276,13 @@ class _TrackerPageState extends State<TrackerPage> {
           _weightLossVisible = weightLossVisible;
           _currentStreak = streak;
           _currentEntry = entry;
-
           _meals = entry?.meals ?? [];
           _supplements = entry?.supplements ?? [];
           _exerciseController.text = entry?.exercise ?? '';
           _waterController.text = entry?.waterIntake ?? '';
           _weightController.text = entry?.weight?.toStringAsFixed(1) ?? '';
-
           _isLoading = false;
         });
-
         AppConfig.debugPrint('✅ Data loaded successfully');
       }
     } catch (e, stackTrace) {
@@ -302,7 +305,8 @@ class _TrackerPageState extends State<TrackerPage> {
     final userId = AuthService.currentUserId;
     if (userId == null) {
       AppConfig.debugPrint('❌ Cannot save: No user ID');
-      ErrorHandlingService.showSimpleError(context, 'You must be logged in to save entries');
+      ErrorHandlingService.showSimpleError(
+          context, 'You must be logged in to save entries');
       return;
     }
 
@@ -311,9 +315,9 @@ class _TrackerPageState extends State<TrackerPage> {
     try {
       AppConfig.debugPrint('💾 Starting save operation...');
       AppConfig.debugPrint('   User ID: $userId');
-      AppConfig.debugPrint('   Date: ${_selectedDate.toString().split(' ')[0]}');
+      AppConfig.debugPrint(
+          '   Date: ${_selectedDate.toString().split(' ')[0]}');
 
-      // Convert exercise to standard format (minutes)
       String? exerciseText;
       if (_exerciseController.text.trim().isNotEmpty) {
         final value = double.tryParse(_exerciseController.text.trim());
@@ -327,25 +331,33 @@ class _TrackerPageState extends State<TrackerPage> {
         }
       }
 
-      // Convert water to standard format (cups)
       String? waterText;
       if (_waterController.text.trim().isNotEmpty) {
         final value = double.tryParse(_waterController.text.trim());
         if (value != null) {
           double cups = value;
           switch (_waterUnit) {
-            case 'liters': cups = value * 4.227; break;
-            case 'oz': cups = value / 8; break;
-            case 'pints': cups = value * 2; break;
-            case 'quarts': cups = value * 4; break;
-            case 'gallons': cups = value * 16; break;
+            case 'liters':
+              cups = value * 4.227;
+              break;
+            case 'oz':
+              cups = value / 8;
+              break;
+            case 'pints':
+              cups = value * 2;
+              break;
+            case 'quarts':
+              cups = value * 4;
+              break;
+            case 'gallons':
+              cups = value * 16;
+              break;
           }
           waterText = '${cups.toStringAsFixed(1)} cups';
           AppConfig.debugPrint('   Water: $waterText');
         }
       }
 
-      // Calculate score
       final score = TrackerService.calculateDailyScore(
         meals: _meals,
         surgeryType: _diseaseType,
@@ -354,19 +366,18 @@ class _TrackerPageState extends State<TrackerPage> {
       );
       AppConfig.debugPrint('   Calculated score: $score');
 
-      // Convert weight to kg if needed
       double? weight;
       if (_weightController.text.trim().isNotEmpty) {
         final value = double.tryParse(_weightController.text.trim());
         if (value != null) {
           weight = _weightUnit == 'lbs' ? value * 0.453592 : value;
-          AppConfig.debugPrint('   Weight: ${weight.toStringAsFixed(1)} kg (from $_weightUnit)');
+          AppConfig.debugPrint(
+              '   Weight: ${weight.toStringAsFixed(1)} kg (from $_weightUnit)');
         }
       } else {
         AppConfig.debugPrint('   Weight: none entered');
       }
 
-      // Create entry
       final entry = TrackerEntry(
         date: _selectedDate.toString().split(' ')[0],
         meals: _meals,
@@ -390,11 +401,9 @@ class _TrackerPageState extends State<TrackerPage> {
       if (savedEntry == null) {
         throw Exception('Save verification failed - entry not found after save');
       }
-
       if (weight != null && savedEntry.weight == null) {
         throw Exception('Weight was not saved correctly');
       }
-
       if (_meals.isNotEmpty && savedEntry.meals.isEmpty) {
         throw Exception('Meals were not saved correctly');
       }
@@ -405,7 +414,8 @@ class _TrackerPageState extends State<TrackerPage> {
 
       if (hasReachedDay7 && !hasShownPopup) {
         await TrackerService.markDay7PopupShown(userId);
-        AppConfig.debugPrint('🎉 User reached day 7! Popup will show on home screen.');
+        AppConfig.debugPrint(
+            '🎉 User reached day 7! Popup will show on home screen.');
       }
 
       if (mounted) {
@@ -414,10 +424,8 @@ class _TrackerPageState extends State<TrackerPage> {
           _currentStreak = newStreak;
           _isSaving = false;
         });
-
         AppConfig.debugPrint('✅ Save completed successfully!');
         AppConfig.debugPrint('   New streak: $newStreak days');
-
         ErrorHandlingService.showSuccess(context, 'Entry saved successfully!');
       }
     } catch (e, stackTrace) {
@@ -444,14 +452,19 @@ class _TrackerPageState extends State<TrackerPage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final yesterday = now.subtract(const Duration(days: 1));
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
       return 'Today';
     } else if (date.year == yesterday.year &&
         date.month == yesterday.month &&
         date.day == yesterday.day) {
       return 'Yesterday';
     }
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
@@ -497,13 +510,16 @@ class _TrackerPageState extends State<TrackerPage> {
         setState(() => _weightVisible = newValue);
         ErrorHandlingService.showSuccess(
           context,
-          newValue ? 'Weight stats will appear on your profile' : 'Weight stats hidden from profile',
+          newValue
+              ? 'Weight stats will appear on your profile'
+              : 'Weight stats hidden from profile',
         );
       }
     } catch (e) {
       if (mounted) {
         await ErrorHandlingService.handleError(
-          context: context, error: e,
+          context: context,
+          error: e,
           category: ErrorHandlingService.databaseError,
           customMessage: 'Failed to update privacy setting',
         );
@@ -521,13 +537,16 @@ class _TrackerPageState extends State<TrackerPage> {
         setState(() => _weightLossVisible = newValue);
         ErrorHandlingService.showSuccess(
           context,
-          newValue ? 'Weight loss stats will appear on your profile' : 'Weight loss stats hidden from profile',
+          newValue
+              ? 'Weight loss stats will appear on your profile'
+              : 'Weight loss stats hidden from profile',
         );
       }
     } catch (e) {
       if (mounted) {
         await ErrorHandlingService.handleError(
-          context: context, error: e,
+          context: context,
+          error: e,
           category: ErrorHandlingService.databaseError,
           customMessage: 'Failed to update privacy setting',
         );
@@ -540,7 +559,8 @@ class _TrackerPageState extends State<TrackerPage> {
     if (userId == null) return;
 
     final existingHeight = await ProfileService.getHeight(userId);
-    final existingPreference = await ProfileService.getHeightUnitPreference(userId);
+    final existingPreference =
+        await ProfileService.getHeightUnitPreference(userId);
 
     final feetController = TextEditingController();
     final inchesController = TextEditingController();
@@ -567,7 +587,9 @@ class _TrackerPageState extends State<TrackerPage> {
               const Icon(Icons.height, color: Colors.blue),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(existingHeight != null ? 'Update Your Height' : 'Set Your Height'),
+                child: Text(existingHeight != null
+                    ? 'Update Your Height'
+                    : 'Set Your Height'),
               ),
             ],
           ),
@@ -584,7 +606,8 @@ class _TrackerPageState extends State<TrackerPage> {
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
@@ -598,7 +621,8 @@ class _TrackerPageState extends State<TrackerPage> {
                       DropdownMenuItem(
                         value: 'metric',
                         child: Row(children: [
-                          Icon(Icons.straighten, size: 18, color: Colors.blue),
+                          Icon(Icons.straighten,
+                              size: 18, color: Colors.blue),
                           const SizedBox(width: 8),
                           const Text('Metric (cm)'),
                         ]),
@@ -606,7 +630,8 @@ class _TrackerPageState extends State<TrackerPage> {
                       DropdownMenuItem(
                         value: 'imperial',
                         child: Row(children: [
-                          Icon(Icons.straighten, size: 18, color: Colors.orange),
+                          Icon(Icons.straighten,
+                              size: 18, color: Colors.orange),
                           const SizedBox(width: 8),
                           const Text('Imperial (ft/in)'),
                         ]),
@@ -616,17 +641,25 @@ class _TrackerPageState extends State<TrackerPage> {
                       if (value != null) {
                         setDialogState(() {
                           heightSystem = value;
-                          if (value == 'imperial' && cmController.text.isNotEmpty) {
+                          if (value == 'imperial' &&
+                              cmController.text.isNotEmpty) {
                             final cm = double.tryParse(cmController.text);
                             if (cm != null) {
                               final c = HeightUtils.cmToFeetInches(cm);
-                              feetController.text = c['feet'].toString();
-                              inchesController.text = c['inches'].toString();
+                              feetController.text =
+                                  c['feet'].toString();
+                              inchesController.text =
+                                  c['inches'].toString();
                             }
-                          } else if (value == 'metric' && feetController.text.isNotEmpty) {
-                            final feet = int.tryParse(feetController.text) ?? 0;
-                            final inches = int.tryParse(inchesController.text) ?? 0;
-                            cmController.text = HeightUtils.feetInchesToCm(feet, inches).toStringAsFixed(0);
+                          } else if (value == 'metric' &&
+                              feetController.text.isNotEmpty) {
+                            final feet =
+                                int.tryParse(feetController.text) ?? 0;
+                            final inches =
+                                int.tryParse(inchesController.text) ?? 0;
+                            cmController.text =
+                                HeightUtils.feetInchesToCm(feet, inches)
+                                    .toStringAsFixed(0);
                           }
                         });
                       }
@@ -641,10 +674,14 @@ class _TrackerPageState extends State<TrackerPage> {
                         child: TextField(
                           controller: feetController,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
                           decoration: const InputDecoration(
-                            labelText: 'Feet', hintText: 'e.g., 5',
-                            border: OutlineInputBorder(), suffixText: 'ft',
+                            labelText: 'Feet',
+                            hintText: 'e.g., 5',
+                            border: OutlineInputBorder(),
+                            suffixText: 'ft',
                           ),
                         ),
                       ),
@@ -653,66 +690,91 @@ class _TrackerPageState extends State<TrackerPage> {
                         child: TextField(
                           controller: inchesController,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
                           decoration: const InputDecoration(
-                            labelText: 'Inches', hintText: 'e.g., 8',
-                            border: OutlineInputBorder(), suffixText: 'in',
+                            labelText: 'Inches',
+                            hintText: 'e.g., 8',
+                            border: OutlineInputBorder(),
+                            suffixText: 'in',
                           ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text('Common: 4\'10" - 6\'6"',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  Text(
+                    HeightUtils.getCommonHeightRange('imperial'),
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
                 ] else ...[
                   TextField(
                     controller: cmController,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,1}'))
+                    ],
                     decoration: const InputDecoration(
-                      labelText: 'Height', hintText: 'e.g., 170',
-                      border: OutlineInputBorder(), suffixText: 'cm',
+                      labelText: 'Height',
+                      hintText: 'e.g., 170',
+                      border: OutlineInputBorder(),
+                      suffixText: 'cm',
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('Common: 147cm - 198cm',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  Text(
+                    HeightUtils.getCommonHeightRange('metric'),
+                    style:
+                        TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
                 ],
               ],
             ),
           ),
           actions: [
             if (existingHeight != null)
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 double? heightInCm;
                 if (heightSystem == 'imperial') {
                   final feet = int.tryParse(feetController.text.trim());
-                  final inches = int.tryParse(inchesController.text.trim());
+                  final inches =
+                      int.tryParse(inchesController.text.trim());
                   if (feet == null || feet < 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter valid feet')));
+                        const SnackBar(
+                            content: Text('Please enter valid feet')));
                     return;
                   }
                   if (inches == null || inches < 0 || inches >= 12) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter valid inches (0-11)')));
+                        const SnackBar(
+                            content: Text(
+                                'Please enter valid inches (0-11)')));
                     return;
                   }
                   heightInCm = HeightUtils.feetInchesToCm(feet, inches);
                 } else {
-                  heightInCm = double.tryParse(cmController.text.trim());
+                  heightInCm =
+                      double.tryParse(cmController.text.trim());
                   if (heightInCm == null || heightInCm <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid height in cm')));
+                        const SnackBar(
+                            content:
+                                Text('Please enter a valid height in cm')));
                     return;
                   }
                 }
                 if (!HeightUtils.isValidHeight(heightInCm)) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: const Text('Height must be between 50cm and 250cm'),
+                    content: const Text(
+                        'Height must be between 50cm and 250cm'),
                     backgroundColor: Colors.orange,
                   ));
                   return;
@@ -720,23 +782,29 @@ class _TrackerPageState extends State<TrackerPage> {
                 try {
                   final uid = AuthService.currentUserId;
                   if (uid != null) {
-                    AppConfig.debugPrint('📏 Saving height: $heightInCm cm');
-                    AppConfig.debugPrint('📏 Saving preference: $heightSystem');
+                    AppConfig.debugPrint(
+                        '📏 Saving height: $heightInCm cm');
+                    AppConfig.debugPrint(
+                        '📏 Saving preference: $heightSystem');
 
-                    // Save both height and preference
                     await ProfileService.updateHeight(uid, heightInCm);
-                    await ProfileService.updateHeightUnitPreference(uid, heightSystem);
+                    await ProfileService.updateHeightUnitPreference(
+                        uid, heightSystem);
 
                     // Verify it was saved
-                    final savedHeight = await ProfileService.getHeight(uid);
-                    final savedPreference = await ProfileService.getHeightUnitPreference(uid);
+                    final savedHeight =
+                        await ProfileService.getHeight(uid);
+                    final savedPreference =
+                        await ProfileService.getHeightUnitPreference(uid);
 
-                    if (savedHeight == null || (savedHeight - heightInCm).abs() > 0.1) {
-                      throw Exception('Height verification failed after save');
+                    if (savedHeight == null ||
+                        (savedHeight - heightInCm).abs() > 0.1) {
+                      throw Exception(
+                          'Height verification failed after save');
                     }
-
                     if (savedPreference != heightSystem) {
-                      throw Exception('Preference verification failed after save');
+                      throw Exception(
+                          'Preference verification failed after save');
                     }
 
                     if (mounted) {
@@ -744,10 +812,11 @@ class _TrackerPageState extends State<TrackerPage> {
                         _userHeight = heightInCm;
                         _heightUnitPreference = heightSystem;
                       });
-
-                      AppConfig.debugPrint('✅ Height and preference saved: $heightInCm cm ($heightSystem)');
-                      ErrorHandlingService.showSuccess(context,
-                          'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}');
+                      AppConfig.debugPrint(
+                          '✅ Height and preference saved: $heightInCm cm ($heightSystem)');
+                      ErrorHandlingService.showSuccess(
+                          context,
+                          'Height saved: ${HeightUtils.formatHeight(heightInCm!, heightSystem)}');
                     }
                   }
                   Navigator.pop(context);
@@ -755,14 +824,16 @@ class _TrackerPageState extends State<TrackerPage> {
                   AppConfig.debugPrint('❌ Error saving height: $e');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Failed to save height: ${e.toString()}'),
+                      content: Text(
+                          'Failed to save height: ${e.toString()}'),
                       backgroundColor: Colors.red,
                     ));
                   }
                 }
               },
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white),
               child: const Text('Save'),
             ),
           ],
@@ -784,7 +855,8 @@ class _TrackerPageState extends State<TrackerPage> {
           if (_userHeight != null)
             IconButton(
               icon: const Icon(Icons.height),
-              tooltip: 'Height: ${HeightUtils.formatHeight(_userHeight!, _heightUnitPreference)}',
+              tooltip:
+                  'Height: ${HeightUtils.formatHeight(_userHeight!, _heightUnitPreference)}',
               onPressed: _showHeightSetupDialog,
             ),
           if (AppConfig.enableDebugPrints)
@@ -795,8 +867,9 @@ class _TrackerPageState extends State<TrackerPage> {
                 final userId = AuthService.currentUserId;
                 if (userId != null) {
                   await TrackerService.debugStorageState(userId);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Check debug logs for storage state')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content:
+                          Text('Check debug logs for storage state')));
                 }
               },
             ),
@@ -816,7 +889,8 @@ class _TrackerPageState extends State<TrackerPage> {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
     if (_userHeight == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _showHeightSetupDialog());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _showHeightSetupDialog());
     }
 
     return SingleChildScrollView(
@@ -830,6 +904,10 @@ class _TrackerPageState extends State<TrackerPage> {
           const SizedBox(height: 20),
           _buildMealsSection(),
           const SizedBox(height: 20),
+          if (_meals.isNotEmpty) ...[
+            _buildNutritionSummarySection(),
+            const SizedBox(height: 20),
+          ],
           _buildSupplementsSection(),
           const SizedBox(height: 20),
           _buildExerciseSection(),
@@ -846,8 +924,8 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 
   Widget _buildDateSelector() {
-    final canGoForward =
-        _selectedDate.isBefore(DateTime.now().subtract(const Duration(days: -1)));
+    final canGoForward = _selectedDate
+        .isBefore(DateTime.now().subtract(const Duration(days: -1)));
 
     return Card(
       child: Padding(
@@ -856,9 +934,11 @@ class _TrackerPageState extends State<TrackerPage> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(
-                onPressed: () => _changeDate(-1), icon: const Icon(Icons.chevron_left)),
+                onPressed: () => _changeDate(-1),
+                icon: const Icon(Icons.chevron_left)),
             Text(_formatDate(_selectedDate),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold)),
             IconButton(
                 onPressed: canGoForward ? () => _changeDate(1) : null,
                 icon: const Icon(Icons.chevron_right)),
@@ -880,13 +960,15 @@ class _TrackerPageState extends State<TrackerPage> {
                 const Icon(Icons.monitor_weight, color: Colors.blue, size: 24),
                 const SizedBox(width: 8),
                 const Text('Weight',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 if (_userHeight != null)
                   InkWell(
                     onTap: _showHeightSetupDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -895,10 +977,12 @@ class _TrackerPageState extends State<TrackerPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.height, size: 14, color: Colors.blue.shade700),
+                          Icon(Icons.height,
+                              size: 14, color: Colors.blue.shade700),
                           const SizedBox(width: 4),
                           Text(
-                            HeightUtils.formatHeight(_userHeight!, _heightUnitPreference),
+                            HeightUtils.formatHeight(
+                                _userHeight!, _heightUnitPreference),
                             style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.blue.shade700,
@@ -919,11 +1003,14 @@ class _TrackerPageState extends State<TrackerPage> {
                     controller: _weightController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,1}'))
                     ],
                     decoration: InputDecoration(
                       labelText: 'Weight',
-                      hintText: _weightUnit == 'kg' ? 'e.g., 70.5' : 'e.g., 155.5',
+                      hintText: _weightUnit == 'kg'
+                          ? 'e.g., 70.5'
+                          : 'e.g., 155.5',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.monitor_weight),
                     ),
@@ -934,7 +1021,8 @@ class _TrackerPageState extends State<TrackerPage> {
                   width: 80,
                   child: DropdownButtonFormField<String>(
                     value: _weightUnit,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 'kg', child: Text('kg')),
                       DropdownMenuItem(value: 'lbs', child: Text('lbs')),
@@ -980,11 +1068,13 @@ class _TrackerPageState extends State<TrackerPage> {
               children: [
                 Icon(
                     _weightVisible ? Icons.visibility : Icons.visibility_off,
-                    size: 20, color: Colors.grey.shade600),
+                    size: 20,
+                    color: Colors.grey.shade600),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text('Weight average visible on profile',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                      style: TextStyle(
+                          fontSize: 13, color: Colors.grey.shade700)),
                 ),
                 Switch(
                     value: _weightVisible,
@@ -997,12 +1087,16 @@ class _TrackerPageState extends State<TrackerPage> {
               Row(
                 children: [
                   Icon(
-                      _weightLossVisible ? Icons.visibility : Icons.visibility_off,
-                      size: 20, color: Colors.grey.shade600),
+                      _weightLossVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      size: 20,
+                      color: Colors.grey.shade600),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text('Weight loss visible on profile',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey.shade700)),
                   ),
                   Switch(
                       value: _weightLossVisible,
@@ -1029,11 +1123,12 @@ class _TrackerPageState extends State<TrackerPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.restaurant, color: Colors.orange, size: 24),
+                    const Icon(Icons.restaurant,
+                        color: Colors.orange, size: 24),
                     const SizedBox(width: 8),
                     Text('Meals (${_meals.length})',
-                        style:
-                            const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 IconButton(
@@ -1079,6 +1174,212 @@ class _TrackerPageState extends State<TrackerPage> {
     );
   }
 
+  // ── Nutrition Summary ─────────────────────────────────────────
+
+  Widget _buildNutritionSummarySection() {
+    final totals = TrackerService.calculateNutritionTotals(_meals);
+    final status = TrackerService.getNutritionStatus(_meals);
+    final targets = TrackerService.dailyTargets;
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.bar_chart, color: Colors.teal, size: 24),
+                const SizedBox(width: 8),
+                const Text('Daily Nutrition Summary',
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Based on bariatric post-surgery daily targets',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 16),
+            _buildNutrientRow(
+              label: 'Calories',
+              current: totals['calories'] ?? 0,
+              target: targets['calories']!,
+              unit: 'kcal',
+              status: status['calories'] ?? 'low',
+              isUpperLimit: false,
+            ),
+            _buildNutrientRow(
+              label: 'Protein',
+              current: totals['protein'] ?? 0,
+              target: targets['protein']!,
+              unit: 'g',
+              status: status['protein'] ?? 'low',
+              isUpperLimit: false,
+            ),
+            _buildNutrientRow(
+              label: 'Fiber',
+              current: totals['fiber'] ?? 0,
+              target: targets['fiber']!,
+              unit: 'g',
+              status: status['fiber'] ?? 'low',
+              isUpperLimit: false,
+            ),
+            const Divider(height: 20),
+            Text(
+              'Keep these under the daily limit:',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 8),
+            _buildNutrientRow(
+              label: 'Fat',
+              current: totals['fat'] ?? 0,
+              target: targets['fat']!,
+              unit: 'g',
+              status: status['fat'] ?? 'good',
+              isUpperLimit: true,
+            ),
+            _buildNutrientRow(
+              label: 'Saturated Fat',
+              current: totals['saturatedFat'] ?? 0,
+              target: targets['saturatedFat']!,
+              unit: 'g',
+              status: status['saturatedFat'] ?? 'good',
+              isUpperLimit: true,
+            ),
+            _buildNutrientRow(
+              label: 'Sodium',
+              current: totals['sodium'] ?? 0,
+              target: targets['sodium']!,
+              unit: 'mg',
+              status: status['sodium'] ?? 'good',
+              isUpperLimit: true,
+            ),
+            _buildNutrientRow(
+              label: 'Sugar',
+              current: totals['sugar'] ?? 0,
+              target: targets['sugar']!,
+              unit: 'g',
+              status: status['sugar'] ?? 'good',
+              isUpperLimit: true,
+            ),
+            const SizedBox(height: 12),
+            _buildNutritionLegend(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNutrientRow({
+    required String label,
+    required double current,
+    required double target,
+    required String unit,
+    required String status,
+    required bool isUpperLimit,
+  }) {
+    Color statusColor;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'over':
+        statusColor = Colors.red.shade600;
+        statusIcon = Icons.arrow_upward;
+        break;
+      case 'low':
+        statusColor = Colors.orange.shade700;
+        statusIcon = Icons.arrow_downward;
+        break;
+      case 'good':
+      default:
+        statusColor = Colors.green.shade600;
+        statusIcon = Icons.check_circle_outline;
+        break;
+    }
+
+    final progress = (current / target).clamp(0.0, 1.5);
+    final displayProgress = progress.clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(label,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+              Text(
+                '${current.toStringAsFixed(current >= 10 ? 0 : 1)}$unit',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '/ ${target.toStringAsFixed(0)}$unit',
+                style:
+                    TextStyle(fontSize: 11, color: Colors.grey.shade500),
+              ),
+              const SizedBox(width: 6),
+              Icon(statusIcon, size: 14, color: statusColor),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: displayProgress,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                progress > 1.0 ? Colors.red.shade400 : statusColor,
+              ),
+              minHeight: 6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNutritionLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _legendItem(Colors.green.shade600, 'On track'),
+        _legendItem(Colors.orange.shade700, 'Need more'),
+        _legendItem(Colors.red.shade600, 'Over limit'),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+      ],
+    );
+  }
+
   // ── Supplement Section ────────────────────────────────────────
 
   Widget _buildSupplementsSection() {
@@ -1095,10 +1396,9 @@ class _TrackerPageState extends State<TrackerPage> {
                   children: [
                     const Icon(Icons.medication, color: Colors.teal, size: 24),
                     const SizedBox(width: 8),
-                    Text(
-                      'Supplements (${_supplements.length})',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
+                    Text('Supplements (${_supplements.length})',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
                 ),
                 IconButton(
@@ -1111,11 +1411,10 @@ class _TrackerPageState extends State<TrackerPage> {
             if (_supplements.isEmpty) ...[
               const SizedBox(height: 12),
               Center(
-                child: Text(
-                  'No supplements logged yet. Tap + to add one.',
-                  style: TextStyle(color: Colors.grey.shade600),
-                ),
-              ),
+                  child: Text(
+                'No supplements logged yet. Tap + to add one.',
+                style: TextStyle(color: Colors.grey.shade600),
+              )),
             ] else ...[
               const SizedBox(height: 12),
               ListView.builder(
@@ -1124,7 +1423,8 @@ class _TrackerPageState extends State<TrackerPage> {
                 itemCount: _supplements.length,
                 itemBuilder: (context, index) {
                   final supplement = _supplements[index];
-                  final name = supplement['name'] as String? ?? 'Supplement ${index + 1}';
+                  final name = supplement['name'] as String? ??
+                      'Supplement ${index + 1}';
                   final amount = supplement['amount'] as String? ?? '';
                   final notes = supplement['notes'] as String? ?? '';
                   return Card(
@@ -1136,13 +1436,15 @@ class _TrackerPageState extends State<TrackerPage> {
                         decoration: BoxDecoration(
                           color: Colors.teal.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.teal.shade200),
+                          border:
+                              Border.all(color: Colors.teal.shade200),
                         ),
                         child: Icon(Icons.medication_liquid,
                             color: Colors.teal.shade700, size: 20),
                       ),
                       title: Text(name,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -1152,7 +1454,8 @@ class _TrackerPageState extends State<TrackerPage> {
                           if (notes.isNotEmpty)
                             Text(notes,
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.grey.shade600)),
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600)),
                         ],
                       ),
                       isThreeLine: notes.isNotEmpty,
@@ -1183,7 +1486,8 @@ class _TrackerPageState extends State<TrackerPage> {
                 Icon(Icons.fitness_center, color: Colors.purple, size: 24),
                 SizedBox(width: 8),
                 Text('Exercise',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 12),
@@ -1195,11 +1499,14 @@ class _TrackerPageState extends State<TrackerPage> {
                     controller: _exerciseController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,1}'))
                     ],
                     decoration: InputDecoration(
                       labelText: 'Duration',
-                      hintText: _exerciseUnit == 'minutes' ? 'e.g., 30' : 'e.g., 1',
+                      hintText: _exerciseUnit == 'minutes'
+                          ? 'e.g., 30'
+                          : 'e.g., 1',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.directions_run),
                     ),
@@ -1210,10 +1517,13 @@ class _TrackerPageState extends State<TrackerPage> {
                   width: 80,
                   child: DropdownButtonFormField<String>(
                     value: _exerciseUnit,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     items: const [
-                      DropdownMenuItem(value: 'minutes', child: Text('min')),
-                      DropdownMenuItem(value: 'hours', child: Text('hrs')),
+                      DropdownMenuItem(
+                          value: 'minutes', child: Text('min')),
+                      DropdownMenuItem(
+                          value: 'hours', child: Text('hrs')),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -1243,7 +1553,8 @@ class _TrackerPageState extends State<TrackerPage> {
                 Icon(Icons.water_drop, color: Colors.cyan, size: 24),
                 SizedBox(width: 8),
                 Text('Water Intake',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 12),
@@ -1255,7 +1566,8 @@ class _TrackerPageState extends State<TrackerPage> {
                     controller: _waterController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,1}'))
                     ],
                     decoration: const InputDecoration(
                       labelText: 'Amount',
@@ -1270,14 +1582,18 @@ class _TrackerPageState extends State<TrackerPage> {
                   width: 90,
                   child: DropdownButtonFormField<String>(
                     value: _waterUnit,
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     items: const [
                       DropdownMenuItem(value: 'cups', child: Text('cups')),
                       DropdownMenuItem(value: 'oz', child: Text('oz')),
                       DropdownMenuItem(value: 'liters', child: Text('L')),
-                      DropdownMenuItem(value: 'pints', child: Text('pints')),
-                      DropdownMenuItem(value: 'quarts', child: Text('qts')),
-                      DropdownMenuItem(value: 'gallons', child: Text('gal')),
+                      DropdownMenuItem(
+                          value: 'pints', child: Text('pints')),
+                      DropdownMenuItem(
+                          value: 'quarts', child: Text('qts')),
+                      DropdownMenuItem(
+                          value: 'gallons', child: Text('gal')),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -1308,7 +1624,8 @@ class _TrackerPageState extends State<TrackerPage> {
                 Icon(Icons.favorite, color: Colors.red, size: 24),
                 SizedBox(width: 8),
                 Text("Today's Health Score",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1342,7 +1659,8 @@ class _TrackerPageState extends State<TrackerPage> {
         onPressed: _isSaving ? null : _saveEntry,
         icon: _isSaving
             ? const SizedBox(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation(Colors.white)))
@@ -1354,7 +1672,8 @@ class _TrackerPageState extends State<TrackerPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.orange,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -1377,10 +1696,33 @@ class _SupplementDialogState extends State<_SupplementDialog> {
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
 
-  // Common unit options for supplements
   String _selectedUnit = 'mg';
   static const List<String> _units = [
     'mg', 'mcg', 'g', 'IU', 'ml', 'capsule(s)', 'tablet(s)', 'tsp', 'tbsp',
+  ];
+
+  // Common bariatric post-surgery supplements for quick fill
+  final List<String> _commonSupplements = [
+    'Multivitamin',
+    'Calcium Citrate',
+    'Vitamin D3',
+    'Vitamin B12',
+    'Iron',
+    'Folate',
+    'Zinc',
+    'Vitamin B1 (Thiamine)',
+    'Magnesium',
+    'Omega-3 Fish Oil',
+    'Biotin',
+    'Vitamin C',
+    'Copper',
+    'Vitamin A',
+    'Vitamin K',
+    'Probiotics',
+    'Protein Powder',
+    'Vitamin E',
+    'Selenium',
+    'CoQ10',
   ];
 
   @override
@@ -1399,7 +1741,8 @@ class _SupplementDialogState extends State<_SupplementDialog> {
     }
 
     final rawAmount = _amountController.text.trim();
-    final amountString = rawAmount.isNotEmpty ? '$rawAmount $_selectedUnit' : '';
+    final amountString =
+        rawAmount.isNotEmpty ? '$rawAmount $_selectedUnit' : '';
 
     Navigator.pop(context, {
       'name': _nameController.text.trim(),
@@ -1423,16 +1766,57 @@ class _SupplementDialogState extends State<_SupplementDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Name
+            // Quick-fill chips
+            Text(
+              'Common bariatric supplements:',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: _commonSupplements.take(10).map((name) {
+                final isSelected = _nameController.text == name;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() => _nameController.text = name);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.teal.shade100
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.teal
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Text(name,
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Name field
             TextField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
                 labelText: 'Supplement Name *',
-                hintText: 'e.g., Vitamin D, Iron, B12',
+                hintText: 'e.g., Calcium Citrate, B12',
                 prefixIcon: Icon(Icons.medication_liquid),
                 border: OutlineInputBorder(),
               ),
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
 
@@ -1444,9 +1828,11 @@ class _SupplementDialogState extends State<_SupplementDialog> {
                   flex: 2,
                   child: TextField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true),
                     inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}'))
+                      FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d+\.?\d{0,2}'))
                     ],
                     decoration: const InputDecoration(
                       labelText: 'Amount',
@@ -1465,10 +1851,13 @@ class _SupplementDialogState extends State<_SupplementDialog> {
                       border: OutlineInputBorder(),
                     ),
                     items: _units
-                        .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                        .map((u) =>
+                            DropdownMenuItem(value: u, child: Text(u)))
                         .toList(),
                     onChanged: (value) {
-                      if (value != null) setState(() => _selectedUnit = value);
+                      if (value != null) {
+                        setState(() => _selectedUnit = value);
+                      }
                     },
                   ),
                 ),
@@ -1476,7 +1865,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Optional notes
+            // Notes field
             TextField(
               controller: _notesController,
               textCapitalization: TextCapitalization.sentences,
@@ -1492,7 +1881,8 @@ class _SupplementDialogState extends State<_SupplementDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(
           onPressed: _save,
           style: ElevatedButton.styleFrom(
@@ -1505,7 +1895,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Meal Dialog (unchanged logic, kept intact)
+// Meal Dialog
 // ════════════════════════════════════════════════════════════════
 
 class _MealDialog extends StatefulWidget {
@@ -1547,7 +1937,8 @@ class _MealDialogState extends State<_MealDialog> {
 
   Future<void> _loadSavedIngredients() async {
     try {
-      final ingredients = await SavedIngredientsService.loadSavedIngredients();
+      final ingredients =
+          await SavedIngredientsService.loadSavedIngredients();
       if (mounted) {
         setState(() {
           _savedIngredients = ingredients;
@@ -1615,7 +2006,8 @@ class _MealDialogState extends State<_MealDialog> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.bookmark, color: Colors.blue.shade700, size: 20),
+                        Icon(Icons.bookmark,
+                            color: Colors.blue.shade700, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'Quick Fill from Saved Ingredients:',
@@ -1637,7 +2029,8 @@ class _MealDialogState extends State<_MealDialog> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: InkWell(
-                              onTap: () => _autofillFromIngredient(ingredient),
+                              onTap: () =>
+                                  _autofillFromIngredient(ingredient),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 width: 140,
@@ -1645,32 +2038,40 @@ class _MealDialogState extends State<_MealDialog> {
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.blue.shade300),
+                                  border: Border.all(
+                                      color: Colors.blue.shade300),
                                 ),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
                                   children: [
                                     Text(ingredient.productName,
                                         style: const TextStyle(
-                                            fontSize: 12, fontWeight: FontWeight.w600),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis),
                                     const SizedBox(height: 4),
-                                    Text('${ingredient.calories.toStringAsFixed(0)} cal',
+                                    Text(
+                                        '${ingredient.calories.toStringAsFixed(0)} cal',
                                         style: TextStyle(
-                                            fontSize: 10, color: Colors.grey.shade600)),
+                                            fontSize: 10,
+                                            color: Colors.grey.shade600)),
                                     const SizedBox(height: 2),
                                     Row(
                                       children: [
                                         Icon(Icons.touch_app,
-                                            size: 12, color: Colors.blue.shade700),
+                                            size: 12,
+                                            color: Colors.blue.shade700),
                                         const SizedBox(width: 4),
                                         Text('Tap to fill',
                                             style: TextStyle(
                                                 fontSize: 9,
                                                 color: Colors.blue.shade700,
-                                                fontWeight: FontWeight.w600)),
+                                                fontWeight:
+                                                    FontWeight.w600)),
                                       ],
                                     ),
                                   ],
@@ -1708,11 +2109,15 @@ class _MealDialogState extends State<_MealDialog> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const SizedBox(
-                          width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2)),
+                          width: 16,
+                          height: 16,
+                          child:
+                              CircularProgressIndicator(strokeWidth: 2)),
                       const SizedBox(width: 12),
                       Text('Loading saved ingredients...',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600)),
                     ],
                   ),
                 ),
@@ -1722,7 +2127,8 @@ class _MealDialogState extends State<_MealDialog> {
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
-                  labelText: 'Meal Name *', hintText: 'e.g., Grilled Chicken Salad'),
+                  labelText: 'Meal Name *',
+                  hintText: 'e.g., Grilled Chicken Salad'),
               textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 12),
@@ -1743,7 +2149,9 @@ class _MealDialogState extends State<_MealDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
         ElevatedButton(
           onPressed: _saveMeal,
           style: ElevatedButton.styleFrom(
@@ -1754,11 +2162,14 @@ class _MealDialogState extends State<_MealDialog> {
     );
   }
 
-  Widget _numField(TextEditingController ctrl, String label, String suffix) {
+  Widget _numField(
+      TextEditingController ctrl, String label, String suffix) {
     return TextField(
       controller: ctrl,
       keyboardType: TextInputType.number,
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))],
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+      ],
       decoration: InputDecoration(labelText: label, suffixText: suffix),
     );
   }

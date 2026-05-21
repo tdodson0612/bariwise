@@ -1,5 +1,6 @@
 // lib/services/grocery_service.dart
-// ✅ ENHANCED VERSION: Detailed logging + explicit user_id in inserts
+// ✅ FIXED: Delete calls now include user_id filter so the Cloudflare
+//           Worker can execute them without returning an error.
 
 import '../models/grocery_item.dart';
 import 'auth_service.dart';
@@ -11,10 +12,10 @@ class GroceryService {
   // ==================================================
   static Future<List<GroceryItem>> getGroceryList() async {
     print('📋 GroceryService.getGroceryList() called');
-    
+
     final userId = AuthService.currentUserId;
     print('👤 Current userId: $userId');
-    
+
     if (userId == null || userId.isEmpty) {
       print('❌ No userId available - returning empty list');
       return [];
@@ -22,7 +23,7 @@ class GroceryService {
 
     try {
       print('🔍 Querying grocery_items table...');
-      
+
       // RLS policies will filter by user automatically
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
@@ -69,18 +70,18 @@ class GroceryService {
 
       print('✅ Successfully loaded ${items.length} grocery items');
       return items;
-
     } catch (e, stackTrace) {
       print('❌ Error in getGroceryList: $e');
       print('Stack trace: $stackTrace');
-      
+
       final errorMsg = e.toString();
       if (errorMsg.contains('table') || errorMsg.contains('column')) {
         throw Exception('Database schema error: $e');
       } else if (errorMsg.contains('auth') || errorMsg.contains('session')) {
         throw Exception('Authentication error: Please log in again. Error: $e');
       } else if (errorMsg.contains('network') || errorMsg.contains('timeout')) {
-        throw Exception('Network error: Please check your internet connection. Error: $e');
+        throw Exception(
+            'Network error: Please check your internet connection. Error: $e');
       } else {
         throw Exception('Failed to load grocery list: $e');
       }
@@ -88,17 +89,19 @@ class GroceryService {
   }
 
   // ==================================================
-  // SAVE LIST (Clear + Insert all) - ENHANCED WITH DETAILED LOGGING
+  // SAVE LIST (Clear + Insert all)
+  // ✅ FIX: Delete now passes user_id filter so the Worker
+  //         knows which rows to remove.
   // ==================================================
   static Future<void> saveGroceryList(List<String> items) async {
     print('\n========================================');
     print('💾 GroceryService.saveGroceryList() START');
     print('========================================');
     print('📊 Items to save: ${items.length}');
-    
+
     final userId = AuthService.currentUserId;
     print('👤 Current userId: $userId');
-    
+
     if (userId == null || userId.isEmpty) {
       print('❌ No userId - cannot save');
       throw Exception('Please sign in to continue');
@@ -107,13 +110,15 @@ class GroceryService {
     print('📋 Items list: $items');
 
     try {
-      // STEP 1: Delete existing items
+      // STEP 1: Delete existing items for this user
       print('\n--- STEP 1: DELETE EXISTING ITEMS ---');
       print('🗑️ Calling delete query...');
       try {
         final deleteResult = await DatabaseServiceCore.workerQuery(
           action: 'delete',
           table: 'grocery_items',
+          // ✅ FIX: explicit user_id filter so the Worker executes the delete
+          filters: {'user_id': userId},
         );
         print('✅ Delete successful');
         print('📦 Delete result: $deleteResult');
@@ -133,13 +138,13 @@ class GroceryService {
 
       print('\n--- STEP 2: INSERT NEW ITEMS ---');
       print('📝 Inserting ${items.length} items...');
-      
+
       for (var i = 0; i < items.length; i++) {
         final item = items[i];
-        
+
         print('\n➡️ Processing item $i of ${items.length}');
         print('   Raw value: "$item"');
-        
+
         if (item.trim().isEmpty) {
           print('   ⚠️ Empty - skipping');
           continue;
@@ -147,59 +152,63 @@ class GroceryService {
 
         try {
           final data = {
-            'user_id': userId,  // ✅ EXPLICITLY include user_id
-            'item_name': item.trim(),  // ✅ Correct column name
+            'user_id': userId,
+            'item_name': item.trim(),
             'order_index': i,
             'created_at': DateTime.now().toIso8601String(),
           };
 
           print('   📤 Data to insert: $data');
-          
+
           final insertResult = await DatabaseServiceCore.workerQuery(
             action: 'insert',
             table: 'grocery_items',
             data: data,
           );
-          
+
           print('   ✅ Insert successful');
           print('   📦 Result: $insertResult');
-          
         } catch (itemError, itemStack) {
           print('   ❌ INSERT FAILED for item $i!');
           print('   ❌ Item: "$item"');
           print('   ❌ Error: $itemError');
           print('   ❌ Stack: $itemStack');
-          
+
           // Stop on first error to diagnose
           throw Exception('Failed to insert item "$item": $itemError');
         }
       }
-      
+
       print('\n✅ ALL ITEMS INSERTED SUCCESSFULLY');
       print('========================================\n');
-
     } catch (e, stackTrace) {
       print('\n❌❌❌ FINAL ERROR IN saveGroceryList ❌❌❌');
       print('Error: $e');
       print('Stack trace: $stackTrace');
       print('========================================\n');
-      
-      // Analyze error and provide helpful message
+
       final errorStr = e.toString().toLowerCase();
-      
+
       if (errorStr.contains('user_id') && errorStr.contains('null')) {
         throw Exception('User ID is null. Please log out and log back in.');
-      } else if (errorStr.contains('user_id') && errorStr.contains('foreign key')) {
-        throw Exception('User account not found. Please log out and log back in.');
+      } else if (errorStr.contains('user_id') &&
+          errorStr.contains('foreign key')) {
+        throw Exception(
+            'User account not found. Please log out and log back in.');
       } else if (errorStr.contains('rls') || errorStr.contains('policy')) {
-        throw Exception('Permission denied. RLS policy blocking insert. Check policies in Supabase.');
+        throw Exception(
+            'Permission denied. RLS policy blocking insert. Check policies in Supabase.');
       } else if (errorStr.contains('permission denied')) {
-        throw Exception('Permission denied. Check RLS policies in Supabase.');
-      } else if (errorStr.contains('column') && errorStr.contains('item_name')) {
-        throw Exception('Database schema error: item_name column issue: $e');
+        throw Exception(
+            'Permission denied. Check RLS policies in Supabase.');
+      } else if (errorStr.contains('column') &&
+          errorStr.contains('item_name')) {
+        throw Exception(
+            'Database schema error: item_name column issue: $e');
       } else if (errorStr.contains('column')) {
         throw Exception('Database schema error: $e');
-      } else if (errorStr.contains('null value') && errorStr.contains('violates not-null')) {
+      } else if (errorStr.contains('null value') &&
+          errorStr.contains('violates not-null')) {
         throw Exception('Required field is null: $e');
       } else {
         throw Exception('Failed to save grocery list: $e');
@@ -209,10 +218,12 @@ class GroceryService {
 
   // ==================================================
   // CLEAR LIST
+  // ✅ FIX: Delete now passes user_id filter so the Worker
+  //         knows which rows to remove.
   // ==================================================
   static Future<void> clearGroceryList() async {
     print('🗑️ GroceryService.clearGroceryList() called');
-    
+
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
@@ -221,10 +232,11 @@ class GroceryService {
     print('👤 Clearing for user: $userId');
 
     try {
-      // RLS will ensure we only delete our own items
+      // ✅ FIX: explicit user_id filter so the Worker executes the delete
       await DatabaseServiceCore.workerQuery(
         action: 'delete',
         table: 'grocery_items',
+        filters: {'user_id': userId},
       );
       print('✅ Successfully cleared grocery list');
     } catch (e, stackTrace) {
@@ -235,11 +247,13 @@ class GroceryService {
   }
 
   // ==================================================
-  // ADD SINGLE ITEM - ENHANCED WITH EXPLICIT USER_ID
+  // ADD SINGLE ITEM
   // ==================================================
-  static Future<void> addToGroceryList(String item, {String? quantity}) async {
-    print('➕ GroceryService.addToGroceryList() called: "$item" (qty: $quantity)');
-    
+  static Future<void> addToGroceryList(String item,
+      {String? quantity}) async {
+    print(
+        '➕ GroceryService.addToGroceryList() called: "$item" (qty: $quantity)');
+
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
@@ -262,8 +276,8 @@ class GroceryService {
         action: 'insert',
         table: 'grocery_items',
         data: {
-          'user_id': userId,  // ✅ EXPLICITLY include user_id
-          'item_name': formatted.trim(),  // ✅ Correct column name
+          'user_id': userId,
+          'item_name': formatted.trim(),
           'order_index': newOrderIndex,
           'created_at': DateTime.now().toIso8601String(),
         },
@@ -314,12 +328,15 @@ class GroceryService {
         .where((i) => i.isNotEmpty)
         .map((i) {
           i = i.replaceAll(
-              RegExp(r'^\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'),
+              RegExp(
+                  r'^\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'),
               '');
           i = i.replaceAll(
-              RegExp(r'^\d+/\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'),
+              RegExp(
+                  r'^\d+/\d+\s*(cups?|tbsp|tsp|lbs?|oz|grams?|kg|ml|liters?)?\s*'),
               '');
-          i = i.replaceAll(RegExp(r'^(a\s+)?(pinch\s+of\s+|dash\s+of\s+)?'), '');
+          i = i.replaceAll(
+              RegExp(r'^(a\s+)?(pinch\s+of\s+|dash\s+of\s+)?'), '');
           return i.trim();
         })
         .where((i) => i.isNotEmpty && i.length > 2)
@@ -329,8 +346,10 @@ class GroceryService {
   }
 
   static bool _similar(String a, String b) {
-    final ca = a.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
-    final cb = b.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    final ca =
+        a.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    final cb =
+        b.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
     if (ca == cb) return true;
     if (ca.contains(cb) || cb.contains(ca)) return true;
     return false;
@@ -344,7 +363,7 @@ class GroceryService {
     String ingredients,
   ) async {
     print('📝 Adding recipe "$recipeName" ingredients to shopping list');
-    
+
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
@@ -395,7 +414,8 @@ class GroceryService {
 
       await saveGroceryList(updatedList);
 
-      print('✅ Added ${added.length} items, skipped ${skipped.length} duplicates');
+      print(
+          '✅ Added ${added.length} items, skipped ${skipped.length} duplicates');
 
       return {
         'added': added.length,
@@ -430,14 +450,13 @@ class GroceryService {
   static Future<bool> testDatabaseConnection() async {
     try {
       print('🧪 Testing database connection...');
-      
+
       final userId = AuthService.currentUserId;
       if (userId == null) {
         print('❌ No user ID - cannot test connection');
         return false;
       }
 
-      // Try a simple query
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'grocery_items',

@@ -10,10 +10,12 @@ import 'package:bari_wise/widgets/recipe_nutrition_display.dart';
 import 'package:bari_wise/services/recipe_nutrition_service.dart';
 import 'package:bari_wise/services/saved_ingredients_service.dart';
 import 'package:bari_wise/models/nutrition_info.dart';
-import 'package:bari_wise/widgets/nutrition_facts_label.dart'; // 🔥 ADDED
+import 'package:bari_wise/widgets/nutrition_facts_label.dart';
 import 'dart:convert';
 import '../services/draft_recipes_service.dart';
 import '../models/draft_recipe.dart';
+import 'package:bari_wise/services/lora_inference_service.dart';
+import '../services/recent_activity_tracker.dart';
 
 class IngredientRow {
   String quantity;
@@ -44,10 +46,10 @@ class IngredientRow {
 
   bool get isEmpty => quantity.isEmpty && name.isEmpty;
   bool get isValid => quantity.isNotEmpty && name.isNotEmpty;
-  
-  String get displayMeasurement => 
-    measurement == 'other' && customMeasurement != null 
-      ? customMeasurement! 
+
+  String get displayMeasurement =>
+    measurement == 'other' && customMeasurement != null
+      ? customMeasurement!
       : measurement;
 }
 
@@ -72,6 +74,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
   final TextEditingController _descriptionController = TextEditingController();
 
   List<IngredientRow> _ingredients = [IngredientRow()];
+
   final List<String> _measurements = [
     'cup', 'cups', 'tbsp', 'tsp', 'oz', 'lb', 'g', 'kg',
     'ml', 'l', 'piece', 'pieces', 'pinch', 'dash', 'to taste',
@@ -81,8 +84,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
   bool isSubmitting = false;
   bool isLoading = true;
   bool _isSaved = false;
-
   int _tabIndex = 0;
+
   Map<String, dynamic> _drafts = {};
   String? _loadedDraftName;
 
@@ -93,27 +96,18 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
   List<Map<String, dynamic>> _submittedRecipes = [];
   bool _isLoadingSubmitted = false;
 
-  String _ingredientsToPlainText() {
-    return _ingredients
-        .where((i) => i.isValid)
-        .map((i) => '${i.quantity} ${i.measurement} ${i.name}')
-        .join('\n');
-  }
-
-  // 🔥 NEW: Convert RecipeNutrition to NutritionInfo for FDA label
+  // Convert RecipeNutrition to NutritionInfo for FDA label
   NutritionInfo _convertRecipeNutritionToInfo(RecipeNutrition recipeNutr) {
     return recipeNutr.toNutritionInfo(
-      productName: _nameController.text.isNotEmpty 
-        ? _nameController.text 
+      productName: _nameController.text.isNotEmpty
+        ? _nameController.text
         : 'Recipe Nutrition',
     );
   }
 
-  // 🔥 NEW: Build dietary badge
+  // Build dietary badge
   Widget _buildBadge(String label, Color color) {
-    // Determine text color based on badge background color
     final textColor = _getBadgeTextColor(color);
-    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -132,14 +126,13 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     );
   }
 
-  // Helper to get appropriate text color for badges
   Color _getBadgeTextColor(Color badgeColor) {
-    if (badgeColor == Colors.blue) return Colors.blue.shade900;
+    if (badgeColor == Colors.blue)   return Colors.blue.shade900;
     if (badgeColor == Colors.orange) return Colors.orange.shade900;
     if (badgeColor == Colors.purple) return Colors.purple.shade900;
-    if (badgeColor == Colors.orange) return Colors.orange.shade900;
-    if (badgeColor == Colors.red) return Colors.red.shade900;
-    return Colors.black87; // Default fallback
+    if (badgeColor == Colors.green)  return Colors.green.shade900;
+    if (badgeColor == Colors.red)    return Colors.red.shade900;
+    return Colors.black87;
   }
 
   @override
@@ -148,7 +141,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     _initializeUser();
     _loadDrafts();
     _loadSubmittedRecipes();
-
+    RecentActivityTracker.recordScreen(label: 'Submit Recipe', route: '/submit-recipe');
     if (widget.initialIngredients != null) {
       _parseInitialIngredients(widget.initialIngredients!);
     }
@@ -165,7 +158,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       final lines = ingredients.split('\n').where((l) => l.trim().isNotEmpty).toList();
       _ingredients = lines.map((line) => IngredientRow(name: line.trim())).toList();
     }
-    
     if (_ingredients.isEmpty) {
       _ingredients = [IngredientRow()];
     }
@@ -200,7 +192,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   Future<void> _loadSubmittedRecipes() async {
     setState(() => _isLoadingSubmitted = true);
-    
     try {
       final userId = AuthService.currentUserId;
       if (userId == null) {
@@ -212,9 +203,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         }
         return;
       }
-
       final submissions = await SubmittedRecipesService.getUserSubmissions(userId);
-      
       if (mounted) {
         setState(() {
           _submittedRecipes = submissions.map((submission) => {
@@ -230,10 +219,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingSubmitted = false);
-      }
-      print('Error loading submitted recipes: $e');
+      if (mounted) setState(() => _isLoadingSubmitted = false);
     }
   }
 
@@ -249,9 +235,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   Future<void> _saveRecipe() async {
     if (!_formKey.currentState!.validate()) return;
-
     final validIngredients = _ingredients.where((i) => i.isValid).toList();
-    
     if (validIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -261,14 +245,12 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       );
       return;
     }
-
     setState(() => isSubmitting = true);
-
     try {
-      final name = _nameController.text.trim();
+      final name        = _nameController.text.trim();
       final description = _descriptionController.text.trim();
-      final ing = _serializeIngredients();
-      final dir = _directionsController.text.trim();
+      final ing         = _serializeIngredients();
+      final dir         = _directionsController.text.trim();
 
       await LocalDraftService.saveDraft(
         name: name,
@@ -276,7 +258,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         ingredients: ing,
         directions: dir,
       );
-
       _loadedDraftName = name;
       _isSaved = true;
       await _loadDrafts();
@@ -293,12 +274,11 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
-                        'Draft saved!',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      const Text('Draft saved!',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       Text(
-                        'Saved "$name" with ${validIngredients.length} ingredient${validIngredients.length == 1 ? '' : 's'}',
+                        'Saved "$name" with ${validIngredients.length} '
+                        'ingredient${validIngredients.length == 1 ? '' : 's'}',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ],
@@ -311,9 +291,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             action: SnackBarAction(
               label: 'VIEW DRAFTS',
               textColor: Colors.white,
-              onPressed: () {
-                setState(() => _tabIndex = 1);
-              },
+              onPressed: () => setState(() => _tabIndex = 1),
             ),
           ),
         );
@@ -321,24 +299,18 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving draft: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error saving draft: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
   Future<void> _updateDraft() async {
     if (!_formKey.currentState!.validate()) return;
-
     final validIngredients = _ingredients.where((i) => i.isValid).toList();
-    
     if (validIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -348,31 +320,23 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       );
       return;
     }
-
-    if (_loadedDraftName == null) {
-      _saveRecipe();
-      return;
-    }
-
+    if (_loadedDraftName == null) { _saveRecipe(); return; }
     setState(() => isSubmitting = true);
-
     try {
-      final name = _nameController.text.trim();
+      final name        = _nameController.text.trim();
       final description = _descriptionController.text.trim();
-      final ing = _serializeIngredients();
-      final dir = _directionsController.text.trim();
+      final ing         = _serializeIngredients();
+      final dir         = _directionsController.text.trim();
 
       if (_loadedDraftName != name) {
         await LocalDraftService.deleteDraft(_loadedDraftName!);
       }
-
       await LocalDraftService.saveDraft(
         name: name,
         description: description.isNotEmpty ? description : null,
         ingredients: ing,
         directions: dir,
       );
-
       _loadedDraftName = name;
       _isSaved = true;
       await _loadDrafts();
@@ -385,10 +349,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'Draft "$name" updated!',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                  child: Text('Draft "$name" updated!',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -400,22 +362,17 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error updating draft: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error updating draft: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
   Future<void> _addToGroceryList() async {
     final validIngredients = _ingredients.where((i) => i.isValid).toList();
-    
     if (validIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -425,15 +382,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       );
       return;
     }
-
     try {
       int addedCount = 0;
       for (var ingredient in validIngredients) {
-        final itemText = '${ingredient.quantity} ${ingredient.measurement} ${ingredient.name}'.trim();
+        final itemText =
+            '${ingredient.quantity} ${ingredient.measurement} ${ingredient.name}'
+                .trim();
         await GroceryService.addToGroceryList(itemText);
         addedCount++;
       }
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -442,9 +399,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             action: SnackBarAction(
               label: 'VIEW',
               textColor: Colors.white,
-              onPressed: () {
-                Navigator.pushNamed(context, '/grocery-list');
-              },
+              onPressed: () => Navigator.pushNamed(context, '/grocery-list'),
             ),
           ),
         );
@@ -463,7 +418,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   Future<void> _submitRecipe() async {
     if (!_formKey.currentState!.validate()) return;
-
     final validIngredients = _ingredients.where((i) => i.isValid).toList();
     if (validIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -487,13 +441,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             const SizedBox(height: 8),
             Text('Ingredients: ${validIngredients.length}'),
             const SizedBox(height: 16),
-            
-            const Text(
-              'Choose submission type:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            const Text('Choose submission type:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-            
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.save, color: Colors.blue),
@@ -501,9 +451,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               subtitle: const Text('Keep private, edit anytime'),
               onTap: () => Navigator.pop(context, 'draft'),
             ),
-            
             const Divider(),
-            
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.send, color: Colors.orange),
@@ -523,7 +471,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     );
 
     if (submissionType == null) return;
-
     setState(() => isSubmitting = true);
 
     try {
@@ -562,16 +509,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             ),
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 3),
-            action: submissionType == 'community' ? SnackBarAction(
-              label: 'View Status',
-              textColor: Colors.white,
-              onPressed: () {
-                setState(() => _tabIndex = 2);
-              },
-            ) : null,
+            action: submissionType == 'community'
+                ? SnackBarAction(
+                    label: 'View Status',
+                    textColor: Colors.white,
+                    onPressed: () => setState(() => _tabIndex = 2),
+                  )
+                : null,
           ),
         );
-
         _nameController.clear();
         _directionsController.clear();
         _descriptionController.clear();
@@ -592,9 +538,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
@@ -612,22 +556,111 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       final draftRecipe = DraftRecipe(
         userId: AuthService.currentUserId!,
         title: _nameController.text.trim(),
-        description: _descriptionController.text.trim().isNotEmpty 
-          ? _descriptionController.text.trim() 
-          : null,
+        description: _descriptionController.text.trim().isNotEmpty
+            ? _descriptionController.text.trim()
+            : null,
         ingredients: recipeIngredients,
         instructions: _directionsController.text.trim(),
         servings: 1,
       );
-
       await DraftRecipesService.createDraftRecipe(draftRecipe);
     } catch (e) {
       rethrow;
     }
   }
 
+  // ── LORA_INTEGRATION_POINT: Pre-screen with LoRA compliance reviewer ────────
+  // When LoraInferenceService.isLoraEnabled = false → returns null instantly,
+  // zero behavior change.
+  // When enabled → warns user if recipe fails compliance thresholds before
+  // hitting the DB. User may proceed anyway or go back and revise.
+  // ────────────────────────────────────────────────────────────────────────────
   Future<void> _submitForCommunityReview() async {
     try {
+      if (LoraInferenceService.isLoraEnabled) {
+        final ingredientMaps = _ingredients
+            .where((i) => i.isValid)
+            .map((i) => i.toJson())
+            .toList();
+
+        final prescreen = await LoraInferenceService.prescreenCompliance(
+          recipeName: _nameController.text.trim(),
+          ingredients: ingredientMaps,
+          directions: _directionsController.text.trim(),
+          nutrition: null,
+        );
+
+        if (prescreen != null && !prescreen.passedCompliance && mounted) {
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  const Text('Compliance Warning'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                      'LoRA compliance check flagged issues with this recipe:'),
+                  const SizedBox(height: 8),
+                  if (prescreen.complianceWarnings.isNotEmpty)
+                    ...prescreen.complianceWarnings.map(
+                      (w) => Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 4),
+                        child: Text('• $w',
+                            style: TextStyle(
+                                color: Colors.orange.shade800, fontSize: 13)),
+                      ),
+                    ),
+                  if (prescreen.complianceErrors.isNotEmpty)
+                    ...prescreen.complianceErrors.map(
+                      (e) => Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 4),
+                        child: Text('• $e',
+                            style: TextStyle(
+                                color: Colors.red.shade800, fontSize: 13)),
+                      ),
+                    ),
+                  if (prescreen.correctionNotes != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      prescreen.correctionNotes!,
+                      style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  const Text('Submit anyway?'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Go Back'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Submit Anyway'),
+                ),
+              ],
+            ),
+          );
+          if (proceed != true) return;
+        }
+      }
+      // ── End LoRA pre-screen ──────────────────────────────────────────────
+
       final recipeIngredients = _ingredients
           .where((i) => i.isValid)
           .map((ing) => RecipeIngredient(
@@ -640,15 +673,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       final draftRecipe = DraftRecipe(
         userId: AuthService.currentUserId!,
         title: _nameController.text.trim(),
-        description: _descriptionController.text.trim().isNotEmpty 
-            ? _descriptionController.text.trim() 
+        description: _descriptionController.text.trim().isNotEmpty
+            ? _descriptionController.text.trim()
             : null,
         ingredients: recipeIngredients,
         instructions: _directionsController.text.trim(),
         servings: 1,
       );
-
-      final draftRecipeId = await DraftRecipesService.createDraftRecipe(draftRecipe);
+      final draftRecipeId =
+          await DraftRecipesService.createDraftRecipe(draftRecipe);
       await SubmittedRecipesService.submitRecipeForReview(draftRecipeId);
     } catch (e) {
       rethrow;
@@ -657,7 +690,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   Future<void> _analyzeRecipeNutrition() async {
     final validIngredients = _ingredients.where((i) => i.isValid).toList();
-    
     if (validIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -676,15 +708,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
     try {
       final saved = await SavedIngredientsService.loadSavedIngredients();
-      
+
       if (saved.isEmpty) {
         if (mounted) {
           setState(() => _isAnalyzingNutrition = false);
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: Row(
-                children: const [
+              title: const Row(
+                children: [
                   Icon(Icons.info_outline, color: Colors.orange),
                   SizedBox(width: 8),
                   Text('No Saved Ingredients'),
@@ -697,10 +729,12 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                 '2. Scan a product barcode\n'
                 '3. Click "Save Ingredient"\n'
                 '4. Come back and analyze\n\n'
-                'Saved ingredients help us calculate accurate nutrition for your recipes!'
+                'Saved ingredients help us calculate accurate nutrition for your recipes!',
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK')),
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
@@ -724,27 +758,24 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       for (var ingredient in validIngredients) {
         final name = ingredient.name.trim().toLowerCase();
         if (name.length < 3) continue;
-        
+
         final found = saved.where((item) {
-          final itemName = item.productName.toLowerCase();
+          final itemName  = item.productName.toLowerCase();
           final nameWords = name.split(' ');
           final itemWords = itemName.split(' ');
-          
-          if (itemName.contains(name) || name.contains(itemName)) {
-            return true;
-          }
-          
+          if (itemName.contains(name) || name.contains(itemName)) return true;
           for (var word in nameWords) {
             if (word.length >= 3 && itemWords.any((iw) => iw.contains(word))) {
               return true;
             }
           }
-          
           return false;
         }).toList();
-        
+
         for (var item in found) {
-          if (!matches.any((m) => m.productName.toLowerCase() == item.productName.toLowerCase())) {
+          if (!matches.any((m) =>
+              m.productName.toLowerCase() ==
+              item.productName.toLowerCase())) {
             matches.add(item);
           }
         }
@@ -759,52 +790,57 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               title: Row(
                 children: [
                   Icon(Icons.search_off, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('No Matches Found'),
+                  const SizedBox(width: 8),
+                  const Text('No Matches Found'),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('We couldn\'t match your recipe ingredients to saved items.\n'),
-                  SizedBox(height: 12),
-                  Text('Recipe ingredients:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ...validIngredients.take(5).map((ing) => 
-                    Padding(
-                      padding: EdgeInsets.only(left: 8, top: 4),
-                      child: Text('• ${ing.name}'),
-                    )
-                  ),
+                  const Text(
+                      'We couldn\'t match your recipe ingredients to saved items.\n'),
+                  const SizedBox(height: 12),
+                  const Text('Recipe ingredients:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...validIngredients.take(5).map((ing) => Padding(
+                        padding: const EdgeInsets.only(left: 8, top: 4),
+                        child: Text('• ${ing.name}'),
+                      )),
                   if (validIngredients.length > 5)
                     Padding(
-                      padding: EdgeInsets.only(left: 8, top: 4),
-                      child: Text('... and ${validIngredients.length - 5} more'),
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child:
+                          Text('... and ${validIngredients.length - 5} more'),
                     ),
-                  SizedBox(height: 12),
-                  Text('You have ${saved.length} saved ingredient${saved.length == 1 ? '' : 's'}:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ...saved.take(3).map((item) => 
-                    Padding(
-                      padding: EdgeInsets.only(left: 8, top: 4),
-                      child: Text('• ${item.productName}'),
-                    )
+                  const SizedBox(height: 12),
+                  Text(
+                    'You have ${saved.length} saved '
+                    'ingredient${saved.length == 1 ? '' : 's'}:',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
+                  ...saved.take(3).map((item) => Padding(
+                        padding: const EdgeInsets.only(left: 8, top: 4),
+                        child: Text('• ${item.productName}'),
+                      )),
                   if (saved.length > 3)
                     Padding(
-                      padding: EdgeInsets.only(left: 8, top: 4),
+                      padding: const EdgeInsets.only(left: 8, top: 4),
                       child: Text('... and ${saved.length - 3} more'),
                     ),
                 ],
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: Text('OK')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK')),
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
                     Navigator.pushNamed(context, '/saved-ingredients');
                   },
-                  icon: Icon(Icons.bookmark),
-                  label: Text('View Saved'),
+                  icon: const Icon(Icons.bookmark),
+                  label: const Text('View Saved'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -826,7 +862,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Matched ${matches.length} ingredient${matches.length == 1 ? '' : 's'}!'),
+            content: Text(
+                '✅ Matched ${matches.length} ingredient${matches.length == 1 ? '' : 's'}!'),
             backgroundColor: Colors.orange,
             duration: const Duration(seconds: 2),
           ),
@@ -834,7 +871,10 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       }
     } catch (e) {
       if (mounted) {
-        await ErrorHandlingService.handleError(context: context, error: e, customMessage: 'Error analyzing nutrition');
+        await ErrorHandlingService.handleError(
+            context: context,
+            error: e,
+            customMessage: 'Error analyzing nutrition');
       }
     } finally {
       if (mounted) setState(() => _isAnalyzingNutrition = false);
@@ -843,28 +883,26 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   void _loadDraftForEditing(String name, Map<String, dynamic> draft) {
     setState(() {
-      _nameController.text = draft["name"] ?? '';
-      _directionsController.text = draft["directions"] ?? '';
+      _nameController.text        = draft["name"] ?? '';
+      _directionsController.text  = draft["directions"] ?? '';
       _descriptionController.text = draft["description"] ?? '';
-      
       try {
         final List<dynamic> parsed = jsonDecode(draft["ingredients"]);
         _ingredients = parsed.map((e) => IngredientRow.fromJson(e)).toList();
       } catch (e) {
         _ingredients = [IngredientRow(name: draft["ingredients"] ?? '')];
       }
-      
-      if (_ingredients.isEmpty) {
-        _ingredients = [IngredientRow()];
-      }
-      
+      if (_ingredients.isEmpty) _ingredients = [IngredientRow()];
       _loadedDraftName = name;
-      _isSaved = true;
-      _tabIndex = 0;
+      _isSaved   = true;
+      _tabIndex  = 0;
     });
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Loaded "$name" for editing'), backgroundColor: Colors.blue, duration: const Duration(seconds: 2)),
+      SnackBar(
+          content: Text('Loaded "$name" for editing'),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 2)),
     );
   }
 
@@ -875,7 +913,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         title: const Text('Delete Draft'),
         content: Text('Are you sure you want to delete "$name"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -884,14 +924,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         ],
       ),
     );
-    
+
     if (confirmed == true) {
       await LocalDraftService.deleteDraft(name);
       await _loadDrafts();
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted "$name"'), backgroundColor: Colors.orange),
+          SnackBar(
+              content: Text('Deleted "$name"'),
+              backgroundColor: Colors.orange),
         );
       }
     }
@@ -900,7 +941,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
   String _formatDateTime(dynamic timestamp) {
     try {
       if (timestamp == null) return 'Unknown';
-      
       DateTime date;
       if (timestamp is String) {
         date = DateTime.parse(timestamp);
@@ -909,10 +949,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       } else {
         return 'Unknown';
       }
-      
-      final now = DateTime.now();
+      final now  = DateTime.now();
       final diff = now.difference(date);
-      
       if (diff.inDays == 0) {
         if (diff.inHours == 0) return '${diff.inMinutes} min ago';
         return '${diff.inHours} hr ago';
@@ -937,22 +975,29 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDetailRow('Status', recipe['status'] ?? 'pending'),
-              _buildDetailRow('Submitted', _formatDateTime(recipe['submitted_at'])),
+              _buildDetailRow(
+                  'Submitted', _formatDateTime(recipe['submitted_at'])),
               if (recipe['approved_at'] != null)
-                _buildDetailRow('Approved', _formatDateTime(recipe['approved_at'])),
+                _buildDetailRow(
+                    'Approved', _formatDateTime(recipe['approved_at'])),
               if (recipe['views'] != null)
                 _buildDetailRow('Views', recipe['views'].toString()),
               if (recipe['rejection_reason'] != null) ...[
                 const SizedBox(height: 12),
-                const Text('Rejection Reason:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                const Text('Rejection Reason:',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.red)),
                 const SizedBox(height: 4),
-                Text(recipe['rejection_reason'], style: const TextStyle(color: Colors.red)),
+                Text(recipe['rejection_reason'],
+                    style: const TextStyle(color: Colors.red)),
               ],
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close')),
         ],
       ),
     );
@@ -962,7 +1007,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     switch (status.toLowerCase()) {
       case 'approved': return Colors.orange;
       case 'rejected': return Colors.red;
-      default: return Colors.orange;
+      default:         return Colors.orange;
     }
   }
 
@@ -970,7 +1015,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     switch (status.toLowerCase()) {
       case 'approved': return Icons.check_circle;
       case 'rejected': return Icons.cancel;
-      default: return Icons.pending;
+      default:         return Icons.pending;
     }
   }
 
@@ -981,9 +1026,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 80,
-            child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
+              width: 80,
+              child: Text('$label:',
+                  style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(child: Text(value)),
         ],
       ),
@@ -1029,13 +1074,12 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             children: [
               Icon(Icons.bookmark_border, size: 64, color: Colors.grey.shade400),
               const SizedBox(height: 16),
-              const Text("No drafts saved yet", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text('No drafts saved yet',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                "Save your recipes as drafts to edit them later",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              ),
+              Text('Save your recipes as drafts to edit them later',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
             ],
           ),
         ),
@@ -1060,27 +1104,30 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               ),
               child: Icon(Icons.receipt_long, color: Colors.orange.shade700),
             ),
-            title: Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            title: Text(name,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
-                Text(
-                  "Last updated: ${_formatDateTime(draft["updated_at"])}",
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
+                Text('Last updated: ${_formatDateTime(draft["updated_at"])}',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600)),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.blue.shade200),
                   ),
-                  child: Text(
-                    'DRAFT',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
-                  ),
+                  child: Text('DRAFT',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700)),
                 ),
               ],
             ),
@@ -1109,11 +1156,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
   Widget _buildSubmittedList() {
     if (_isLoadingSubmitted) {
       return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: CircularProgressIndicator(),
-        ),
-      );
+          child: Padding(
+              padding: EdgeInsets.all(40),
+              child: CircularProgressIndicator()));
     }
 
     if (_submittedRecipes.isEmpty) {
@@ -1130,19 +1175,14 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             children: [
               Icon(Icons.send_outlined, size: 64, color: Colors.grey.shade400),
               const SizedBox(height: 16),
-              const Text(
-                "No submitted recipes yet",
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              const Text('No submitted recipes yet',
+                  style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                "Submit a recipe to see it here",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              ),
+              Text('Submit a recipe to see it here',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 14, color: Colors.grey.shade600)),
             ],
           ),
         ),
@@ -1152,16 +1192,15 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     return ListView(
       padding: const EdgeInsets.all(10),
       children: _submittedRecipes.map((recipe) {
-        final status = recipe['status'] ?? 'pending';
+        final status      = recipe['status'] ?? 'pending';
         final statusColor = _getStatusColor(status);
-        final statusIcon = _getStatusIcon(status);
-        
+        final statusIcon  = _getStatusIcon(status);
+
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+              borderRadius: BorderRadius.circular(12)),
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: Container(
@@ -1172,23 +1211,22 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               ),
               child: Icon(statusIcon, color: statusColor),
             ),
-            title: Text(
-              recipe['title'] ?? 'Untitled',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
+            title: Text(recipe['title'] ?? 'Untitled',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
                 Text(
-                  "Submitted: ${_formatDateTime(recipe['submitted_at'])}",
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
+                    'Submitted: ${_formatDateTime(recipe['submitted_at'])}',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
@@ -1197,20 +1235,19 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                       child: Text(
                         status.toUpperCase(),
                         style: TextStyle(
-                          fontSize: 10,
-                          color: statusColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                            fontSize: 10,
+                            color: statusColor,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                     if (recipe['views'] != null) ...[
                       const SizedBox(width: 8),
-                      Icon(Icons.visibility, size: 14, color: Colors.grey.shade600),
+                      Icon(Icons.visibility,
+                          size: 14, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
-                      Text(
-                        '${recipe['views']}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                      ),
+                      Text('${recipe['views']}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600)),
                     ],
                   ],
                 ),
@@ -1226,7 +1263,6 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
 
   Widget _buildIngredientRow(int index) {
     final ingredient = _ingredients[index];
-    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -1244,11 +1280,14 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               decoration: InputDecoration(
                 labelText: 'Qty',
                 hintText: '1',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
                 isDense: true,
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               onChanged: (value) => ingredient.quantity = value,
             ),
           ),
@@ -1261,8 +1300,10 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     decoration: InputDecoration(
                       labelText: 'Custom Unit',
                       hintText: 'e.g., handful',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       isDense: true,
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.close, size: 16),
@@ -1275,19 +1316,23 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                         tooltip: 'Back to dropdown',
                       ),
                     ),
-                    onChanged: (value) {
-                      setState(() => ingredient.customMeasurement = value);
-                    },
+                    onChanged: (value) =>
+                        setState(() => ingredient.customMeasurement = value),
                   )
                 : DropdownButtonFormField<String>(
                     value: ingredient.measurement,
                     decoration: InputDecoration(
                       labelText: 'Unit',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       isDense: true,
                     ),
-                    items: _measurements.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                    items: _measurements
+                        .map((m) =>
+                            DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
                     onChanged: (value) {
                       setState(() {
                         ingredient.measurement = value!;
@@ -1306,13 +1351,16 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               decoration: InputDecoration(
                 labelText: 'Ingredient',
                 hintText: 'flour',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
                 isDense: true,
               ),
               onChanged: (value) => ingredient.name = value,
               validator: (value) {
-                if (ingredient.quantity.isNotEmpty && (value == null || value.trim().isEmpty)) {
+                if (ingredient.quantity.isNotEmpty &&
+                    (value == null || value.trim().isEmpty)) {
                   return 'Required';
                 }
                 return null;
@@ -1322,7 +1370,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.remove_circle, color: Colors.red),
-            onPressed: _ingredients.length > 1 ? () => _removeIngredientRow(index) : null,
+            onPressed: _ingredients.length > 1
+                ? () => _removeIngredientRow(index)
+                : null,
             tooltip: 'Remove',
           ),
         ],
@@ -1350,7 +1400,11 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             children: [
               Icon(_getIconForField(label), color: Colors.orange, size: 20),
               const SizedBox(width: 8),
-              Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87)),
             ],
           ),
           const SizedBox(height: 12),
@@ -1366,7 +1420,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.orange, width: 2),
+                borderSide:
+                    const BorderSide(color: Colors.orange, width: 2),
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -1387,15 +1442,16 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     switch (label) {
       case 'Recipe Name': return Icons.restaurant;
       case 'Ingredients': return Icons.list_alt;
-      case 'Directions': return Icons.description;
-      default: return Icons.edit;
+      case 'Directions':  return Icons.description;
+      default:            return Icons.edit;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+          body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -1406,16 +1462,18 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
       ),
       body: Stack(
         children: [
-          Positioned.fill(child: Image.asset('assets/background.jpeg', fit: BoxFit.cover)),
+          Positioned.fill(
+              child: Image.asset('assets/background.jpeg',
+                  fit: BoxFit.cover)),
           Column(
             children: [
               Container(
                 color: Colors.white.withOpacity(0.9),
                 child: Row(
                   children: [
-                    _buildTabButton("Submit Recipe", 0),
-                    _buildTabButton("Saved Drafts", 1),
-                    _buildTabButton("Submitted", 2),
+                    _buildTabButton('Submit Recipe', 0),
+                    _buildTabButton('Saved Drafts', 1),
+                    _buildTabButton('Submitted', 2),
                   ],
                 ),
               ),
@@ -1440,31 +1498,31 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
         key: _formKey,
         child: Column(
           children: [
-            // Header
+            // ── Header ──────────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white.withAlpha(230),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Column(
+              child: const Column(
                 children: [
-                  Icon(Icons.add_circle_outline, size: 48, color: Colors.orange),
-                  const SizedBox(height: 12),
-                  const Text(
+                  Icon(Icons.add_circle_outline,
+                      size: 48, color: Colors.orange),
+                  SizedBox(height: 12),
+                  Text(
                     'Share Your Recipe',
                     style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
 
+            // ── Recipe Name ─────────────────────────────────────────────
             _buildTextField(
               controller: _nameController,
               label: 'Recipe Name',
@@ -1479,9 +1537,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                 return null;
               },
             ),
-
             const SizedBox(height: 20),
 
+            // ── Description (optional) ──────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1491,18 +1549,16 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      Icon(Icons.description, color: Colors.orange, size: 20),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Description (Optional)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      Icon(Icons.description,
+                          color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Text('Description (Optional)',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87)),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -1510,15 +1566,19 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     controller: _descriptionController,
                     maxLines: 3,
                     decoration: InputDecoration(
-                      hintText: 'Tell us about this recipe... When did you develop it? What makes it special?',
-                      hintStyle: TextStyle(color: Colors.grey.shade600),
+                      hintText:
+                          'Tell us about this recipe... When did you develop it? What makes it special?',
+                      hintStyle:
+                          TextStyle(color: Colors.grey.shade600),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide:
+                            BorderSide(color: Colors.grey.shade300),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Colors.orange, width: 2),
+                        borderSide: const BorderSide(
+                            color: Colors.orange, width: 2),
                       ),
                       contentPadding: const EdgeInsets.all(12),
                       filled: true,
@@ -1529,18 +1589,16 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                   Text(
                     'Share the story behind this recipe or any special notes',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                      fontStyle: FontStyle.italic,
-                    ),
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
 
-            // Structured Ingredients Section
+            // ── Structured Ingredients ──────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1550,28 +1608,22 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.list_alt, color: Colors.orange, size: 20),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Ingredients',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      Icon(Icons.list_alt, color: Colors.orange, size: 20),
+                      SizedBox(width: 8),
+                      Text('Ingredients',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87)),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
-                  // Ingredient rows
-                  ..._ingredients.asMap().entries.map((entry) {
-                    return _buildIngredientRow(entry.key);
-                  }),
-                  
-                  // Add ingredient button
+                  ..._ingredients
+                      .asMap()
+                      .entries
+                      .map((entry) => _buildIngredientRow(entry.key)),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
@@ -1582,16 +1634,17 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.orange,
                         side: const BorderSide(color: Colors.orange),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
 
+            // ── Directions ──────────────────────────────────────────────
             _buildTextField(
               controller: _directionsController,
               label: 'Directions',
@@ -1607,10 +1660,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                 return null;
               },
             ),
-
             const SizedBox(height: 20),
 
-            // 🔥 NEW: Recipe Nutrition Section with TABBED VIEW
+            // ── Recipe Nutrition (Tabbed) ───────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1620,21 +1672,17 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.analytics, color: Colors.orange, size: 22),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Recipe Nutrition (Saved Ingredients)',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
+                      Icon(Icons.analytics, color: Colors.orange, size: 22),
+                      SizedBox(width: 8),
+                      Text('Recipe Nutrition (Saved Ingredients)',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87)),
                     ],
                   ),
-
                   const SizedBox(height: 8),
                   const Text(
                     'We will try to match saved ingredients to your list and estimate total nutrition.',
@@ -1647,32 +1695,38 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton.icon(
-                      onPressed: _isAnalyzingNutrition ? null : _analyzeRecipeNutrition,
+                      onPressed: _isAnalyzingNutrition
+                          ? null
+                          : _analyzeRecipeNutrition,
                       icon: _isAnalyzingNutrition
                           ? const SizedBox(
                               width: 18,
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white),
                               ),
                             )
                           : const Icon(Icons.calculate),
                       label: Text(
-                        _isAnalyzingNutrition ? 'Analyzing...' : 'Analyze Recipe Nutrition',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                        _isAnalyzingNutrition
+                            ? 'Analyzing...'
+                            : 'Analyze Recipe Nutrition',
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange.shade700,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 12),
 
-                  // Matched ingredient list
+                  // Matched ingredient chips
                   if (_matchedNutritionIngredients.isNotEmpty) ...[
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -1686,29 +1740,29 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.check_circle, size: 16, color: Colors.orange.shade700),
+                              Icon(Icons.check_circle,
+                                  size: 16,
+                                  color: Colors.orange.shade700),
                               const SizedBox(width: 6),
                               Text(
-                                'Matched ${_matchedNutritionIngredients.length} ingredient${_matchedNutritionIngredients.length == 1 ? '' : 's'}:',
+                                'Matched ${_matchedNutritionIngredients.length} '
+                                'ingredient${_matchedNutritionIngredients.length == 1 ? '' : 's'}:',
                                 style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.orange.shade900,
-                                ),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.orange.shade900),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           ..._matchedNutritionIngredients.map(
                             (n) => Padding(
-                              padding: const EdgeInsets.only(left: 8, top: 2),
-                              child: Text(
-                                '• ${n.productName}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange.shade800,
-                                ),
-                              ),
+                              padding:
+                                  const EdgeInsets.only(left: 8, top: 2),
+                              child: Text('• ${n.productName}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800)),
                             ),
                           ),
                         ],
@@ -1717,13 +1771,12 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     const SizedBox(height: 16),
                   ],
 
-                  // 🔥 NEW: Tabbed Nutrition Display
+                  // Tabbed nutrition display
                   if (_recipeNutrition != null) ...[
                     DefaultTabController(
                       length: 2,
                       child: Column(
                         children: [
-                          // Tab Bar
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
@@ -1734,115 +1787,149 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                               unselectedLabelColor: Colors.grey.shade600,
                               indicatorColor: Colors.orange,
                               indicatorWeight: 3,
-                              tabs: [
+                              tabs: const [
                                 Tab(
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
                                     children: [
                                       Icon(Icons.summarize, size: 16),
                                       SizedBox(width: 6),
-                                      Text('Summary', style: TextStyle(fontSize: 13)),
+                                      Text('Summary',
+                                          style:
+                                              TextStyle(fontSize: 13)),
                                     ],
                                   ),
                                 ),
                                 Tab(
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.restaurant_menu, size: 16),
+                                      Icon(Icons.restaurant_menu,
+                                          size: 16),
                                       SizedBox(width: 6),
-                                      Text('Full Label', style: TextStyle(fontSize: 13)),
+                                      Text('Full Label',
+                                          style:
+                                              TextStyle(fontSize: 13)),
                                     ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          
                           const SizedBox(height: 12),
-                          
-                          // Tab Views
                           SizedBox(
                             height: 450,
                             child: TabBarView(
                               children: [
-                                // Tab 1: Summary (existing display)
+                                // Tab 1: Summary
                                 SingleChildScrollView(
-                                  child: RecipeNutritionDisplay(nutrition: _recipeNutrition!),
+                                  child: RecipeNutritionDisplay(
+                                      nutrition: _recipeNutrition!),
                                 ),
-                                
-                                // Tab 2: Full FDA Label with Insights
+                                // Tab 2: Full FDA Label + Profile
                                 SingleChildScrollView(
                                   child: Column(
                                     children: [
                                       NutritionFactsLabel(
-                                        nutrition: _convertRecipeNutritionToInfo(_recipeNutrition!),
+                                        nutrition:
+                                            _convertRecipeNutritionToInfo(
+                                                _recipeNutrition!),
                                         showbariScore: true,
                                       ),
-                                      
                                       const SizedBox(height: 12),
-                                      
-                                      // Nutrition quality indicators
                                       Container(
-                                        padding: const EdgeInsets.all(12),
+                                        padding:
+                                            const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
                                           color: Colors.blue.shade50,
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: Colors.blue.shade200),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                              color:
+                                                  Colors.blue.shade200),
                                         ),
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
-                                                Icon(Icons.eco, size: 16, color: Colors.blue.shade700),
+                                                Icon(Icons.eco,
+                                                    size: 16,
+                                                    color: Colors
+                                                        .blue.shade700),
                                                 const SizedBox(width: 6),
                                                 Text(
                                                   'Recipe Profile',
                                                   style: TextStyle(
                                                     fontSize: 13,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.blue.shade900,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                    color: Colors
+                                                        .blue.shade900,
                                                   ),
                                                 ),
                                               ],
                                             ),
                                             const SizedBox(height: 8),
-                                            
-                                            // Dietary labels
                                             Wrap(
                                               spacing: 6,
                                               runSpacing: 6,
                                               children: [
-                                                if (RecipeNutritionService.isHighProtein(_recipeNutrition!))
-                                                  _buildBadge('High Protein', Colors.blue),
-                                                if (RecipeNutritionService.isLowCarb(_recipeNutrition!))
-                                                  _buildBadge('Low Carb', Colors.orange),
-                                                if (RecipeNutritionService.isLowFat(_recipeNutrition!))
-                                                  _buildBadge('Low Fat', Colors.purple),
-                                                if (RecipeNutritionService.isLowSugar(_recipeNutrition!))
-                                                  _buildBadge('Low Sugar', Colors.green),
-                                                if (RecipeNutritionService.isBariatricFriendly(_recipeNutrition!))
-                                                  _buildBadge('Bariatric Friendly', Colors.red),
+                                                if (RecipeNutritionService
+                                                    .isHighProtein(
+                                                        _recipeNutrition!))
+                                                  _buildBadge('High Protein',
+                                                      Colors.blue),
+                                                if (RecipeNutritionService
+                                                    .isLowCarb(
+                                                        _recipeNutrition!))
+                                                  _buildBadge('Low Carb',
+                                                      Colors.orange),
+                                                if (RecipeNutritionService
+                                                    .isLowFat(
+                                                        _recipeNutrition!))
+                                                  _buildBadge('Low Fat',
+                                                      Colors.purple),
+                                                if (RecipeNutritionService
+                                                    .isLowSugar(
+                                                        _recipeNutrition!))
+                                                  _buildBadge('Low Sugar',
+                                                      Colors.green),
+                                                if (RecipeNutritionService
+                                                    .isBariatricFriendly(
+                                                        _recipeNutrition!))
+                                                  _buildBadge(
+                                                      'Bariatric Friendly',
+                                                      Colors.red),
                                               ],
                                             ),
-
-                                            // Health warnings
-                                            if (RecipeNutritionService.getBariatricWarnings(_recipeNutrition!).isNotEmpty) ...[
+                                            if (RecipeNutritionService
+                                                .getBariatricWarnings(
+                                                    _recipeNutrition!)
+                                                .isNotEmpty) ...[
                                               const SizedBox(height: 12),
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding:
+                                                    const EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
                                                   color: Colors.orange.shade50,
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: Colors.orange.shade200),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                      color: Colors.orange.shade200),
                                                 ),
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Row(
                                                       children: [
-                                                        Icon(Icons.warning_amber, size: 14, color: Colors.orange.shade700),
+                                                        Icon(Icons.warning_amber,
+                                                            size: 14,
+                                                            color: Colors.orange.shade700),
                                                         const SizedBox(width: 4),
                                                         Text(
                                                           'Health Notes:',
@@ -1855,39 +1942,49 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                                                       ],
                                                     ),
                                                     const SizedBox(height: 4),
-                                                    ...RecipeNutritionService.getBariatricWarnings(_recipeNutrition!).map(
-                                                      (warning) => Padding(
-                                                        padding: const EdgeInsets.only(left: 8, top: 2),
-                                                        child: Text(
-                                                          '• $warning',
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: Colors.orange.shade800,
+                                                    ...RecipeNutritionService
+                                                        .getBariatricWarnings(
+                                                            _recipeNutrition!)
+                                                        .map(
+                                                          (w) => Padding(
+                                                            padding: const EdgeInsets.only(
+                                                                left: 8, top: 2),
+                                                            child: Text(
+                                                              '• $w',
+                                                              style: TextStyle(
+                                                                  fontSize: 10,
+                                                                  color: Colors.orange.shade800),
+                                                            ),
                                                           ),
                                                         ),
-                                                      ),
-                                                    ),
                                                   ],
                                                 ),
                                               ),
                                             ],
-                                            
-                                            // Health benefits
-                                            if (RecipeNutritionService.getHealthBenefits(_recipeNutrition!).isNotEmpty) ...[
+                                            if (RecipeNutritionService
+                                                .getHealthBenefits(
+                                                    _recipeNutrition!)
+                                                .isNotEmpty) ...[
                                               const SizedBox(height: 12),
                                               Container(
-                                                padding: const EdgeInsets.all(8),
+                                                padding:
+                                                    const EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
                                                   color: Colors.orange.shade50,
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  border: Border.all(color: Colors.orange.shade200),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  border: Border.all(
+                                                      color: Colors.orange.shade200),
                                                 ),
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Row(
                                                       children: [
-                                                        Icon(Icons.thumb_up, size: 14, color: Colors.orange.shade700),
+                                                        Icon(Icons.thumb_up,
+                                                            size: 14,
+                                                            color: Colors.orange.shade700),
                                                         const SizedBox(width: 4),
                                                         Text(
                                                           'Benefits:',
@@ -1900,18 +1997,21 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                                                       ],
                                                     ),
                                                     const SizedBox(height: 4),
-                                                    ...RecipeNutritionService.getHealthBenefits(_recipeNutrition!).map(
-                                                      (benefit) => Padding(
-                                                        padding: const EdgeInsets.only(left: 8, top: 2),
-                                                        child: Text(
-                                                          '• $benefit',
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: Colors.orange.shade800,
+                                                    ...RecipeNutritionService
+                                                        .getHealthBenefits(
+                                                            _recipeNutrition!)
+                                                        .map(
+                                                          (b) => Padding(
+                                                            padding: const EdgeInsets.only(
+                                                                left: 8, top: 2),
+                                                            child: Text(
+                                                              '• $b',
+                                                              style: TextStyle(
+                                                                  fontSize: 10,
+                                                                  color: Colors.orange.shade800),
+                                                            ),
                                                           ),
                                                         ),
-                                                      ),
-                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -1928,10 +2028,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                         ],
                       ),
                     ),
-                    
                     const SizedBox(height: 12),
                   ],
-                  
+
                   // Disclaimer
                   if (_recipeNutrition != null)
                     Container(
@@ -1944,17 +2043,17 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.info_outline, size: 14, color: Colors.grey.shade700),
+                          Icon(Icons.info_outline,
+                              size: 14, color: Colors.grey.shade700),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "🛈 This is an estimate based on your saved ingredients. "
-                              "Accuracy depends on the items you have saved.",
+                              '🛈 This is an estimate based on your saved ingredients. '
+                              'Accuracy depends on the items you have saved.',
                               style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade700,
-                                fontStyle: FontStyle.italic,
-                              ),
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                  fontStyle: FontStyle.italic),
                             ),
                           ),
                         ],
@@ -1963,10 +2062,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
 
-            // BUTTONS SECTION
+            // ── Action Buttons ──────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1975,7 +2073,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
               ),
               child: Column(
                 children: [
-                  // Show which draft is being edited
+                  // Editing-draft banner
                   if (_loadedDraftName != null) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1986,27 +2084,23 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.edit_note, color: Colors.blue.shade700),
+                          Icon(Icons.edit_note,
+                              color: Colors.blue.shade700),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Editing Draft',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  _loadedDraftName!,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.blue.shade900,
-                                  ),
-                                ),
+                                Text('Editing Draft',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade700,
+                                        fontWeight: FontWeight.bold)),
+                                Text(_loadedDraftName!,
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.blue.shade900)),
                               ],
                             ),
                           ),
@@ -2015,25 +2109,42 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                     ),
                     const SizedBox(height: 12),
                   ],
-                  
+
+                  // Save draft + Grocery list row
                   Row(
                     children: [
                       Expanded(
                         child: SizedBox(
                           height: 54,
                           child: ElevatedButton.icon(
-                            onPressed: isSubmitting ? null : (_loadedDraftName != null ? _updateDraft : _saveRecipe),
-                            icon: Icon(_isSaved ? Icons.check_circle : Icons.save, size: 20),
+                            onPressed: isSubmitting
+                                ? null
+                                : (_loadedDraftName != null
+                                    ? _updateDraft
+                                    : _saveRecipe),
+                            icon: Icon(
+                                _isSaved
+                                    ? Icons.check_circle
+                                    : Icons.save,
+                                size: 20),
                             label: Text(
-                              _isSaved 
-                                  ? 'Saved!' 
-                                  : (_loadedDraftName != null ? 'Update Draft' : 'Save Draft'),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              _isSaved
+                                  ? 'Saved!'
+                                  : (_loadedDraftName != null
+                                      ? 'Update Draft'
+                                      : 'Save Draft'),
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _isSaved ? Colors.orange.shade700 : Colors.blue,
+                              backgroundColor: _isSaved
+                                  ? Colors.orange.shade700
+                                  : Colors.blue,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(8)),
                             ),
                           ),
                         ),
@@ -2043,25 +2154,29 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                         child: SizedBox(
                           height: 54,
                           child: ElevatedButton.icon(
-                            onPressed: isSubmitting ? null : _addToGroceryList,
-                            icon: const Icon(Icons.add_shopping_cart, size: 20),
-                            label: const Text(
-                              'Grocery List',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
+                            onPressed:
+                                isSubmitting ? null : _addToGroceryList,
+                            icon: const Icon(Icons.add_shopping_cart,
+                                size: 20),
+                            label: const Text('Grocery List',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.purple,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(8)),
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
 
+                  // Submit to community
                   SizedBox(
                     width: double.infinity,
                     height: 54,
@@ -2073,24 +2188,30 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
                               ),
                             )
                           : const Icon(Icons.send, size: 20),
                       label: Text(
-                        isSubmitting ? 'Submitting...' : 'Submit to Community',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        isSubmitting
+                            ? 'Submitting...'
+                            : 'Submit to Community',
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 12),
 
+                  // Cancel / Discard
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -2106,11 +2227,12 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                                   builder: (context) => AlertDialog(
                                     title: const Text('Discard Changes?'),
                                     content: const Text(
-                                      'You have unsaved changes. Are you sure you want to discard them?'
-                                    ),
+                                        'You have unsaved changes. '
+                                        'Are you sure you want to discard them?'),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(context),
+                                        onPressed: () =>
+                                            Navigator.pop(context),
                                         child: const Text('Keep Editing'),
                                       ),
                                       TextButton(
@@ -2118,7 +2240,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                                           Navigator.pop(context);
                                           Navigator.pop(context);
                                         },
-                                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor: Colors.red),
                                         child: const Text('Discard'),
                                       ),
                                     ],
@@ -2130,7 +2253,8 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                             },
                       icon: const Icon(Icons.cancel_outlined),
                       label: const Text('Cancel'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                      style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey),
                     ),
                   ),
                 ],

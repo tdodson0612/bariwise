@@ -9,6 +9,7 @@ import '../services/profile_service.dart';
 import '../services/auth_service.dart';
 import '../services/error_handling_service.dart';
 import '../services/saved_ingredients_service.dart';
+import '../services/recent_activity_tracker.dart';
 import '../models/tracker_entry.dart';
 import '../models/nutrition_info.dart';
 import '../barihealthbar.dart';
@@ -16,6 +17,7 @@ import '../config/app_config.dart';
 import '../widgets/premium_gate.dart';
 import '../controllers/premium_gate_controller.dart';
 import '../utils/height_utils.dart';
+import '../services/bari_snapshot_sync.dart';
 
 class TrackerPage extends StatefulWidget {
   const TrackerPage({super.key});
@@ -60,6 +62,7 @@ class _TrackerPageState extends State<TrackerPage> {
     super.initState();
     _initializePremiumController();
     _checkDisclaimerAndLoad();
+    RecentActivityTracker.recordScreen(label: 'Tracker', route: '/tracker');
   }
 
   @override
@@ -390,6 +393,9 @@ class _TrackerPageState extends State<TrackerPage> {
 
       AppConfig.debugPrint('📝 Saving entry...');
       await TrackerService.saveEntry(userId, entry);
+
+      // ── Sync to Supabase dashboard (best-effort, non-fatal) ──
+      await BariSnapshotSync.syncEntry(userId, entry);
 
       AppConfig.debugPrint('🔄 Auto-filling missing weights...');
       await TrackerService.autoFillMissingWeights(userId);
@@ -791,7 +797,6 @@ class _TrackerPageState extends State<TrackerPage> {
                     await ProfileService.updateHeightUnitPreference(
                         uid, heightSystem);
 
-                    // Verify it was saved
                     final savedHeight =
                         await ProfileService.getHeight(uid);
                     final savedPreference =
@@ -1701,7 +1706,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
     'mg', 'mcg', 'g', 'IU', 'ml', 'capsule(s)', 'tablet(s)', 'tsp', 'tbsp',
   ];
 
-  // Common bariatric post-surgery supplements for quick fill
   final List<String> _commonSupplements = [
     'Multivitamin',
     'Calcium Citrate',
@@ -1766,7 +1770,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Quick-fill chips
             Text(
               'Common bariatric supplements:',
               style: TextStyle(
@@ -1805,8 +1808,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-
-            // Name field
             TextField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
@@ -1819,8 +1820,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
-
-            // Amount + unit row
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1864,8 +1863,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
               ],
             ),
             const SizedBox(height: 16),
-
-            // Notes field
             TextField(
               controller: _notesController,
               textCapitalization: TextCapitalization.sentences,

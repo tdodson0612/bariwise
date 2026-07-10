@@ -1,4 +1,23 @@
-// lib/services/error_handling_service.dart - IMPROVED: iPad-friendly, user-friendly error handling
+// lib/services/error_handling_service.dart
+//
+// Centralized error handling service for the entire app.
+// Apple-compliant: No technical jargon, user-friendly messages, retry options.
+//
+// 🔧 FIX: _isAuthError() was matching on 'token', 'session', and 'expired'
+//    which are common substrings that appear in many unrelated Supabase /
+//    HTTP error messages. This caused profile-creation failures, network
+//    errors, and other non-auth errors to be misclassified, surfacing the
+//    "Hmm, who are you?" dialog when the user hadn't done anything wrong.
+//
+//    The fix:
+//      • _isAuthError() now requires more specific auth signals
+//        (HTTP 401/403 codes, or explicit Supabase auth phrases).
+//      • A dedicated _isProfileSetupError() category was added for the
+//        signup profile-creation failure path.
+//      • _isDatabaseError() no longer matches 'fetch' or 'query' — too broad.
+//      • _isImageError() no longer matches 'image' or 'photo' — too broad.
+//      • _isAdError() no longer matches bare 'ad' — too broad.
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,16 +25,16 @@ import 'dart:convert';
 import '../logger.dart';
 import '../widgets/bari_error_overlay.dart';
 
-/// Centralized error handling service for the entire app
-/// Apple-compliant: No technical jargon, user-friendly messages, retry options
 class ErrorHandlingService {
-  static final ErrorHandlingService _instance = ErrorHandlingService._internal();
+  static final ErrorHandlingService _instance =
+      ErrorHandlingService._internal();
   factory ErrorHandlingService() => _instance;
   ErrorHandlingService._internal();
 
-  // Error categories
+  // Error category constants
   static const String networkError = 'NETWORK_ERROR';
   static const String authError = 'AUTH_ERROR';
+  static const String profileSetupError = 'PROFILE_SETUP_ERROR';
   static const String premiumError = 'PREMIUM_ERROR';
   static const String databaseError = 'DATABASE_ERROR';
   static const String scanError = 'SCAN_ERROR';
@@ -26,8 +45,10 @@ class ErrorHandlingService {
   static const String navigationError = 'NAVIGATION_ERROR';
   static const String unknownError = 'UNKNOWN_ERROR';
 
-  /// Handle error and show appropriate UI response
-  /// Apple-friendly: Clean, simple, actionable messages
+  // --------------------------------------------------------
+  // MAIN ENTRY POINT
+  // --------------------------------------------------------
+
   static Future<void> handleError({
     required BuildContext context,
     required dynamic error,
@@ -40,13 +61,10 @@ class ErrorHandlingService {
   }) async {
     try {
       final errorInfo = _categorizeError(error, category);
-      
-      // Log error for debugging (dev only, not shown to users)
       await _logError(errorInfo, error);
-      
+
       if (!context.mounted) return;
 
-      // Show user-friendly dialog or snackbar
       if (showDialog) {
         _showErrorDialog(
           context: context,
@@ -56,7 +74,7 @@ class ErrorHandlingService {
           onCancel: onCancel,
         );
       }
-      
+
       if (showSnackBar) {
         _showErrorSnackBar(
           context: context,
@@ -65,25 +83,25 @@ class ErrorHandlingService {
         );
       }
     } catch (e) {
-      // Ultimate fallback - simple, clean message
-      if (kDebugMode) {
-        debugPrint('Error handler failed: $e');
-      }
-      if (context.mounted) {
-        _showFallbackError(context);
-      }
+      if (kDebugMode) debugPrint('Error handler failed: $e');
+      if (context.mounted) _showFallbackError(context);
     }
   }
 
-  static ErrorInfo _categorizeError(dynamic error, String? category) {
-    final errorString = error.toString().toLowerCase();
+  // --------------------------------------------------------
+  // ERROR CATEGORIZATION
+  // --------------------------------------------------------
 
-    // Network/Connection issues
-    if (_isNetworkError(errorString) || category == networkError) {
+  static ErrorInfo _categorizeError(dynamic error, String? category) {
+    final s = error.toString().toLowerCase();
+
+    // Network / connection issues — check first (broad but safe)
+    if (_isNetworkError(s) || category == networkError) {
       return ErrorInfo(
         category: networkError,
         title: 'Oopsie! Lost connection',
-        message: 'Looks like the internet got shy! Can you check your WiFi?',
+        message:
+            'Looks like the internet got shy! Can you check your WiFi?',
         userMessage: 'I need the internet to help you stay healthy! 🌐',
         icon: Icons.wifi_off_rounded,
         color: Colors.orange,
@@ -92,13 +110,17 @@ class ErrorHandlingService {
       );
     }
 
-    // Authentication
-    if (_isAuthError(errorString) || category == authError) {
+    // ⚠️ Auth errors — must be SPECIFIC.
+    // Do NOT match generic words like 'failed', 'error', 'token', 'session'.
+    // Those appear in database, network, and profile errors too.
+    if (_isAuthError(s) || category == authError) {
       return ErrorInfo(
         category: authError,
         title: 'Hmm, who are you?',
-        message: 'I don\'t recognize you! Let\'s log in again so I know it\'s really you.',
-        userMessage: 'Your login might have timed out - happens to the best of us! 😊',
+        message:
+            'I don\'t recognize you! Let\'s log in again so I know it\'s really you.',
+        userMessage:
+            'Your login might have timed out - happens to the best of us! 😊',
         icon: Icons.lock_outline_rounded,
         color: Colors.blue,
         canRetry: false,
@@ -107,12 +129,31 @@ class ErrorHandlingService {
       );
     }
 
+    // Profile setup errors (signup only)
+    if (_isProfileSetupError(s) || category == profileSetupError) {
+      return ErrorInfo(
+        category: profileSetupError,
+        title: 'Almost there!',
+        message:
+            'Your account was created but we had trouble finishing setup. '
+            'Please sign in and we\'ll sort it out!',
+        userMessage:
+            'If this keeps happening, try the "Clear Session" button on the login screen. 🔄',
+        icon: Icons.person_add_alt_1_rounded,
+        color: Colors.teal,
+        canRetry: false,
+        redirectRoute: '/login',
+        isUserFacingError: true,
+      );
+    }
+
     // Premium features
-    if (_isPremiumError(errorString) || category == premiumError) {
+    if (_isPremiumError(s) || category == premiumError) {
       return ErrorInfo(
         category: premiumError,
         title: 'This is a VIP feature!',
-        message: 'Want unlimited scans? Upgrade to Premium and I\'ll be your personal health buddy! ⭐',
+        message:
+            'Want unlimited scans? Upgrade to Premium and I\'ll be your personal health buddy! ⭐',
         userMessage: 'Premium unlocks ALL my best features!',
         icon: Icons.star_rounded,
         color: Colors.amber,
@@ -122,12 +163,13 @@ class ErrorHandlingService {
       );
     }
 
-    // Database/sync issues
-    if (_isDatabaseError(errorString) || category == databaseError) {
+    // Database / sync issues
+    if (_isDatabaseError(s) || category == databaseError) {
       return ErrorInfo(
         category: databaseError,
         title: 'Uh oh, sync hiccup!',
-        message: 'I tried to grab your data but got a little mixed up. Let\'s try that again!',
+        message:
+            'I tried to grab your data but got a little mixed up. Let\'s try that again!',
         userMessage: 'Sometimes I need a second to catch my breath! 💨',
         icon: Icons.sync_problem_rounded,
         color: Colors.red.shade400,
@@ -136,12 +178,13 @@ class ErrorHandlingService {
       );
     }
 
-    // Barcode scanning issues
-    if (_isScanError(errorString) || category == scanError) {
+    // Barcode scanning
+    if (_isScanError(s) || category == scanError) {
       return ErrorInfo(
         category: scanError,
         title: 'Couldn\'t read that!',
-        message: 'That barcode was a bit blurry for me! Try again with better lighting?',
+        message:
+            'That barcode was a bit blurry for me! Try again with better lighting?',
         userMessage: 'Make sure the barcode is nice and clear - I\'m trying my best! 🔍',
         icon: Icons.qr_code_scanner_rounded,
         color: Colors.purple,
@@ -150,12 +193,13 @@ class ErrorHandlingService {
       );
     }
 
-    // Camera/image issues
-    if (_isImageError(errorString) || category == imageError) {
+    // Camera / image
+    if (_isImageError(s) || category == imageError) {
       return ErrorInfo(
         category: imageError,
         title: 'Camera shy?',
-        message: 'I need to use your camera, but it\'s blocked! Can you let me in through Settings?',
+        message:
+            'I need to use your camera, but it\'s blocked! Can you let me in through Settings?',
         userMessage: 'Pretty please? I promise to only take healthy pics! 📸',
         icon: Icons.camera_alt_rounded,
         color: Colors.indigo,
@@ -166,7 +210,7 @@ class ErrorHandlingService {
     }
 
     // Ad loading (silent)
-    if (_isAdError(errorString) || category == adError) {
+    if (_isAdError(s) || category == adError) {
       return ErrorInfo(
         category: adError,
         title: 'Ad Unavailable',
@@ -179,12 +223,13 @@ class ErrorHandlingService {
       );
     }
 
-    // Input validation
-    if (_isValidationError(errorString) || category == validationError) {
+    // Validation
+    if (_isValidationError(s) || category == validationError) {
       return ErrorInfo(
         category: validationError,
         title: 'Whoopsie!',
-        message: 'Some of that info doesn\'t look quite right. Double check and try again?',
+        message:
+            'Some of that info doesn\'t look quite right. Double check and try again?',
         userMessage: 'I\'m picky about details - helps me keep you healthy! 📝',
         icon: Icons.error_outline_rounded,
         color: Colors.orange,
@@ -193,13 +238,14 @@ class ErrorHandlingService {
       );
     }
 
-    // App initialization
-    if (_isInitializationError(errorString) || category == initializationError) {
+    // Initialization
+    if (_isInitializationError(s) || category == initializationError) {
       return ErrorInfo(
         category: initializationError,
         title: 'Starting up...',
         message: 'I got a little dizzy on startup! Mind if we restart?',
-        userMessage: 'Just close me and open me back up - I\'ll be ready! 🔄',
+        userMessage:
+            'Just close me and open me back up - I\'ll be ready! 🔄',
         icon: Icons.refresh_rounded,
         color: Colors.blue,
         canRetry: true,
@@ -208,11 +254,12 @@ class ErrorHandlingService {
     }
 
     // Navigation
-    if (_isNavigationError(errorString) || category == navigationError) {
+    if (_isNavigationError(s) || category == navigationError) {
       return ErrorInfo(
         category: navigationError,
         title: 'Lost my way!',
-        message: 'That page wandered off somewhere! Let me take you back home.',
+        message:
+            'That page wandered off somewhere! Let me take you back home.',
         userMessage: 'Home is where the health is! 🏠',
         icon: Icons.home_rounded,
         color: Colors.teal,
@@ -222,11 +269,12 @@ class ErrorHandlingService {
       );
     }
 
-    // Unknown/unexpected errors
+    // Unknown / unexpected
     return ErrorInfo(
       category: unknownError,
       title: 'Well, that\'s awkward...',
-      message: 'Something weird just happened and I\'m not quite sure what! Wanna try again?',
+      message:
+          'Something weird just happened and I\'m not quite sure what! Wanna try again?',
       userMessage: 'If this keeps happening, try giving me a restart! 🤔',
       icon: Icons.error_outline_rounded,
       color: Colors.red.shade400,
@@ -235,95 +283,130 @@ class ErrorHandlingService {
     );
   }
 
-  // Error detection methods (unchanged but more robust)
-  
-  static bool _isNetworkError(String error) {
-    return error.contains('socket') ||
-           error.contains('timeout') ||
-           error.contains('network') ||
-           error.contains('connection') ||
-           error.contains('internet') ||
-           error.contains('unreachable') ||
-           error.contains('failed host lookup') ||
-           error.contains('no address associated') ||
-           error.contains('http') && error.contains('exception');
+  // --------------------------------------------------------
+  // ERROR DETECTION HELPERS
+  // --------------------------------------------------------
+
+  static bool _isNetworkError(String s) {
+    return s.contains('socket') ||
+        s.contains('timeout') ||
+        s.contains('network') ||
+        s.contains('connection') ||
+        s.contains('internet') ||
+        s.contains('unreachable') ||
+        s.contains('failed host lookup') ||
+        s.contains('no address associated') ||
+        (s.contains('http') && s.contains('exception'));
   }
 
-  static bool _isAuthError(String error) {
-    return error.contains('unauthorized') ||
-           error.contains('authentication') ||
-           error.contains('invalid_grant') ||
-           error.contains('token') ||
-           error.contains('session') ||
-           error.contains('expired') ||
-           error.contains('401') ||
-           error.contains('403');
+  /// Auth errors must be SPECIFIC to avoid false positives.
+  ///
+  /// ❌ Do NOT add: 'token', 'session', 'expired', 'failed', 'error'
+  ///    These appear in many non-auth error messages and would cause
+  ///    the "Hmm, who are you?" dialog to show for unrelated problems.
+  ///
+  /// ✅ DO match: explicit HTTP status codes, Supabase error phrases,
+  ///    and the exact strings Supabase auth returns.
+  static bool _isAuthError(String s) {
+    return s.contains('invalid login credentials') ||
+        s.contains('invalid email or password') ||
+        s.contains('email not confirmed') ||
+        s.contains('invalid grant') ||
+        s.contains('refresh_token') ||
+        s.contains('not authenticated') ||
+        s.contains('jwt') ||
+        s.contains('unauthorized') ||
+        // HTTP status codes as strings (from worker error messages)
+        s.contains('status: 401') ||
+        s.contains('status: 403') ||
+        s.contains('(401)') ||
+        s.contains('(403)') ||
+        // Supabase-specific phrases
+        s.contains('user not found') ||
+        s.contains('login has expired');
   }
 
-  static bool _isPremiumError(String error) {
-    return error.contains('premium') ||
-           error.contains('subscription') ||
-           error.contains('upgrade') ||
-           error.contains('limit reached') ||
-           error.contains('scan limit');
+  /// Profile setup failures during signup (distinct from auth errors).
+  static bool _isProfileSetupError(String s) {
+    return s.contains('profile setup failed') ||
+        s.contains('failed to create user profile') ||
+        s.contains('profile creation failed') ||
+        s.contains('finish setting up your profile');
   }
 
-  static bool _isDatabaseError(String error) {
-    return error.contains('database') ||
-           error.contains('supabase') ||
-           error.contains('postgrest') ||
-           error.contains('query') ||
-           error.contains('table') ||
-           error.contains('fetch');
+  static bool _isPremiumError(String s) {
+    return s.contains('premium') ||
+        s.contains('subscription') ||
+        s.contains('upgrade') ||
+        s.contains('limit reached') ||
+        s.contains('scan limit');
   }
 
-  static bool _isScanError(String error) {
-    return error.contains('barcode') ||
-           error.contains('scan') ||
-           error.contains('mlkit') ||
-           error.contains('product not found') ||
-           error.contains('no barcode found');
+  /// Database errors — deliberately narrower than before.
+  /// Removed 'fetch' and 'query' as they appear in too many innocent contexts.
+  static bool _isDatabaseError(String s) {
+    return s.contains('database') ||
+        s.contains('supabase') ||
+        s.contains('postgrest') ||
+        s.contains('row-level security') ||
+        s.contains('rls') ||
+        s.contains('worker query failed') ||
+        s.contains('failed to execute worker');
   }
 
-  static bool _isImageError(String error) {
-    return error.contains('camera') ||
-           error.contains('image') ||
-           error.contains('picker') ||
-           error.contains('photo') ||
-           error.contains('permission denied') ||
-           error.contains('access denied');
+  static bool _isScanError(String s) {
+    return s.contains('barcode') ||
+        s.contains('scan') ||
+        s.contains('mlkit') ||
+        s.contains('product not found') ||
+        s.contains('no barcode found');
   }
 
-  static bool _isAdError(String error) {
-    return error.contains('ad') ||
-           error.contains('admob') ||
-           error.contains('interstitial') ||
-           error.contains('rewarded');
+  /// Image errors — deliberately narrower than before.
+  /// Removed 'image' and 'photo' as they're too broad (e.g. "profile image
+  /// upload failed" for a database error would wrongly match).
+  static bool _isImageError(String s) {
+    return s.contains('camera') ||
+        s.contains('image picker') ||
+        s.contains('pickimage') ||
+        s.contains('picker') ||
+        s.contains('permission denied') ||
+        s.contains('access denied');
   }
 
-  static bool _isValidationError(String error) {
-    return error.contains('validation') ||
-           error.contains('invalid') ||
-           error.contains('empty') ||
-           error.contains('required field') ||
-           error.contains('format');
+  /// Ad errors — bare 'ad' deliberately removed, too short and matches
+  /// unrelated words like 'upload', 'read', 'admin', etc.
+  static bool _isAdError(String s) {
+    return s.contains('admob') ||
+        s.contains('interstitial') ||
+        s.contains('rewarded');
   }
 
-  static bool _isInitializationError(String error) {
-    return error.contains('initialization') ||
-           error.contains('initialize') ||
-           error.contains('startup') ||
-           error.contains('init failed') ||
-           error.contains('bootstrap');
+  static bool _isValidationError(String s) {
+    return s.contains('validation') ||
+        s.contains('invalid') ||
+        s.contains('required field') ||
+        s.contains('format');
   }
 
-  static bool _isNavigationError(String error) {
-    return error.contains('navigation') ||
-           error.contains('route') ||
-           error.contains('navigator') ||
-           error.contains('page not found') ||
-           error.contains('could not find');
+  static bool _isInitializationError(String s) {
+    return s.contains('initialization') ||
+        s.contains('initialize') ||
+        s.contains('startup') ||
+        s.contains('init failed') ||
+        s.contains('bootstrap');
   }
+
+  static bool _isNavigationError(String s) {
+    return s.contains('navigation') ||
+        s.contains('navigator') ||
+        s.contains('page not found') ||
+        s.contains('could not find');
+  }
+
+  // --------------------------------------------------------
+  // DIALOG / SNACKBAR
+  // --------------------------------------------------------
 
   static void _showErrorDialog({
     required BuildContext context,
@@ -332,43 +415,36 @@ class ErrorHandlingService {
     VoidCallback? onRetry,
     VoidCallback? onCancel,
   }) {
-    if (!context.mounted) return;
-
-    // Don't show dialog for non-user-facing errors
-    if (!errorInfo.isUserFacingError) {
-      if (kDebugMode) {
+    if (!context.mounted || !errorInfo.isUserFacingError) {
+      if (kDebugMode && !errorInfo.isUserFacingError) {
         debugPrint('Silent error: ${errorInfo.category}');
       }
       return;
     }
 
-    // Determine action button text and callback
     String? actionButtonText;
     VoidCallback? actionCallback;
-    
+
     if (errorInfo.canRetry && onRetry != null) {
       actionButtonText = 'Try again!';
       actionCallback = onRetry;
     } else if (errorInfo.redirectRoute != null) {
-      if (errorInfo.redirectRoute == '/login') {
-        actionButtonText = 'Log in';
-      } else if (errorInfo.redirectRoute == '/purchase') {
-        actionButtonText = 'Upgrade';
-      } else if (errorInfo.redirectRoute == '/home') {
-        actionButtonText = 'Go home';
-      } else {
-        actionButtonText = 'Continue';
-      }
-      actionCallback = () => Navigator.pushNamed(context, errorInfo.redirectRoute!);
+      actionButtonText = switch (errorInfo.redirectRoute) {
+        '/login' => 'Log in',
+        '/purchase' => 'Upgrade',
+        '/home' => 'Go home',
+        _ => 'Continue',
+      };
+      actionCallback = () =>
+          Navigator.pushNamed(context, errorInfo.redirectRoute!);
     } else {
       actionButtonText = 'Got it!';
       actionCallback = null;
     }
 
-    // Show Bari error overlay
     showDialog(
       context: context,
-      barrierDismissible: false, // Must tap button to dismiss
+      barrierDismissible: false,
       builder: (dialogContext) => BariErrorOverlay(
         title: errorInfo.title,
         message: customMessage ?? errorInfo.message,
@@ -376,7 +452,8 @@ class ErrorHandlingService {
         icon: errorInfo.icon,
         color: errorInfo.color,
         onRetry: errorInfo.canRetry && onRetry != null ? onRetry : null,
-        onNavigate: errorInfo.redirectRoute != null ? actionCallback : null,
+        onNavigate:
+            errorInfo.redirectRoute != null ? actionCallback : null,
         onDismiss: () {
           Navigator.of(dialogContext).pop();
           onCancel?.call();
@@ -386,7 +463,6 @@ class ErrorHandlingService {
     );
   }
 
-  /// Show error snack bar - simple, non-intrusive
   static void _showErrorSnackBar({
     required BuildContext context,
     required ErrorInfo errorInfo,
@@ -398,19 +474,13 @@ class ErrorHandlingService {
       SnackBar(
         content: Row(
           children: [
-            Icon(
-              errorInfo.icon,
-              color: Colors.white,
-              size: 22,
-            ),
+            Icon(errorInfo.icon, color: Colors.white, size: 22),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 customMessage ?? errorInfo.message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                ),
+                style:
+                    const TextStyle(color: Colors.white, fontSize: 15),
               ),
             ),
           ],
@@ -426,18 +496,17 @@ class ErrorHandlingService {
     );
   }
 
-  /// Fallback error for when error handler itself fails
   static void _showFallbackError(BuildContext context) {
     if (!context.mounted) return;
-    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Oops!'),
-        content: const Text('Something unexpected happened. Please try again.'),
+        content:
+            const Text('Something unexpected happened. Please try again.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('OK'),
           ),
         ],
@@ -445,10 +514,15 @@ class ErrorHandlingService {
     );
   }
 
-  /// Log error for debugging (dev only, never shown to users)
-  static Future<void> _logError(ErrorInfo errorInfo, dynamic originalError) async {
+  // --------------------------------------------------------
+  // LOGGING
+  // --------------------------------------------------------
+
+  static Future<void> _logError(
+    ErrorInfo errorInfo,
+    dynamic originalError,
+  ) async {
     try {
-      // Console logging for development
       if (kDebugMode) {
         logger.e(
           'Error [${errorInfo.category}]: ${errorInfo.title}',
@@ -457,38 +531,41 @@ class ErrorHandlingService {
         );
       }
 
-      // Store locally for debugging (last 50 errors)
       final prefs = await SharedPreferences.getInstance();
       final errorLog = {
         'timestamp': DateTime.now().toIso8601String(),
         'category': errorInfo.category,
         'title': errorInfo.title,
-        'error': originalError.toString().substring(0, 200), // Limit size
+        'error': originalError
+            .toString()
+            .substring(
+              0,
+              originalError.toString().length > 200
+                  ? 200
+                  : originalError.toString().length,
+            ),
       };
 
       final logs = prefs.getStringList('error_logs') ?? [];
       logs.add(json.encode(errorLog));
-      
       if (logs.length > 50) {
         logs.removeRange(0, logs.length - 50);
       }
-      
       await prefs.setStringList('error_logs', logs);
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Failed to log error: $e');
-      }
-      // Fail silently - don't compound errors
+      if (kDebugMode) debugPrint('Failed to log error: $e');
     }
   }
 
-  // Convenience methods for common error scenarios
-  
+  // --------------------------------------------------------
+  // CONVENIENCE METHODS
+  // --------------------------------------------------------
+
   static Future<void> handleNetworkError(
-    BuildContext context, 
-    dynamic error, 
-    {VoidCallback? onRetry}
-  ) async {
+    BuildContext context,
+    dynamic error, {
+    VoidCallback? onRetry,
+  }) async {
     await handleError(
       context: context,
       error: error,
@@ -497,7 +574,10 @@ class ErrorHandlingService {
     );
   }
 
-  static Future<void> handleAuthError(BuildContext context, dynamic error) async {
+  static Future<void> handleAuthError(
+    BuildContext context,
+    dynamic error,
+  ) async {
     await handleError(
       context: context,
       error: error,
@@ -505,7 +585,10 @@ class ErrorHandlingService {
     );
   }
 
-  static Future<void> handlePremiumError(BuildContext context, dynamic error) async {
+  static Future<void> handlePremiumError(
+    BuildContext context,
+    dynamic error,
+  ) async {
     await handleError(
       context: context,
       error: error,
@@ -514,10 +597,10 @@ class ErrorHandlingService {
   }
 
   static Future<void> handleScanError(
-    BuildContext context, 
-    dynamic error, 
-    {VoidCallback? onRetry}
-  ) async {
+    BuildContext context,
+    dynamic error, {
+    VoidCallback? onRetry,
+  }) async {
     await handleError(
       context: context,
       error: error,
@@ -527,10 +610,10 @@ class ErrorHandlingService {
   }
 
   static Future<void> handleInitializationError(
-    BuildContext context, 
-    dynamic error, 
-    {VoidCallback? onRetry}
-  ) async {
+    BuildContext context,
+    dynamic error, {
+    VoidCallback? onRetry,
+  }) async {
     await handleError(
       context: context,
       error: error,
@@ -540,10 +623,10 @@ class ErrorHandlingService {
   }
 
   static Future<void> handleNavigationError(
-    BuildContext context, 
-    dynamic error, 
-    {VoidCallback? onRetry}
-  ) async {
+    BuildContext context,
+    dynamic error, {
+    VoidCallback? onRetry,
+  }) async {
     await handleError(
       context: context,
       error: error,
@@ -552,17 +635,15 @@ class ErrorHandlingService {
     );
   }
 
-  /// Simple error message (non-blocking)
   static void showSimpleError(BuildContext context, String message) {
     if (!context.mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 12),
-            Expanded(child: Text('🫀 $message')), // Bari heart emoji
+            Expanded(child: Text('🫀 $message')),
           ],
         ),
         backgroundColor: Colors.red.shade400,
@@ -575,19 +656,21 @@ class ErrorHandlingService {
     );
   }
 
-  /// Success message (positive feedback)
   static void showSuccess(BuildContext context, String message) {
     if (!context.mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '🫀 $message', // Bari heart emoji
+                '🫀 $message',
                 style: const TextStyle(fontSize: 15),
               ),
             ),
@@ -604,41 +687,42 @@ class ErrorHandlingService {
     );
   }
 
-  /// Get error logs (for debugging/support)
   static Future<List<Map<String, dynamic>>> getErrorLogs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final logs = prefs.getStringList('error_logs') ?? [];
-      return logs.map((log) => json.decode(log) as Map<String, dynamic>).toList();
+      return logs
+          .map((l) => json.decode(l) as Map<String, dynamic>)
+          .toList();
     } catch (e) {
       return [];
     }
   }
 
-  /// Clear error logs
   static Future<void> clearErrorLogs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('error_logs');
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Failed to clear logs: $e');
-      }
+      if (kDebugMode) debugPrint('Failed to clear logs: $e');
     }
   }
 }
 
-/// Error information class - Apple-compliant
+// --------------------------------------------------------
+// ERROR INFO MODEL
+// --------------------------------------------------------
+
 class ErrorInfo {
   final String category;
   final String title;
   final String message;
-  final String? userMessage; // Additional helpful context
+  final String? userMessage;
   final IconData icon;
   final Color color;
   final bool canRetry;
   final String? redirectRoute;
-  final bool isUserFacingError; // Should we show this to the user?
+  final bool isUserFacingError;
 
   ErrorInfo({
     required this.category,

@@ -10,6 +10,7 @@ import '../services/draft_recipes_service.dart';
 import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/error_handling_service.dart';
+import '../services/recent_activity_tracker.dart';
 import 'package:intl/intl.dart';
 import '../services/submitted_recipes_service.dart';
 
@@ -32,6 +33,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     super.initState();
     _loadRecipes();
     _checkPremiumStatus();
+    RecentActivityTracker.recordScreen(label: 'My Cookbook', route: '/my-cookbook');
   }
 
   Future<void> _loadRecipes() async {
@@ -72,7 +74,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
         setState(() => _isPremium = isPremium);
       }
     } catch (e) {
-      print('Error checking premium status: $e');
+      // silent fail — premium check is non-critical
     }
   }
 
@@ -191,7 +193,6 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     if (confirmed != true) return;
 
     try {
-      // Show loading
       if (mounted) {
         showDialog(
           context: context,
@@ -206,7 +207,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
 
       if (mounted) {
         Navigator.pop(context); // Dismiss loading
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Recipe submitted for review!'),
@@ -225,7 +226,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Dismiss loading
-        
+
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
@@ -261,7 +262,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              
+
               // Header
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -288,7 +289,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: _getScoreColor(recipe.healthScore).withOpacity(0.1),
+                                    color: _getScoreColor(recipe.healthScore)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
                                       color: _getScoreColor(recipe.healthScore),
@@ -316,41 +318,41 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                   ],
                 ),
               ),
-              
+
               const Divider(height: 1),
-              
+
               // Content with tabs if nutrition available
               Expanded(
                 child: recipe.hasNutrition && recipe.totalNutrition != null
-                  ? DefaultTabController(
-                      length: 3,
-                      child: Column(
-                        children: [
-                          TabBar(
-                            labelColor: Colors.orange,
-                            unselectedLabelColor: Colors.grey,
-                            indicatorColor: Colors.orange,
-                            tabs: const [
-                              Tab(text: 'Recipe'),
-                              Tab(text: 'Nutrition'),
-                              Tab(text: 'Details'),
-                            ],
-                          ),
-                          Expanded(
-                            child: TabBarView(
-                              children: [
-                                _buildRecipeTab(recipe, scrollController),
-                                _buildNutritionTab(recipe, scrollController),
-                                _buildDetailsTab(recipe, scrollController),
+                    ? DefaultTabController(
+                        length: 3,
+                        child: Column(
+                          children: [
+                            TabBar(
+                              labelColor: Colors.orange,
+                              unselectedLabelColor: Colors.grey,
+                              indicatorColor: Colors.orange,
+                              tabs: const [
+                                Tab(text: 'Recipe'),
+                                Tab(text: 'Nutrition'),
+                                Tab(text: 'Details'),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : _buildRecipeTab(recipe, scrollController),
+                            Expanded(
+                              child: TabBarView(
+                                children: [
+                                  _buildRecipeTab(recipe, scrollController),
+                                  _buildNutritionTab(recipe, scrollController),
+                                  _buildDetailsTab(recipe, scrollController),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _buildRecipeTab(recipe, scrollController),
               ),
-              
+
               // Actions
               Container(
                 padding: const EdgeInsets.all(16),
@@ -367,7 +369,6 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                 child: SafeArea(
                   child: Column(
                     children: [
-                      // Submit to Community button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -389,10 +390,9 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 8),
-                      
-                      // Remove button
+
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -430,7 +430,6 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
       controller: scrollController,
       padding: const EdgeInsets.all(16),
       children: [
-        // Description
         if (recipe.description != null && recipe.description!.isNotEmpty) ...[
           _buildSection(
             'Description',
@@ -442,8 +441,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
           ),
           const SizedBox(height: 24),
         ],
-        
-        // Ingredients
+
         _buildSection(
           'Ingredients',
           const Icon(Icons.shopping_basket, color: Colors.orange),
@@ -468,10 +466,9 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
             }).toList(),
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
-        // Instructions
+
         if (recipe.instructions != null && recipe.instructions!.isNotEmpty) ...[
           _buildSection(
             'Instructions',
@@ -511,7 +508,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                             Expanded(
                               child: Text(
                                 '${entry.value.trim()}.',
-                                style: const TextStyle(fontSize: 15, height: 1.5),
+                                style: const TextStyle(
+                                    fontSize: 15, height: 1.5),
                               ),
                             ),
                           ],
@@ -525,7 +523,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     );
   }
 
-  Widget _buildNutritionTab(DraftRecipe recipe, ScrollController scrollController) {
+  Widget _buildNutritionTab(
+      DraftRecipe recipe, ScrollController scrollController) {
     if (!recipe.hasNutrition || recipe.totalNutrition == null) {
       return Center(
         child: Padding(
@@ -554,10 +553,9 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
           servings: recipe.servings,
           showbariScore: true,
         ),
-        
+
         const SizedBox(height: 16),
-        
-        // Quick insights
+
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -583,40 +581,45 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              
+
               _buildInsightRow(
                 'Per Serving',
                 '${(recipe.totalNutrition!.calories / recipe.servings).toStringAsFixed(0)} calories',
-                recipe.totalNutrition!.calories / recipe.servings < 300 
-                  ? Colors.green 
-                  : recipe.totalNutrition!.calories / recipe.servings < 500
-                    ? Colors.orange
-                    : Colors.red,
+                recipe.totalNutrition!.calories / recipe.servings < 300
+                    ? Colors.green
+                    : recipe.totalNutrition!.calories / recipe.servings < 500
+                        ? Colors.orange
+                        : Colors.red,
               ),
-              
+
               if (recipe.totalNutrition!.protein > 0)
                 _buildInsightRow(
                   'Protein',
                   '${recipe.totalNutrition!.protein.toStringAsFixed(1)}g total',
-                  recipe.totalNutrition!.protein >= 20 ? Colors.green : Colors.grey,
+                  recipe.totalNutrition!.protein >= 20
+                      ? Colors.green
+                      : Colors.grey,
                 ),
-              
-              if (recipe.totalNutrition!.fiber != null && recipe.totalNutrition!.fiber! > 0)
+
+              if (recipe.totalNutrition!.fiber != null &&
+                  recipe.totalNutrition!.fiber! > 0)
                 _buildInsightRow(
                   'Fiber',
                   '${recipe.totalNutrition!.fiber!.toStringAsFixed(1)}g total',
-                  recipe.totalNutrition!.fiber! >= 5 ? Colors.green : Colors.grey,
+                  recipe.totalNutrition!.fiber! >= 5
+                      ? Colors.green
+                      : Colors.grey,
                 ),
-              
+
               if (recipe.totalNutrition!.sodium > 0)
                 _buildInsightRow(
                   'Sodium',
                   '${recipe.totalNutrition!.sodium.toStringAsFixed(0)}mg total',
-                  recipe.totalNutrition!.sodium < 400 
-                    ? Colors.green 
-                    : recipe.totalNutrition!.sodium < 800
-                      ? Colors.orange
-                      : Colors.red,
+                  recipe.totalNutrition!.sodium < 400
+                      ? Colors.green
+                      : recipe.totalNutrition!.sodium < 800
+                          ? Colors.orange
+                          : Colors.red,
                 ),
             ],
           ),
@@ -625,9 +628,10 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     );
   }
 
-  Widget _buildDetailsTab(DraftRecipe recipe, ScrollController scrollController) {
+  Widget _buildDetailsTab(
+      DraftRecipe recipe, ScrollController scrollController) {
     final dateFormat = DateFormat('MMM d, yyyy \'at\' h:mm a');
-    
+
     return ListView(
       controller: scrollController,
       padding: const EdgeInsets.all(16),
@@ -638,15 +642,12 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
           _buildDetailRow('Health Score', '${recipe.healthScore}/100'),
         _buildDetailRow('Created', dateFormat.format(recipe.createdAt)),
         _buildDetailRow('Last Updated', dateFormat.format(recipe.updatedAt)),
-        
+
         if (recipe.hasNutrition) ...[
           const SizedBox(height: 24),
           const Text(
             'Nutrition Summary',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Container(
@@ -658,13 +659,19 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
             ),
             child: Column(
               children: [
-                _buildNutrientRow('Calories', '${recipe.totalNutrition!.calories.toStringAsFixed(0)}'),
-                _buildNutrientRow('Protein', '${recipe.totalNutrition!.protein.toStringAsFixed(1)}g'),
-                _buildNutrientRow('Carbs', '${recipe.totalNutrition!.carbs.toStringAsFixed(1)}g'),
-                _buildNutrientRow('Fat', '${recipe.totalNutrition!.fat.toStringAsFixed(1)}g'),
+                _buildNutrientRow('Calories',
+                    '${recipe.totalNutrition!.calories.toStringAsFixed(0)}'),
+                _buildNutrientRow('Protein',
+                    '${recipe.totalNutrition!.protein.toStringAsFixed(1)}g'),
+                _buildNutrientRow('Carbs',
+                    '${recipe.totalNutrition!.carbs.toStringAsFixed(1)}g'),
+                _buildNutrientRow('Fat',
+                    '${recipe.totalNutrition!.fat.toStringAsFixed(1)}g'),
                 if (recipe.totalNutrition!.fiber != null)
-                  _buildNutrientRow('Fiber', '${recipe.totalNutrition!.fiber!.toStringAsFixed(1)}g'),
-                _buildNutrientRow('Sodium', '${recipe.totalNutrition!.sodium.toStringAsFixed(0)}mg'),
+                  _buildNutrientRow('Fiber',
+                      '${recipe.totalNutrition!.fiber!.toStringAsFixed(1)}g'),
+                _buildNutrientRow('Sodium',
+                    '${recipe.totalNutrition!.sodium.toStringAsFixed(0)}mg'),
               ],
             ),
           ),
@@ -683,7 +690,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
             const SizedBox(width: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -709,10 +717,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 15),
-            ),
+            child: Text(value, style: const TextStyle(fontSize: 15)),
           ),
         ],
       ),
@@ -729,9 +734,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
+                fontSize: 14, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -772,12 +775,12 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
 
   List<DraftRecipe> get _filteredRecipes {
     if (_searchQuery.isEmpty) return _recipes;
-    
+
     final query = _searchQuery.toLowerCase();
     return _recipes.where((recipe) {
       return recipe.title.toLowerCase().contains(query) ||
-             recipe.ingredients.any((ing) => 
-               ing.productName.toLowerCase().contains(query));
+          recipe.ingredients
+              .any((ing) => ing.productName.toLowerCase().contains(query));
     }).toList();
   }
 
@@ -788,9 +791,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () => _showRecipeDetails(recipe),
         borderRadius: BorderRadius.circular(12),
@@ -798,7 +799,6 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Recipe icon
               Container(
                 width: 56,
                 height: 56,
@@ -812,15 +812,13 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                   size: 28,
                 ),
               ),
-              
+
               const SizedBox(width: 16),
-              
-              // Recipe info
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title and health score
                     Row(
                       children: [
                         Expanded(
@@ -842,7 +840,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: _getScoreColor(recipe.healthScore).withOpacity(0.1),
+                              color: _getScoreColor(recipe.healthScore)
+                                  .withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
                                 color: _getScoreColor(recipe.healthScore),
@@ -860,55 +859,46 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                         ],
                       ],
                     ),
-                    
+
                     const SizedBox(height: 4),
-                    
-                    // Metadata
+
                     Row(
                       children: [
-                        Icon(Icons.restaurant, size: 14, color: Colors.grey.shade600),
+                        Icon(Icons.restaurant,
+                            size: 14, color: Colors.grey.shade600),
                         const SizedBox(width: 4),
                         Text(
                           '$ingredientCount ingredient${ingredientCount == 1 ? '' : 's'}',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
+                              fontSize: 12, color: Colors.grey.shade600),
                         ),
-                        if (recipe.hasNutrition && recipe.totalNutrition != null) ...[
+                        if (recipe.hasNutrition &&
+                            recipe.totalNutrition != null) ...[
                           const SizedBox(width: 12),
-                          Icon(Icons.local_fire_department, size: 14, color: Colors.grey.shade600),
+                          Icon(Icons.local_fire_department,
+                              size: 14, color: Colors.grey.shade600),
                           const SizedBox(width: 4),
                           Text(
                             '${recipe.totalNutrition!.calories.toStringAsFixed(0)} cal',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
+                                fontSize: 12, color: Colors.grey.shade600),
                           ),
                         ],
                       ],
                     ),
-                    
+
                     const SizedBox(height: 4),
-                    
+
                     Text(
                       dateFormat.format(recipe.updatedAt),
                       style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                      ),
+                          fontSize: 11, color: Colors.grey.shade500),
                     ),
                   ],
                 ),
               ),
-              
-              // Arrow icon
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey[400],
-              ),
+
+              Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
             ],
           ),
         ),
@@ -984,7 +974,8 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16),
                 ),
                 onChanged: (value) {
                   setState(() => _searchQuery = value);
@@ -1001,31 +992,25 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.book,
-                              size: 64,
-                              color: Colors.grey.shade400,
-                            ),
+                            Icon(Icons.book,
+                                size: 64, color: Colors.grey.shade400),
                             const SizedBox(height: 16),
                             Text(
                               'No recipes yet',
                               style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey.shade600,
-                              ),
+                                  fontSize: 18, color: Colors.grey.shade600),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               'Create your first recipe!',
                               style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
-                              ),
+                                  fontSize: 14, color: Colors.grey.shade500),
                             ),
                             const SizedBox(height: 24),
                             ElevatedButton.icon(
                               onPressed: () {
-                                Navigator.pushNamed(context, '/submit-recipe').then((_) {
+                                Navigator.pushNamed(context, '/submit-recipe')
+                                    .then((_) {
                                   _loadRecipes();
                                 });
                               },
@@ -1044,16 +1029,21 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                                Icon(Icons.search_off,
+                                    size: 64, color: Colors.grey[400]),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'No recipes found',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Try a different search term',
-                                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[600]),
                                 ),
                               ],
                             ),
@@ -1064,26 +1054,29 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                               padding: const EdgeInsets.all(16),
                               itemCount: _filteredRecipes.length,
                               itemBuilder: (context, index) {
-                                return _buildRecipeCard(_filteredRecipes[index]);
+                                return _buildRecipeCard(
+                                    _filteredRecipes[index]);
                               },
                             ),
                           ),
           ),
         ],
       ),
-      floatingActionButton: !_isLoading && (_isPremium || _remainingSlots > 0)
-          ? FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.pushNamed(context, '/submit-recipe').then((_) {
-                  _loadRecipes();
-                });
-              },
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('New Recipe'),
-            )
-          : null,
+      floatingActionButton:
+          !_isLoading && (_isPremium || _remainingSlots > 0)
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/submit-recipe')
+                        .then((_) {
+                      _loadRecipes();
+                    });
+                  },
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.add),
+                  label: const Text('New Recipe'),
+                )
+              : null,
     );
   }
 }

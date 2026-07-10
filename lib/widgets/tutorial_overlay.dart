@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 enum TutorialStep {
   TUTORIAL_INTRO,
   TUTORIAL_ALL_BUTTONS,
-  TUTORIAL_AUTO,
   TUTORIAL_SCAN,
   TUTORIAL_MANUAL,
   TUTORIAL_LOOKUP,
@@ -14,7 +13,6 @@ enum TutorialStep {
 
 class TutorialOverlay extends StatefulWidget {
   final VoidCallback onComplete;
-  final GlobalKey autoButtonKey;
   final GlobalKey scanButtonKey;
   final GlobalKey manualButtonKey;
   final GlobalKey lookupButtonKey;
@@ -22,7 +20,6 @@ class TutorialOverlay extends StatefulWidget {
   const TutorialOverlay({
     Key? key,
     required this.onComplete,
-    required this.autoButtonKey,
     required this.scanButtonKey,
     required this.manualButtonKey,
     required this.lookupButtonKey,
@@ -83,14 +80,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
           _currentHighlightKey = null;
           break;
         case TutorialStep.TUTORIAL_ALL_BUTTONS:
-          print('🎓 Moving to AUTO step');
-          _currentStep = TutorialStep.TUTORIAL_AUTO;
-          _highlightAllButtons = false;
-          _updateHighlight(widget.autoButtonKey);
-          break;
-        case TutorialStep.TUTORIAL_AUTO:
           print('🎓 Moving to SCAN step');
           _currentStep = TutorialStep.TUTORIAL_SCAN;
+          _highlightAllButtons = false;
           _updateHighlight(widget.scanButtonKey);
           break;
         case TutorialStep.TUTORIAL_SCAN:
@@ -174,11 +166,9 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       case TutorialStep.TUTORIAL_INTRO:
         return "Hi there, friend. I am Barry, the belly. Let me walk you through this app and the way we use it to enrich our health and our lives.";
       case TutorialStep.TUTORIAL_ALL_BUTTONS:
-        return "These buttons are the 4 different ways you can see the nutrition facts and suggested bariatric friendly recipes for any food you like! Let's walk through them together!";
-      case TutorialStep.TUTORIAL_AUTO:
-        return "Let's start with Auto. It works fast - just point your camera at the barcode, and it recognizes it automatically.";
+        return "These buttons are the 3 different ways you can see the nutrition facts and suggested bariatric friendly recipes for any food you like! Let's walk through them together!";
       case TutorialStep.TUTORIAL_SCAN:
-        return "This is Scan. Tap this when you want to scan a barcode yourself. You'll take a picture, tap Analyze, and we'll show you the nutrition facts and helpful recipe ideas.";
+        return "Let's start with Scan. Tap this when you want to scan a barcode yourself. You'll take a picture, tap Analyze, and we'll show you the nutrition facts and helpful recipe ideas.";
       case TutorialStep.TUTORIAL_MANUAL:
         return "Use Code when a barcode won't scan or is damaged. You can type in the numbers from the bottom of the barcode instead.";
       case TutorialStep.TUTORIAL_LOOKUP:
@@ -195,31 +185,27 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       return const SizedBox.shrink();
     }
 
-    final autoBox = widget.autoButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final scanBox = widget.scanButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final manualBox = widget.manualButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final lookupBox = widget.lookupButtonKey.currentContext?.findRenderObject() as RenderBox?;
     final overlayBox = context.findRenderObject() as RenderBox?;
 
-    if (autoBox == null || scanBox == null || manualBox == null || lookupBox == null || overlayBox == null) {
+    if (scanBox == null || manualBox == null || lookupBox == null || overlayBox == null) {
       return const SizedBox.shrink();
     }
 
-    final autoPos = overlayBox.globalToLocal(autoBox.localToGlobal(Offset.zero));
     final scanPos = overlayBox.globalToLocal(scanBox.localToGlobal(Offset.zero));
     final manualPos = overlayBox.globalToLocal(manualBox.localToGlobal(Offset.zero));
     final lookupPos = overlayBox.globalToLocal(lookupBox.localToGlobal(Offset.zero));
 
-    final left = [autoPos.dx, scanPos.dx, manualPos.dx, lookupPos.dx].reduce((a, b) => a < b ? a : b);
-    final top = [autoPos.dy, scanPos.dy, manualPos.dy, lookupPos.dy].reduce((a, b) => a < b ? a : b);
+    final left = [scanPos.dx, manualPos.dx, lookupPos.dx].reduce((a, b) => a < b ? a : b);
+    final top = [scanPos.dy, manualPos.dy, lookupPos.dy].reduce((a, b) => a < b ? a : b);
     final right = [
-      autoPos.dx + autoBox.size.width,
       scanPos.dx + scanBox.size.width,
       manualPos.dx + manualBox.size.width,
       lookupPos.dx + lookupBox.size.width,
     ].reduce((a, b) => a > b ? a : b);
     final bottom = [
-      autoPos.dy + autoBox.size.height,
       scanPos.dy + scanBox.size.height,
       manualPos.dy + manualBox.size.height,
       lookupPos.dy + lookupBox.size.height,

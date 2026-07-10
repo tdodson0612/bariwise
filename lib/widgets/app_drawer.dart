@@ -1,4 +1,4 @@
-// lib/widgets/app_drawer.dart - FIXED: Removed duplicate Premium sections and debug button
+// lib/widgets/app_drawer.dart
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -7,10 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../controllers/premium_gate_controller.dart';
 import '../services/auth_service.dart';
 import '../services/database_service_core.dart';
+import '../config/app_config.dart';
 
 class AppDrawer extends StatefulWidget {
   final String currentPage;
-  
+
   const AppDrawer({
     super.key,
     required this.currentPage,
@@ -18,23 +19,22 @@ class AppDrawer extends StatefulWidget {
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
-  
+
   static const String _cacheKey = 'cached_unread_count';
   static const String _cacheTimeKey = 'cached_unread_count_time';
-  
-  static final GlobalKey<_AppDrawerState> globalKey = GlobalKey<_AppDrawerState>();
-  
+
+  static final GlobalKey<_AppDrawerState> globalKey =
+      GlobalKey<_AppDrawerState>();
+
   static Future<void> invalidateUnreadCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_cacheKey);
       await prefs.remove(_cacheTimeKey);
-      
-      print('🔄 AppDrawer cache invalidated');
-      
+      AppConfig.debugPrint('🔄 AppDrawer cache invalidated');
       await globalKey.currentState?.refresh();
     } catch (e) {
-      print('⚠️ Error invalidating AppDrawer cache: $e');
+      AppConfig.debugPrint('⚠️ Error invalidating AppDrawer cache: $e');
     }
   }
 }
@@ -51,22 +51,13 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
     super.initState();
     _controller = PremiumGateController();
     _controller.addListener(_onPremiumStateChanged);
-    
     WidgetsBinding.instance.addObserver(this);
-    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUnreadCount(forceRefresh: true);
     });
-    
-    _autoRefreshTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) {
-        if (mounted) {
-          print('⏰ AppDrawer auto-refresh triggered');
-          _loadUnreadCount(forceRefresh: true);
-        }
-      },
-    );
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) _loadUnreadCount(forceRefresh: true);
+    });
   }
 
   @override
@@ -80,15 +71,12 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      print('📱 App resumed, refreshing AppDrawer badge...');
       _loadUnreadCount(forceRefresh: true);
     }
   }
 
   void _onPremiumStateChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> refresh() async {
@@ -98,547 +86,525 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
   Future<void> _loadUnreadCount({bool forceRefresh = false}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       if (!forceRefresh) {
         final cachedCount = prefs.getInt(AppDrawer._cacheKey);
         final cachedTime = prefs.getInt(AppDrawer._cacheTimeKey);
-        
         if (cachedCount != null && cachedTime != null) {
           final cacheAge = DateTime.now().millisecondsSinceEpoch - cachedTime;
-          final isCacheValid = cacheAge < _cacheDuration.inMilliseconds;
-          
-          if (isCacheValid) {
-            if (mounted) {
-              setState(() => _unreadCount = cachedCount);
-            }
-            print('✅ AppDrawer: Using valid cache: $cachedCount (${(cacheAge / 1000).toStringAsFixed(1)}s old)');
+          if (cacheAge < _cacheDuration.inMilliseconds) {
+            if (mounted) setState(() => _unreadCount = cachedCount);
             return;
-          } else {
-            print('⏰ AppDrawer: Cache STALE (${(cacheAge / 1000).toStringAsFixed(1)}s old) - refreshing...');
           }
-        } else {
-          print('❌ AppDrawer: No cache found - fetching fresh...');
         }
-      } else {
-        print('🔄 AppDrawer: Force refresh requested');
       }
-      
-      print('📡 AppDrawer: Fetching from MessagingService.getUnreadMessageCount()...');
+
       final count = await MessagingService.getUnreadMessageCount();
-      
       final now = DateTime.now().millisecondsSinceEpoch;
       await prefs.setInt(AppDrawer._cacheKey, count);
       await prefs.setInt(AppDrawer._cacheTimeKey, now);
-      
-      if (mounted) {
-        setState(() => _unreadCount = count);
-      }
-      
-      print('✅ AppDrawer: Fresh count = $count (cached at $now)');
-      
+      if (mounted) setState(() => _unreadCount = count);
     } catch (e) {
-      print('❌ AppDrawer: Error loading unread count: $e');
-      
+      AppConfig.debugPrint('❌ AppDrawer: Error loading unread count: $e');
       try {
         final prefs = await SharedPreferences.getInstance();
         final cachedCount = prefs.getInt(AppDrawer._cacheKey);
         if (cachedCount != null && mounted) {
           setState(() => _unreadCount = cachedCount);
-          print('⚠️ AppDrawer: Using stale cache due to error: $cachedCount');
-        } else {
-          if (mounted) {
-            setState(() => _unreadCount = 0);
-          }
-        }
-      } catch (_) {
-        if (mounted) {
+        } else if (mounted) {
           setState(() => _unreadCount = 0);
         }
+      } catch (_) {
+        if (mounted) setState(() => _unreadCount = 0);
       }
     }
   }
 
+  // ── Navigation helper ──────────────────────────────────────────────────
+  void _go(BuildContext context, String route) {
+    Navigator.pop(context);
+    if (widget.currentPage != route.replaceAll('/', '').replaceAll('-', '_')) {
+      Navigator.pushNamed(context, route);
+    }
+  }
+
+  // ── Tile builders ──────────────────────────────────────────────────────
+  Widget _tile({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required String pageKey,
+    required String route,
+    Color? iconColor,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    final isActive = widget.currentPage == pageKey;
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: isActive ? Colors.orange : (iconColor ?? Colors.grey.shade700),
+        size: 22,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          color: isActive ? Colors.orange : null,
+          fontSize: 14,
+        ),
+      ),
+      selected: isActive,
+      selectedTileColor: Colors.orange.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      trailing: trailing,
+      onTap: onTap ?? () => _go(context, route),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+    );
+  }
+
+  Widget _lockedTile({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+  }) {
+    return ListTile(
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(icon, color: Colors.grey.shade400, size: 22),
+          Positioned(
+            right: -6,
+            bottom: -4,
+            child: Container(
+              width: 14,
+              height: 14,
+              decoration: const BoxDecoration(
+                color: Colors.amber,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock, size: 9, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+      title: Row(
+        children: [
+          Text(label,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade700,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              'PRO',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      onTap: () {
+        Navigator.pop(context);
+        Navigator.pushNamed(context, '/purchase');
+      },
+    );
+  }
+
+  Widget _sectionHeader(String label, {IconData? icon, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: color ?? Colors.grey.shade500),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+              color: color ?? Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Main build ─────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final userEmail = AuthService.currentUser?.email;
+    final isPremium = _controller.isPremium;
+    final isDev = AppConfig.isDevelopment;
 
     return Drawer(
       child: SafeArea(
         top: false,
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.orange, Colors.orange.shade700],
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // ── Header ────────────────────────────────────────────────
+            _DrawerHeader(
+              email: userEmail,
+              isPremium: isPremium,
+              scansUsed: _controller.totalScansUsed,
+            ),
+
+            // ── Scrollable nav list ────────────────────────────────────
+            Expanded(
+              child: ListView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 children: [
-                  Text(
-                    'bari Food Scanner',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  // ── Main ──────────────────────────────────────────
+                  _sectionHeader('Main'),
+                  _tile(
+                    context: context,
+                    icon: Icons.home_rounded,
+                    label: 'Home',
+                    pageKey: 'home',
+                    route: '/home',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (widget.currentPage != 'home') {
+                        Navigator.pushNamedAndRemoveUntil(
+                            context, '/home', (route) => false);
+                      }
+                    },
                   ),
-                  SizedBox(height: 8),
-                  
-                  if (userEmail != null) ...[
-                    Text(
-                      userEmail,
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                  _tile(
+                    context: context,
+                    icon: Icons.person_rounded,
+                    label: 'Profile',
+                    pageKey: 'profile',
+                    route: '/profile',
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    label: 'Messages',
+                    pageKey: 'messages',
+                    route: '/messages',
+                    trailing: _unreadCount > 0
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _unreadCount > 99 ? '99+' : '$_unreadCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
+                        : null,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      if (widget.currentPage != 'messages') {
+                        await Navigator.pushNamed(context, '/messages');
+                        await Future.delayed(
+                            const Duration(milliseconds: 800));
+                        await MessagingService.refreshUnreadBadge();
+                        if (mounted) {
+                          await _loadUnreadCount(forceRefresh: true);
+                        }
+                      }
+                    },
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.people_outline_rounded,
+                    label: 'Find Friends',
+                    pageKey: 'find_friends',
+                    route: '/search-users',
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'Saved Posts',
+                    pageKey: 'saved_posts',
+                    route: '/saved-posts',
+                  ),
+
+                  // ── Nutrition & Scanning ───────────────────────────
+                  _sectionHeader('Nutrition & Scanning'),
+                  _tile(
+                    context: context,
+                    icon: Icons.monitor_heart_outlined,
+                    label: 'Daily Tracker',
+                    pageKey: 'tracker',
+                    route: '/tracker',
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.search_rounded,
+                    label: 'Search Nutrition',
+                    pageKey: 'nutrition_search',
+                    route: '/nutrition-search',
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.edit_outlined,
+                    label: 'Enter Barcode',
+                    pageKey: 'manual_barcode',
+                    route: '/manual-barcode-entry',
+                  ),
+
+                  // ── Bariatric Health ───────────────────────────────
+                  _sectionHeader(
+                    'Bariatric Health',
+                    icon: Icons.monitor_weight_rounded,
+                    color: Colors.orange.shade700,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.monitor_weight_rounded,
+                    label: 'Bariatric Hub',
+                    pageKey: 'bari_hub',
+                    route: '/bari-hub',
+                    iconColor: Colors.orange.shade700,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.water_drop_rounded,
+                    label: 'Hydration Log',
+                    pageKey: 'hydration_log',
+                    route: '/hydration-log',
+                    iconColor: Colors.blue.shade600,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.medication_rounded,
+                    label: 'Supplements',
+                    pageKey: 'supplement_schedule',
+                    route: '/supplement-schedule',
+                    iconColor: Colors.teal.shade600,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.sick_rounded,
+                    label: 'Symptom Log',
+                    pageKey: 'symptom_log',
+                    route: '/symptom-log',
+                    iconColor: Colors.red.shade400,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.bar_chart_rounded,
+                    label: 'Progress Dashboard',
+                    pageKey: 'bari_dashboard',
+                    route: '/bari-dashboard',
+                    iconColor: Colors.purple.shade600,
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.liquor_rounded,
+                    label: 'Alcohol Log',
+                    pageKey: 'alcohol_log',
+                    route: '/alcohol-log',
+                    iconColor: Colors.indigo.shade400,
+                  ),
+
+                  // ── Recipes ────────────────────────────────────────
+                  _sectionHeader('Recipes'),
+                  if (isPremium) ...[
+                    _tile(
+                      context: context,
+                      icon: Icons.favorite_border_rounded,
+                      label: 'Favorite Recipes',
+                      pageKey: 'favorite_recipes',
+                      route: '/favorite-recipes',
                     ),
-                    SizedBox(height: 8),
+                    _tile(
+                      context: context,
+                      icon: Icons.menu_book_rounded,
+                      label: 'My Cookbook',
+                      pageKey: 'my_cookbook',
+                      route: '/my-cookbook',
+                    ),
+                    _tile(
+                      context: context,
+                      icon: Icons.add_circle_outline_rounded,
+                      label: 'Submit Recipe',
+                      pageKey: 'submit_recipe',
+                      route: '/submit-recipe',
+                    ),
+                  ] else ...[
+                    _lockedTile(
+                      context: context,
+                      icon: Icons.favorite_border_rounded,
+                      label: 'Favorite Recipes',
+                    ),
+                    _lockedTile(
+                      context: context,
+                      icon: Icons.menu_book_rounded,
+                      label: 'My Cookbook',
+                    ),
+                    _lockedTile(
+                      context: context,
+                      icon: Icons.add_circle_outline_rounded,
+                      label: 'Submit Recipe',
+                    ),
                   ],
-                  
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _controller.isPremium ? Colors.amber : Colors.grey,
-                      borderRadius: BorderRadius.circular(12),
+
+                  // ── Shopping ───────────────────────────────────────
+                  _sectionHeader('Shopping'),
+                  if (isPremium) ...[
+                    _tile(
+                      context: context,
+                      icon: Icons.shopping_cart_outlined,
+                      label: 'Grocery List',
+                      pageKey: 'grocery_list',
+                      route: '/grocery-list',
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _controller.isPremium ? Icons.star : Icons.person,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          _controller.isPremium ? 'Premium' : 'Free Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
+                    _tile(
+                      context: context,
+                      icon: Icons.bookmark_added_rounded,
+                      label: 'Saved Ingredients',
+                      pageKey: 'saved_ingredients',
+                      route: '/saved-ingredients',
                     ),
-                  ),
-                  
-                  if (!_controller.isPremium) ...[
-                    SizedBox(height: 4),
-                    Text(
-                      'Scans used: ${_controller.totalScansUsed}/3',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ] else ...[
+                    _lockedTile(
+                      context: context,
+                      icon: Icons.shopping_cart_outlined,
+                      label: 'Grocery List',
+                    ),
+                    _lockedTile(
+                      context: context,
+                      icon: Icons.bookmark_added_rounded,
+                      label: 'Saved Ingredients',
                     ),
                   ],
-                ],
-              ),
-            ),
-            
-            ListTile(
-              leading: Icon(
-                Icons.home,
-                color: widget.currentPage == 'home' ? Colors.orange : null,
-              ),
-              title: Text(
-                'Home',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'home' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'home' ? Colors.orange : null,
-                ),
-              ),
-              selected: widget.currentPage == 'home',
-              onTap: () {
-                Navigator.pop(context);
-                if (widget.currentPage != 'home') {
-                  Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-                }
-              },
-            ),
-            
-            ListTile(
-              leading: Icon(
-                Icons.person,
-                color: widget.currentPage == 'profile' ? Colors.orange : null,
-              ),
-              title: Text(
-                'Profile',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'profile' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'profile' ? Colors.orange : null,
-                ),
-              ),
-              selected: widget.currentPage == 'profile',
-              onTap: () {
-                Navigator.pop(context);
-                if (widget.currentPage != 'profile') {
-                  Navigator.pushNamed(context, '/profile');
-                }
-              },
-            ),
-            
-            ListTile(
-              leading: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    Icons.chat,
-                    color: widget.currentPage == 'messages' ? Colors.orange : null,
-                  ),
-                  if (_unreadCount > 0)
-                    Positioned(
-                      right: -8,
-                      top: -4,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
+
+                  // ── Developer Tools (dev mode only) ────────────────
+                  if (isDev) ...[
+                    _sectionHeader(
+                      'Developer Tools',
+                      icon: Icons.code_rounded,
+                      color: Colors.deepPurple.shade400,
+                    ),
+                    _tile(
+                      context: context,
+                      icon: Icons.psychology_rounded,
+                      label: 'LoRA Dataset Manager',
+                      pageKey: 'lora_dataset',
+                      route: '/lora-dataset',
+                      iconColor: Colors.deepPurple.shade600,
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: BoxConstraints(
-                          minWidth: 18,
-                          minHeight: 18,
+                          color: Colors.deepPurple.shade100,
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          _unreadCount > 99 ? '99+' : '$_unreadCount',
+                          'DEV',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
+                            color: Colors.deepPurple.shade800,
+                            fontSize: 9,
                             fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ),
                     ),
+                  ],
+
+                  // ── Account ────────────────────────────────────────
+                  _sectionHeader('Account'),
+                  _tile(
+                    context: context,
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    pageKey: 'settings',
+                    route: '/settings',
+                  ),
+                  _tile(
+                    context: context,
+                    icon: isPremium
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    label: isPremium
+                        ? 'Premium Active'
+                        : 'Upgrade to Premium',
+                    pageKey: 'purchase',
+                    route: '/purchase',
+                    iconColor:
+                        isPremium ? Colors.amber : Colors.grey.shade700,
+                    trailing: isPremium
+                        ? const Icon(Icons.check_circle,
+                            color: Colors.orange, size: 18)
+                        : const Icon(Icons.arrow_forward_ios,
+                            size: 14, color: Colors.grey),
+                  ),
+                  _tile(
+                    context: context,
+                    icon: Icons.mail_outline_rounded,
+                    label: 'Contact Us',
+                    pageKey: 'contact',
+                    route: '/contact',
+                  ),
+
+                  const SizedBox(height: 8),
+                  const Divider(height: 1),
+                  const SizedBox(height: 4),
+
+                  // Sign out
+                  ListTile(
+                    leading: const Icon(Icons.logout_rounded,
+                        color: Colors.red, size: 22),
+                    title: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 2),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    onTap: () => _showSignOutDialog(context),
+                  ),
+
+                  const SizedBox(height: 16),
                 ],
               ),
-              title: Text(
-                'Messages',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'messages' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'messages' ? Colors.orange : null,
-                ),
-              ),
-              trailing: _unreadCount > 0
-                  ? Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _unreadCount > 99 ? '99+' : '$_unreadCount',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    )
-                  : null,
-              selected: widget.currentPage == 'messages',
-              onTap: () async {
-                Navigator.pop(context);
-                
-                if (widget.currentPage != 'messages') {
-                  await Navigator.pushNamed(context, '/messages');
-                  
-                  print('🔄 User returned from messages, refreshing badges...');
-                  
-                  await Future.delayed(Duration(milliseconds: 800));
-                  
-                  await MessagingService.refreshUnreadBadge();
-                  
-                  if (mounted) {
-                    await _loadUnreadCount(forceRefresh: true);
-                  }
-                  
-                  print('✅ Badge refresh complete');
-                }
-              },
             ),
-            
-            ListTile(
-              leading: Icon(
-                Icons.bookmark,
-                color: widget.currentPage == 'saved_posts' ? Colors.orange : null,
-              ),
-              title: Text(
-                'Saved Posts',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'saved_posts' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'saved_posts' ? Colors.orange : null,
-                ),
-              ),
-              selected: widget.currentPage == 'saved_posts',
-              onTap: () {
-                Navigator.pop(context);
-                if (widget.currentPage != 'saved_posts') {
-                  Navigator.pushNamed(context, '/saved-posts');
-                }
-              },
-            ),
-
-            ListTile(
-              leading: Icon(
-                Icons.person_search,
-                color: widget.currentPage == 'find_friends' ? Colors.orange : null,
-              ),
-              title: Text(
-                'Find Friends',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'find_friends' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'find_friends' ? Colors.orange : null,
-                ),
-              ),
-              selected: widget.currentPage == 'find_friends',
-              onTap: () {
-                Navigator.pop(context);
-                if (widget.currentPage != 'find_friends') {
-                  Navigator.pushNamed(context, '/search-users');
-                }
-              },
-            ),
-            
-            if (_controller.isPremium) ...[
-              ListTile(
-                leading: Icon(
-                  Icons.favorite,
-                  color: widget.currentPage == 'favorite_recipes' ? Colors.orange : null,
-                ),
-                title: Text(
-                  'Favorite Recipes',
-                  style: TextStyle(
-                    fontWeight: widget.currentPage == 'favorite_recipes' ? FontWeight.bold : FontWeight.normal,
-                    color: widget.currentPage == 'favorite_recipes' ? Colors.orange : null,
-                  ),
-                ),
-                selected: widget.currentPage == 'favorite_recipes',
-                onTap: () {
-                  Navigator.pop(context);
-                  if (widget.currentPage != 'favorite_recipes') {
-                    Navigator.pushNamed(context, '/favorite-recipes');
-                  }
-                },
-              ),
-              
-              ListTile(
-                leading: const Icon(Icons.book),
-                title: const Text('My Cookbook'),
-                onTap: () {
-                  Navigator.pushNamed(context, '/my-cookbook');
-                },
-              ),
-
-              ListTile(
-                leading: Icon(Icons.shopping_cart),
-                title: Text('My Grocery List'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/grocery-list');
-                },
-              ),
-
-              ListTile(
-                leading: Icon(Icons.bookmark, color: Colors.orange),
-                title: Text("Saved Ingredients"),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/saved-ingredients');
-                },
-              ),
-              
-              ListTile(
-                leading: Icon(Icons.add_circle),
-                title: Text('Submit Recipe'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/submit-recipe');
-                },
-              ),
-            ] else ...[
-              ListTile(
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.favorite, color: Colors.grey),
-                    SizedBox(width: 4),
-                    Icon(Icons.lock, color: Colors.red, size: 16),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Text('Favorite Recipes', style: TextStyle(color: Colors.grey)),
-                    SizedBox(width: 8),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.amber,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'PREMIUM',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/purchase');
-                },
-              ),
-              
-              ListTile(
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.shopping_cart, color: Colors.grey),
-                    SizedBox(width: 4),
-                    Icon(Icons.lock, color: Colors.red, size: 16),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Text('Grocery List', style: TextStyle(color: Colors.grey)),
-                    SizedBox(width: 8),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.amber,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'PREMIUM',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/purchase');
-                },
-              ),
-              
-              ListTile(
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add_circle, color: Colors.grey),
-                    SizedBox(width: 4),
-                    Icon(Icons.lock, color: Colors.red, size: 16),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Text('Submit Recipe', style: TextStyle(color: Colors.grey)),
-                    SizedBox(width: 8),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.amber,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'PREMIUM',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/purchase');
-                },
-              ),
-            ],
-            
-            Divider(),
-            
-            ListTile(
-              leading: Icon(
-                Icons.contact_mail,
-                color: widget.currentPage == 'contact' ? Colors.orange : null,
-              ),
-              title: Text(
-                'Contact Us',
-                style: TextStyle(
-                  fontWeight: widget.currentPage == 'contact' ? FontWeight.bold : FontWeight.normal,
-                  color: widget.currentPage == 'contact' ? Colors.orange : null,
-                ),
-              ),
-              selected: widget.currentPage == 'contact',
-              onTap: () {
-                Navigator.pop(context);
-                if (widget.currentPage != 'contact') {
-                  Navigator.pushNamed(context, '/contact');
-                }
-              },
-            ),
-            
-            ListTile(
-              leading: Icon(
-                Icons.star,
-                color: _controller.isPremium ? Colors.amber : Colors.grey,
-              ),
-              title: Text(
-                _controller.isPremium ? 'Premium Active' : 'Upgrade to Premium',
-                style: TextStyle(
-                  color: _controller.isPremium ? Colors.amber : null,
-                  fontWeight: _controller.isPremium ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-              trailing: _controller.isPremium 
-                  ? Icon(Icons.check_circle, color: Colors.orange)
-                  : Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/purchase');
-              },
-            ),
-            
-            Divider(),
-            
-            ListTile(
-              leading: Icon(Icons.logout, color: Colors.red),
-              title: Text(
-                'Sign Out',
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () => _showSignOutDialog(context),
-            ),
-            
-            SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
 
+  // ── Sign out ───────────────────────────────────────────────────────────
   void _showSignOutDialog(BuildContext context) {
     showDialog(
       context: context,
-      barrierDismissible: true,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Sign Out'),
-        content: Text('Are you sure you want to sign out?'),
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -649,7 +615,7 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: Text('Sign Out'),
+            child: const Text('Sign Out'),
           ),
         ],
       ),
@@ -662,7 +628,7 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
       barrierDismissible: false,
       builder: (loadingContext) => WillPopScope(
         onWillPop: () async => false,
-        child: Center(
+        child: const Center(
           child: Card(
             child: Padding(
               padding: EdgeInsets.all(20),
@@ -679,29 +645,24 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
         ),
       ),
     );
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('last_route');
       await AuthService.signOut();
       await prefs.clear();
       await DatabaseServiceCore.clearAllUserCache();
-      
+      if (context.mounted) Navigator.of(context).pop();
       if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-      
-      if (context.mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
-      print('Error during logout: $e');
-      
+      AppConfig.debugPrint('Error during logout: $e');
       if (context.mounted) {
         Navigator.of(context).pop();
-        
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Error signing out. Please try again.'),
             backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
@@ -709,5 +670,120 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
         );
       }
     }
+  }
+}
+
+// ── Drawer header ──────────────────────────────────────────────────────────
+class _DrawerHeader extends StatelessWidget {
+  final String? email;
+  final bool isPremium;
+  final int scansUsed;
+
+  const _DrawerHeader({
+    required this.email,
+    required this.isPremium,
+    required this.scansUsed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.orange.shade800, Colors.orange.shade600],
+        ),
+      ),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 20,
+        right: 20,
+        bottom: 20,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white38, width: 1.5),
+            ),
+            child: const Icon(Icons.monitor_weight_rounded,
+                color: Colors.white, size: 26),
+          ),
+          const SizedBox(height: 12),
+
+          const Text(
+            'BariWise',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.3,
+            ),
+          ),
+
+          if (email != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              email!,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+
+          const SizedBox(height: 10),
+
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPremium
+                      ? Colors.amber.shade600
+                      : Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPremium ? Icons.star_rounded : Icons.person_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      isPremium ? 'Premium' : 'Free Account',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!isPremium) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '$scansUsed/3 scans used',
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }

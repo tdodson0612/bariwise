@@ -25,7 +25,6 @@ import 'package:bari_wise/config/app_config.dart';
 import 'package:bari_wise/widgets/menu_icon_with_badge.dart';
 import 'package:bari_wise/services/favorite_recipes_service.dart';
 import 'package:bari_wise/services/friends_service.dart'; // 🔥 NEW
-import 'widgets/auto_barcode_scanner.dart';
 import 'widgets/day7_congrats_popup.dart';
 import 'services/tracker_service.dart';
 import 'package:bari_wise/services/feed_posts_service.dart';
@@ -33,6 +32,9 @@ import 'package:bari_wise/models/draft_recipe.dart';
 import 'package:bari_wise/services/draft_recipes_service.dart';
 import 'services/picture_service.dart';
 import 'package:bari_wise/widgets/tutorial_overlay.dart';
+import 'widgets/health_summary_card.dart';
+import '../models/tracker_entry.dart';
+import 'services/recent_activity_tracker.dart';
 
 class Recipe {
   final String title;
@@ -171,7 +173,7 @@ class RecipeGenerator {
         ),
         Recipe(
           title: 'Lentil Soup',
-          description: 'Fiber-rich soup to support bari health',
+          description: 'Fiber-rich soup to support bariatric health',
           ingredients: ['Red lentils', 'Carrots', 'Celery', 'Onions', 'Vegetable broth'],
           instructions: 'Sauté vegetables, add lentils and broth, simmer until tender.',
         ),
@@ -180,7 +182,7 @@ class RecipeGenerator {
   static List<Recipe> _getDetoxRecipes() => [
         Recipe(
           title: 'Green Detox Smoothie',
-          description: 'bari-cleansing green smoothie',
+          description: 'Bariatric-friendly green smoothie',
           ingredients: ['Spinach', 'Green apple', 'Lemon juice', 'Ginger', 'Water'],
           instructions: 'Blend all ingredients until smooth, serve immediately.',
         ),
@@ -276,7 +278,7 @@ class _HomePageState extends State<HomePage>
   File? _imageFile;
   String _nutritionText = '';
   int? _bariHealthScore;
-  bool _showbariBar = false;
+  bool _showBariBar = false;
   bool _isLoading = false;
   List<Recipe> _recipeSuggestions = [];
   List<FavoriteRecipe> _favoriteRecipes = [];
@@ -334,7 +336,6 @@ class _HomePageState extends State<HomePage>
   static const int _recipesPerPage = 2;
 
   // NEW: GlobalKeys for tutorial highlights
-  final GlobalKey _autoButtonKey = GlobalKey();
   final GlobalKey _scanButtonKey = GlobalKey();
   final GlobalKey _manualButtonKey = GlobalKey();
   final GlobalKey _lookupButtonKey = GlobalKey();
@@ -343,18 +344,50 @@ class _HomePageState extends State<HomePage>
   List<Map<String, dynamic>> _feedPosts = [];
   bool _isLoadingFeed = false;
 
+  // Smart Prompt state
+  SmartPrompt? _smartPrompt;
+  bool _loadingSmartPrompt = true;
+
   @override
   bool get wantKeepAlive => true;
 
   @override
+
   void initState() {
     super.initState();
     _initializePremiumController();
     _initializeAsync();
     _checkDay7Achievement();
     _loadFeed();
+    _loadSmartPrompt();
+    RecentActivityTracker.recordScreen(label: 'Home', route: '/home');
     _feedScrollController.addListener(_onFeedScroll);
+  }
 
+  Future<void> _loadSmartPrompt() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() => _loadingSmartPrompt = false);
+      return;
+    }
+    try {
+      final prompt = await SmartPromptService.getCurrentPrompt(userId: userId);
+      if (mounted) {
+        setState(() {
+          _smartPrompt = prompt;
+          _loadingSmartPrompt = false;
+        });
+      }
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error loading smart prompt: $e');
+      if (mounted) setState(() => _loadingSmartPrompt = false);
+    }
+  }
+
+  void _dismissSmartPrompt() {
+    if (_smartPrompt == null) return;
+    SmartPromptService.dismiss(_smartPrompt!.kind);
+    setState(() => _smartPrompt = null);
   }
 
   bool _didPrecache = false;
@@ -409,7 +442,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  @override
   @override
   void dispose() {
     _isDisposed = true;
@@ -581,6 +613,14 @@ class _HomePageState extends State<HomePage>
       return;
     }
 
+    // google_mobile_ads only has a plugin on Android/iOS — skip on macOS/web/desktop
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      if (AppConfig.enableDebugPrints) {
+        print("🚫 Skipping interstitial ad - not supported on this platform");
+      }
+      return;
+    }
+
     InterstitialAd.load(
       adUnitId: AppConfig.interstitialAdId,
       request: const AdRequest(),
@@ -617,6 +657,14 @@ class _HomePageState extends State<HomePage>
     if (_isDisposed || _isPremium) {
       if (AppConfig.enableDebugPrints && _isPremium) {
         print("🚫 Not loading rewarded ad - user is PREMIUM");
+      }
+      return;
+    }
+
+    // google_mobile_ads only has a plugin on Android/iOS — skip on macOS/web/desktop
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      if (AppConfig.enableDebugPrints) {
+        print("🚫 Skipping rewarded ad - not supported on this platform");
       }
       return;
     }
@@ -961,7 +1009,7 @@ class _HomePageState extends State<HomePage>
     setState(() {
       _showInitialView = true;
       _nutritionText = '';
-      _showbariBar = false;
+      _showBariBar = false;
       _imageFile = null;
       _recipeSuggestions = [];
       _bariHealthScore = null;
@@ -1234,7 +1282,7 @@ class _HomePageState extends State<HomePage>
         setState(() {
           _showInitialView = false;
           _nutritionText = '';
-          _showbariBar = false;
+          _showBariBar = false;
           _imageFile = null;
           _recipeSuggestions = [];
           _isLoading = false;
@@ -1561,7 +1609,7 @@ class _HomePageState extends State<HomePage>
         setState(() {
           _isLoading = true;
           _nutritionText = '';
-          _showbariBar = false;
+          _showBariBar = false;
           _recipeSuggestions = [];
           _keywordTokens = [];
           _selectedKeywords = {};
@@ -1704,7 +1752,7 @@ class _HomePageState extends State<HomePage>
         setState(() {
           _nutritionText = _buildNutritionDisplay(nutrition!);
           _bariHealthScore = score;
-          _showbariBar = true;
+          _showBariBar = true;
           _isLoading = false;
           _currentNutrition = nutrition;
         });
@@ -1724,7 +1772,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         setState(() {
           _nutritionText = "Scanning timed out. Please try again.";
-          _showbariBar = false;
+          _showBariBar = false;
           _isLoading = false;
         });
 
@@ -1740,7 +1788,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         setState(() {
           _nutritionText = "Error: ${e.toString()}";
-          _showbariBar = false;
+          _showBariBar = false;
           _isLoading = false;
         });
 
@@ -4809,6 +4857,422 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  Widget _buildAppFeatureChip(IconData icon, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange.shade200),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: Colors.orange.shade700),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange.shade800,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSnapshotNutrient(
+    String label,
+    double current,
+    double target,
+    String unit,
+    String status,
+  ) {
+    Color color;
+    switch (status) {
+      case 'over':
+        color = Colors.red.shade600;
+        break;
+      case 'low':
+        color = Colors.orange.shade700;
+        break;
+      default:
+        color = Colors.green.shade600;
+    }
+
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              current >= 100
+                  ? current.toStringAsFixed(0)
+                  : current.toStringAsFixed(1),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            Text(
+              unit,
+              style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNutritionSnapshot() {
+    final userId = AuthService.currentUserId;
+    if (userId == null) return const SizedBox.shrink();
+
+    return FutureBuilder<TrackerEntry?>(
+      future: TrackerService.getEntryForDate(
+        userId,
+        DateTime.now().toString().split(' ')[0],
+      ),
+      builder: (context, snapshot) {
+        final entry = snapshot.data;
+        if (entry == null || entry.meals.isEmpty) return const SizedBox.shrink();
+
+        try {
+          final totals = TrackerService.calculateNutritionTotals(entry.meals);
+          final status = TrackerService.getNutritionStatus(entry.meals);
+          final targets = TrackerService.dailyTargets;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha((0.95 * 255).toInt()),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.today, color: Colors.orange.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      "Today's Nutrition",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/tracker'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.orange.shade700,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                      ),
+                      child: const Text('Full Detail →', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildSnapshotNutrient(
+                      'Calories',
+                      totals['calories'] ?? 0,
+                      targets['calories']!,
+                      'kcal',
+                      status['calories'] ?? 'low',
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSnapshotNutrient(
+                      'Protein',
+                      totals['protein'] ?? 0,
+                      targets['protein']!,
+                      'g',
+                      status['protein'] ?? 'low',
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSnapshotNutrient(
+                      'Fiber',
+                      totals['fiber'] ?? 0,
+                      targets['fiber']!,
+                      'g',
+                      status['fiber'] ?? 'low',
+                    ),
+                    const SizedBox(width: 8),
+                    _buildSnapshotNutrient(
+                      'Sodium',
+                      totals['sodium'] ?? 0,
+                      targets['sodium']!,
+                      'mg',
+                      status['sodium'] ?? 'good',
+                    ),
+                  ],
+                ),
+                if (entry.supplements.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.medication, size: 14, color: Colors.indigo.shade600),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${entry.supplements.length} supplement${entry.supplements.length == 1 ? '' : 's'} logged today',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.indigo.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          );
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ _buildNutritionSnapshot error: $e');
+          return const SizedBox.shrink();
+        }
+      },
+    );
+  }
+
+  Widget _buildBariHealthCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.orange.shade800, Colors.orange.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.shade900.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => Navigator.pushNamed(context, '/bari-hub'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bariatric Health Hub',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Hydration · Supplements · Symptoms · Progress',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white54, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildSmartPromptCard() {
+    if (_loadingSmartPrompt || _smartPrompt == null) return const SizedBox.shrink();
+    final prompt = _smartPrompt!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha((0.95 * 255).toInt()),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Text(prompt.icon, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  prompt.title,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  prompt.message,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pushNamed(context, prompt.route),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.orange.shade700,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  minimumSize: const Size(0, 32),
+                ),
+                child: Text(prompt.actionLabel, style: const TextStyle(fontSize: 12)),
+              ),
+              IconButton(
+                icon: Icon(Icons.close, size: 16, color: Colors.grey.shade400),
+                onPressed: _dismissSmartPrompt,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Dismiss',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentlyUsedSection() {
+    final items = RecentActivityTracker.getRecent(limit: 5);
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha((0.95 * 255).toInt()),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recently Used',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final item = items[i];
+                return InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: item.route != null
+                      ? () => Navigator.pushNamed(context, item.route!)
+                      : null,
+                  child: Container(
+                    width: 88,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.shade100),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(item.icon, style: const TextStyle(fontSize: 18)),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   Widget _buildInitialView() {
     return Container(
       decoration: BoxDecoration(
@@ -4864,35 +5328,67 @@ class _HomePageState extends State<HomePage>
             ),
 
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha((0.9 * 255).toInt()),
+                color: Colors.white.withAlpha((0.95 * 255).toInt()),
                 borderRadius: BorderRadius.circular(15),
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Welcome to bariwise',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                  Row(
+                    children: [
+                      Icon(Icons.favorite_rounded, color: Colors.orange.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Welcome to BariWise',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 10),
                   Text(
-                    'Scan products, look up foods, and get nutrition insights!',
+                    'BariWise helps you eat better after bariatric surgery. '
+                    'Scan any food barcode to see how bariatric-friendly it is, '
+                    'log your meals to track daily nutrition, and discover '
+                    'recipes designed around a bariatric diet.',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey.shade600,
+                      color: Colors.grey.shade700,
+                      height: 1.5,
                     ),
-                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildAppFeatureChip(Icons.qr_code_scanner, 'Scan Labels'),
+                      const SizedBox(width: 8),
+                      _buildAppFeatureChip(Icons.bar_chart, 'Track Meals'),
+                      const SizedBox(width: 8),
+                      _buildAppFeatureChip(Icons.restaurant, 'Get Recipes'),
+                    ],
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+
+            const HealthSummaryCard(),
+            // Smart prompt — single highest-priority contextual nudge
+            _buildSmartPromptCard(),
+            // Today's nutrition snapshot
+            _buildNutritionSnapshot(),
+            // Recently used screens and recipes
+            _buildRecentlyUsedSection(),
+            // Bariatric Health Hub entry point
+            _buildBariHealthCard(),
+
+            const SizedBox(height: 4),
 
             Container(
               padding: const EdgeInsets.all(16),
@@ -4924,30 +5420,72 @@ class _HomePageState extends State<HomePage>
                               : Colors.blue.shade200,
                         ),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Icon(
-                            _hasUsedAllFreeScans
-                                ? Icons.warning_rounded
-                                : Icons.info_outline,
-                            color: _hasUsedAllFreeScans
-                                ? Colors.red.shade700
-                                : Colors.blue.shade700,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _hasUsedAllFreeScans
-                                  ? 'Daily free scans used. Upgrade for unlimited!'
-                                  : '$_remainingScans free scan${_remainingScans == 1 ? '' : 's'} remaining today',
-                              style: TextStyle(
+                          Row(
+                            children: [
+                              Icon(
+                                _hasUsedAllFreeScans
+                                    ? Icons.warning_rounded
+                                    : Icons.info_outline,
                                 color: _hasUsedAllFreeScans
-                                    ? Colors.red.shade900
-                                    : Colors.blue.shade900,
-                                fontWeight: FontWeight.w600,
+                                    ? Colors.red.shade700
+                                    : Colors.blue.shade700,
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _hasUsedAllFreeScans
+                                      ? 'Daily free scans used.'
+                                      : '$_remainingScans free scan${_remainingScans == 1 ? '' : 's'} remaining today',
+                                  style: TextStyle(
+                                    color: _hasUsedAllFreeScans
+                                        ? Colors.red.shade900
+                                        : Colors.blue.shade900,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
+                          if (_hasUsedAllFreeScans) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _showRewardedAdForFreeScan,
+                                    icon: const Icon(Icons.play_circle_outline, size: 20),
+                                    label: const Text(
+                                      'Watch Ad for Free Scan',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange.shade600,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => Navigator.pushNamed(context, '/purchase'),
+                                    icon: const Icon(Icons.star, size: 20),
+                                    label: const Text(
+                                      'Go Premium',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -4955,14 +5493,6 @@ class _HomePageState extends State<HomePage>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildActionButton(
-                          key: _autoButtonKey,
-                          icon: Icons.qr_code_scanner,
-                          label: 'Auto',
-                          color: Colors.purple.shade600,
-                          onPressed: _isScanning ? null : _autoScanBarcode,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
                         _buildActionButton(
                           key: _scanButtonKey,
                           icon: Icons.camera_alt,
@@ -5343,7 +5873,7 @@ class _HomePageState extends State<HomePage>
 
             const SizedBox(height: 20),
 
-            if (_showbariBar && _bariHealthScore != null)
+            if (_showBariBar && _bariHealthScore != null)
               BariHealthBar(healthScore: _bariHealthScore!),
 
             const SizedBox(height: 20),
@@ -5659,83 +6189,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Future<void> _autoScanBarcode() async {
-    try {
-      if (!_premiumController.canAccessFeature(PremiumFeature.scan)) {
-        Navigator.pushNamed(context, '/purchase');
-        return;
-      }
-
-      final isPremiumNow = _premiumController.isPremium;
-      
-      if (!isPremiumNow && _isAdReady) {
-        _showInterstitialAd(() => _executeAutoScan());
-      } else {
-        _executeAutoScan();
-      }
-    } catch (e) {
-      if (mounted) {
-        await ErrorHandlingService.handleError(
-          context: context,
-          error: e,
-          category: ErrorHandlingService.scanError,
-          customMessage: 'Unable to start auto-scan',
-        );
-      }
-    }
-  }
-
-  Future<void> _executeAutoScan() async {
-    if (_isDisposed) return;
-
-    try {
-      final success = await _premiumController.useScan();
-      if (!success) {
-        Navigator.pushNamed(context, '/purchase');
-        return;
-      }
-
-      if (!mounted) return;
-
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => AutoBarcodeScanner(
-            onBarcodeDetected: (imagePath, barcode) async {
-              Navigator.pop(context);
-              
-              final file = File(imagePath);
-              if (await file.exists()) {
-                setState(() {
-                  _imageFile = file;
-                  _showInitialView = false;
-                });
-                
-                await Future.delayed(Duration(milliseconds: 500));
-                if (mounted && !_isDisposed) {
-                  await _submitPhoto();
-                }
-              }
-            },
-            onCancel: () {
-              Navigator.pop(context);
-              _resetToHome();
-            },
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        await ErrorHandlingService.handleError(
-          context: context,
-          error: e,
-          category: ErrorHandlingService.scanError,
-          customMessage: 'Error during auto-scan',
-        );
-      }
-    }
-  }
-  @override
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
@@ -5760,7 +6213,6 @@ class _HomePageState extends State<HomePage>
           // Tutorial overlay on top when active
           if (_showTutorial)
             TutorialOverlay(
-              autoButtonKey: _autoButtonKey,
               scanButtonKey: _scanButtonKey,
               manualButtonKey: _manualButtonKey,
               lookupButtonKey: _lookupButtonKey,
@@ -6004,6 +6456,107 @@ class _HomePageState extends State<HomePage>
       'unit': unit,
       'name': name.trim(),
     };
+  }
+  /// Show rewarded ad to grant user a bonus free scan
+  Future<void> _showRewardedAdForFreeScan() async {
+    // Check if premium (shouldn't happen, but safety check)
+    if (_premiumController.isPremium) {
+      AppConfig.debugPrint('🚫 Premium user tried to watch ad - blocking');
+      return;
+    }
+
+    // Check if ad is ready
+    if (!_isRewardedAdReady || _rewardedAd == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Ad not ready yet. Please try again in a moment.'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      _loadRewardedAd();
+      return;
+    }
+
+    AppConfig.debugPrint('📺 Showing rewarded ad for free scan');
+
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (ad) {
+        AppConfig.debugPrint('📺 Rewarded ad displayed');
+      },
+      onAdDismissedFullScreenContent: (ad) {
+        AppConfig.debugPrint('📺 Rewarded ad dismissed');
+        ad.dispose();
+        if (!_premiumController.isPremium) {
+          _loadRewardedAd();
+        }
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        AppConfig.debugPrint('❌ Rewarded ad failed to show: $error');
+        ad.dispose();
+        if (!_premiumController.isPremium) {
+          _loadRewardedAd();
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to load ad. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+    );
+
+    _rewardedAd!.show(
+      onUserEarnedReward: (ad, reward) async {
+        AppConfig.debugPrint('🎁 User earned reward: ${reward.amount} ${reward.type}');
+
+        // Refresh premium/scan state from source of truth
+        try {
+          await _premiumController.refresh();
+        } catch (e) {
+          AppConfig.debugPrint('⚠️ Could not refresh scan count after ad: $e');
+        }
+
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _remainingScans = _premiumController.remainingScans;
+            _hasUsedAllFreeScans = _premiumController.hasUsedAllFreeScans;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '✨ You earned 1 free scan! You now have $_remainingScans scan${_remainingScans == 1 ? '' : 's'} remaining.',
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      },
+    );
+
+    _isRewardedAdReady = false;
   }
 }
 // 🔥 NEW: Friend Picker Dialog - ADD THIS AT THE END OF THE FILE

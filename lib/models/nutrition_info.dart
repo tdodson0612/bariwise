@@ -504,7 +504,7 @@ class NutritionInfo {
   }
 
   /// Calculate bari health score for this nutrition info
-  int calculatebariScore({String? surgeryType}) {
+  int calculateBariScore({String? surgeryType}) {
     return BariHealthCalculator.calculate(
       fat: fat,
       sodium: sodium,
@@ -516,6 +516,11 @@ class NutritionInfo {
       saturatedFat: saturatedFat,
     );
   }
+
+  /// Alias — kept for backwards compatibility with any call sites
+  /// using the original lowercase form
+  int calculatebariScore({String? surgeryType}) =>
+      calculateBariScore(surgeryType: surgeryType);
 
   /// Check if nutrition info is empty (no meaningful data)
   bool get isEmpty {

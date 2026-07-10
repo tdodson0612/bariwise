@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../services/grocery_service.dart';
 import '../models/grocery_item.dart';
 import '../services/error_handling_service.dart';
+import '../services/recent_activity_tracker.dart';
 
 class GroceryListPage extends StatefulWidget {
   final String? initialItem;
@@ -56,6 +57,7 @@ class _GroceryListPageState extends State<GroceryListPage> {
   void initState() {
     super.initState();
     _initializeUser();
+    RecentActivityTracker.recordScreen(label: 'Grocery List', route: '/grocery-list');
   }
 
   @override

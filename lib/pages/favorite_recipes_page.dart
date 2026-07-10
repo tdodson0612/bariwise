@@ -10,6 +10,7 @@ import '../services/error_handling_service.dart';
 import '../services/auth_service.dart';
 import '../services/favorite_recipes_service.dart';
 import '../services/feed_posts_service.dart';
+import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
 
 class FavoriteRecipesPage extends StatefulWidget {
@@ -35,6 +36,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
     super.initState();
     _favoriteRecipes = List.from(widget.favoriteRecipes);
     _loadFavoriteRecipes(forceRefresh: false);
+    RecentActivityTracker.recordScreen(
+        label: 'Favorite Recipes', route: '/favorite-recipes');
   }
 
   @override
@@ -48,16 +51,16 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
   Future<List<FavoriteRecipe>?> _getCachedFavorites() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       final cachedData = prefs.getString('favorite_recipes_cached');
       if (cachedData != null) {
         final data = json.decode(cachedData);
         final timestamp = data['_cached_at'] as int?;
-        
+
         if (timestamp != null) {
           final age = DateTime.now().millisecondsSinceEpoch - timestamp;
           final isCacheValid = age < _cacheDuration.inMilliseconds;
-          
+
           if (isCacheValid) {
             final recipes = (data['recipes'] as List)
                 .map((jsonString) {
@@ -70,16 +73,18 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 .where((recipe) => recipe != null)
                 .cast<FavoriteRecipe>()
                 .toList();
-            
-            print('📦 Using cached favorites (${recipes.length} recipes)');
+
+            AppConfig.debugPrint(
+                '📦 Using cached favorites (${recipes.length} recipes)');
             return recipes;
           }
         }
       }
-      
-      final favoriteRecipesJson = prefs.getStringList('favorite_recipes_detailed') ?? [];
+
+      final favoriteRecipesJson =
+          prefs.getStringList('favorite_recipes_detailed') ?? [];
       if (favoriteRecipesJson.isEmpty) return null;
-      
+
       final recipes = favoriteRecipesJson
           .map((jsonString) {
             try {
@@ -91,12 +96,13 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
           .where((recipe) => recipe != null)
           .cast<FavoriteRecipe>()
           .toList();
-      
+
       await _cacheFavorites(recipes);
-      print('📦 Loaded from old cache format and migrated (${recipes.length} recipes)');
+      AppConfig.debugPrint(
+          '📦 Loaded from old cache format and migrated (${recipes.length} recipes)');
       return recipes;
     } catch (e) {
-      print('Error loading cached favorites: $e');
+      AppConfig.debugPrint('Error loading cached favorites: $e');
       return null;
     }
   }
@@ -104,22 +110,23 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
   Future<void> _cacheFavorites(List<FavoriteRecipe> recipes) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       final cacheData = {
-        'recipes': recipes.map((recipe) => json.encode(recipe.toJson())).toList(),
+        'recipes':
+            recipes.map((recipe) => json.encode(recipe.toJson())).toList(),
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
-      
-      await prefs.setString('favorite_recipes_cached', json.encode(cacheData));
-      
-      final favoriteRecipesJson = recipes
-          .map((recipe) => json.encode(recipe.toJson()))
-          .toList();
+
+      await prefs.setString(
+          'favorite_recipes_cached', json.encode(cacheData));
+
+      final favoriteRecipesJson =
+          recipes.map((recipe) => json.encode(recipe.toJson())).toList();
       await prefs.setStringList('favorite_recipes_detailed', favoriteRecipesJson);
-      
-      print('💾 Cached ${recipes.length} favorite recipes');
+
+      AppConfig.debugPrint('💾 Cached ${recipes.length} favorite recipes');
     } catch (e) {
-      print('Error caching favorites: $e');
+      AppConfig.debugPrint('Error caching favorites: $e');
     }
   }
 
@@ -127,9 +134,9 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('favorite_recipes_cached');
-      print('🗑️ Invalidated favorites cache');
+      AppConfig.debugPrint('🗑️ Invalidated favorites cache');
     } catch (e) {
-      print('Error invalidating favorites cache: $e');
+      AppConfig.debugPrint('Error invalidating favorites cache: $e');
     }
   }
 
@@ -138,7 +145,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('favorite_recipes_cached');
     } catch (e) {
-      print('Error invalidating favorites cache: $e');
+      AppConfig.debugPrint('Error invalidating favorites cache: $e');
     }
   }
 
@@ -150,7 +157,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
       if (currentUserId == null) {
         if (mounted) {
           setState(() => _isLoading = false);
-          ErrorHandlingService.showSimpleError(context, 'Please log in to view favorites');
+          ErrorHandlingService.showSimpleError(
+              context, 'Please log in to view favorites');
         }
         return;
       }
@@ -177,7 +185,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         });
 
         await _cacheFavorites(recipes);
-        print('✅ Loaded ${recipes.length} favorites from database');
+        AppConfig.debugPrint(
+            '✅ Loaded ${recipes.length} favorites from database');
       }
     } catch (e) {
       if (mounted) {
@@ -218,7 +227,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         final favorites = jsonDecode(searchResponse.body) as List;
         if (favorites.isEmpty) {
           if (mounted) {
-            ErrorHandlingService.showSimpleError(context, 'Recipe not found in favorites');
+            ErrorHandlingService.showSimpleError(
+                context, 'Recipe not found in favorites');
           }
           return;
         }
@@ -248,13 +258,15 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
       if (deleteResponse.statusCode == 200 && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Removed "${recipe.recipeName}" from favorites'),
+            content:
+                Text('Removed "${recipe.recipeName}" from favorites'),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 4),
             action: SnackBarAction(
               label: 'UNDO',
               textColor: Colors.white,
-              onPressed: () => _undoRemoveFavorite(removedRecipe, removedIndex),
+              onPressed: () =>
+                  _undoRemoveFavorite(removedRecipe, removedIndex),
             ),
           ),
         );
@@ -271,14 +283,16 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
     }
   }
 
-  Future<void> _undoRemoveFavorite(FavoriteRecipe recipe, int index) async {
+  Future<void> _undoRemoveFavorite(
+      FavoriteRecipe recipe, int index) async {
     try {
       final currentUserId = AuthService.currentUserId;
       final currentUsername = await AuthService.fetchCurrentUsername();
 
       if (currentUserId == null || currentUsername == null) {
         if (mounted) {
-          ErrorHandlingService.showSimpleError(context, 'Unable to restore: User not found');
+          ErrorHandlingService.showSimpleError(
+              context, 'Unable to restore: User not found');
         }
         return;
       }
@@ -297,7 +311,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
       final recipes = jsonDecode(searchResponse.body) as List;
       if (recipes.isEmpty) {
         if (mounted) {
-          ErrorHandlingService.showSimpleError(context, 'Recipe not found in database');
+          ErrorHandlingService.showSimpleError(
+              context, 'Recipe not found in database');
         }
         return;
       }
@@ -322,7 +337,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         }),
       );
 
-      if (readdResponse.statusCode == 200 || readdResponse.statusCode == 201) {
+      if (readdResponse.statusCode == 200 ||
+          readdResponse.statusCode == 201) {
         await _invalidateFavoritesCache();
 
         setState(() {
@@ -330,7 +346,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         });
 
         if (mounted) {
-          ErrorHandlingService.showSuccess(context, 'Recipe restored to favorites');
+          ErrorHandlingService.showSuccess(
+              context, 'Recipe restored to favorites');
         }
       }
     } catch (e) {
@@ -352,23 +369,21 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         description: 'Shared from favorites',
         ingredients: recipe.ingredients,
         directions: recipe.directions,
-        visibility: 'public', // or show a dialog to let user choose
+        visibility: 'public',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
-              children: [
+              children: const [
                 Icon(Icons.check_circle, color: Colors.white),
                 SizedBox(width: 12),
-                Expanded(
-                  child: Text('Recipe shared to your feed!'),
-                ),
+                Expanded(child: Text('Recipe shared to your feed!')),
               ],
             ),
             backgroundColor: Colors.orange,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
             action: SnackBarAction(
               label: 'View Feed',
               textColor: Colors.white,
@@ -404,7 +419,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
               if (item is Map) {
                 final qty = item['quantity'] ?? '';
                 final unit = item['measurement'] ?? item['unit'] ?? '';
-                final name = item['name'] ?? item['product_name'] ?? '';
+                final name =
+                    item['name'] ?? item['product_name'] ?? '';
                 return '$qty $unit $name'.trim();
               }
               return item.toString();
@@ -415,7 +431,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
               .split('\n')
               .where((line) => line.trim().isNotEmpty)
               .toList();
-          
+
           if (ingredientsList.isEmpty) {
             ingredientsList = recipe.ingredients
                 .split(',')
@@ -423,14 +439,19 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 .toList();
           }
         }
-        
-        if (ingredientsList.isEmpty && recipe.ingredients.trim().isNotEmpty) {
+
+        if (ingredientsList.isEmpty &&
+            recipe.ingredients.trim().isNotEmpty) {
           ingredientsList = [recipe.ingredients];
         }
       }
     } catch (e) {
-      print('❌ Error parsing ingredients: $e');
-      ingredientsList = [recipe.ingredients.isNotEmpty ? recipe.ingredients : 'No ingredients listed'];
+      AppConfig.debugPrint('❌ Error parsing ingredients: $e');
+      ingredientsList = [
+        recipe.ingredients.isNotEmpty
+            ? recipe.ingredients
+            : 'No ingredients listed'
+      ];
     }
 
     List<String> directionsList = [];
@@ -442,14 +463,18 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
             .split('\n')
             .where((line) => line.trim().isNotEmpty)
             .toList();
-        
+
         if (directionsList.isEmpty) {
           directionsList = [recipe.directions];
         }
       }
     } catch (e) {
-      print('❌ Error parsing directions: $e');
-      directionsList = [recipe.directions.isNotEmpty ? recipe.directions : 'No directions provided'];
+      AppConfig.debugPrint('❌ Error parsing directions: $e');
+      directionsList = [
+        recipe.directions.isNotEmpty
+            ? recipe.directions
+            : 'No directions provided'
+      ];
     }
 
     showDialog(
@@ -467,8 +492,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: EdgeInsets.all(20),
-                decoration: BoxDecoration(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
                   color: Colors.red,
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(16),
@@ -477,12 +502,13 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.restaurant, color: Colors.white, size: 28),
-                    SizedBox(width: 12),
+                    const Icon(Icons.restaurant,
+                        color: Colors.white, size: 28),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         recipe.recipeName,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -490,7 +516,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.close, color: Colors.white),
+                      icon: const Icon(Icons.close, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -499,27 +525,24 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
 
               Expanded(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.orange.shade200,
-                            width: 1,
-                          ),
+                              color: Colors.orange.shade200, width: 1),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.restaurant_menu, 
-                              size: 24, 
-                              color: Colors.orange.shade700
-                            ),
-                            SizedBox(width: 12),
+                            Icon(Icons.restaurant_menu,
+                                size: 24,
+                                color: Colors.orange.shade700),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 recipe.recipeName,
@@ -533,29 +556,27 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           ],
                         ),
                       ),
-                      SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                      if (recipe.description != null && recipe.description!.trim().isNotEmpty) ...[
+                      if (recipe.description != null &&
+                          recipe.description!.trim().isNotEmpty) ...[
                         Container(
-                          padding: EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.blue.shade200,
-                              width: 1,
-                            ),
+                                color: Colors.blue.shade200, width: 1),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.info_outline, 
-                                    size: 20, 
-                                    color: Colors.blue.shade700
-                                  ),
-                                  SizedBox(width: 8),
+                                  Icon(Icons.info_outline,
+                                      size: 20,
+                                      color: Colors.blue.shade700),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'About This Recipe',
                                     style: TextStyle(
@@ -566,27 +587,23 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                   ),
                                 ],
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Text(
                                 recipe.description!,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  height: 1.5,
-                                ),
+                                style: const TextStyle(
+                                    fontSize: 14, height: 1.5),
                               ),
                             ],
                           ),
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                       ],
 
                       Row(
                         children: [
-                          Icon(Icons.shopping_cart, 
-                            size: 24, 
-                            color: Colors.orange.shade700
-                          ),
-                          SizedBox(width: 8),
+                          Icon(Icons.shopping_cart,
+                              size: 24, color: Colors.orange.shade700),
+                          const SizedBox(width: 8),
                           Text(
                             'Ingredients',
                             style: TextStyle(
@@ -597,24 +614,23 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Container(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.orange.shade200,
-                            width: 1,
-                          ),
+                              color: Colors.orange.shade200, width: 1),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: ingredientsList.map((ingredient) {
                             return Padding(
-                              padding: EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.only(bottom: 8),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     '• ',
@@ -627,10 +643,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                   Expanded(
                                     child: Text(
                                       ingredient.trim(),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
+                                      style: const TextStyle(
+                                          fontSize: 15, height: 1.4),
                                     ),
                                   ),
                                 ],
@@ -639,15 +653,13 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           }).toList(),
                         ),
                       ),
-                      SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
                       Row(
                         children: [
-                          Icon(Icons.format_list_numbered, 
-                            size: 24, 
-                            color: Colors.blue.shade700
-                          ),
-                          SizedBox(width: 8),
+                          Icon(Icons.format_list_numbered,
+                              size: 24, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
                           Text(
                             'Instructions',
                             style: TextStyle(
@@ -658,26 +670,27 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Container(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.blue.shade200,
-                            width: 1,
-                          ),
+                              color: Colors.blue.shade200, width: 1),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: directionsList.asMap().entries.map((entry) {
+                          children:
+                              directionsList.asMap().entries.map((entry) {
                             int idx = entry.key;
                             String direction = entry.value;
                             return Padding(
-                              padding: EdgeInsets.only(bottom: 12),
+                              padding:
+                                  const EdgeInsets.only(bottom: 12),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   Container(
                                     width: 28,
@@ -689,7 +702,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                     child: Center(
                                       child: Text(
                                         '${idx + 1}',
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,
@@ -697,14 +710,12 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                       ),
                                     ),
                                   ),
-                                  SizedBox(width: 12),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       direction.trim(),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        height: 1.5,
-                                      ),
+                                      style: const TextStyle(
+                                          fontSize: 15, height: 1.5),
                                     ),
                                   ),
                                 ],
@@ -719,10 +730,10 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
               ),
 
               Container(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.only(
+                  borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(16),
                     bottomRight: Radius.circular(16),
                   ),
@@ -735,42 +746,40 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           Navigator.pop(context);
                           _shareRecipeToFeed(recipe);
                         },
-                        icon: Icon(Icons.share, size: 20),
-                        label: Text(
+                        icon: const Icon(Icons.share, size: 20),
+                        label: const Text(
                           'Share to Feed',
                           style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.orange,
                           foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 14),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.grey.shade600,
                           foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 14),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Close',
                           style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -841,12 +850,13 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
             onPressed: () async {
               try {
                 await _loadFavoriteRecipes(forceRefresh: true);
                 if (mounted) {
-                  ErrorHandlingService.showSuccess(context, 'Recipes refreshed');
+                  ErrorHandlingService.showSuccess(
+                      context, 'Recipes refreshed');
                 }
               } catch (e) {
                 if (mounted) {
@@ -870,8 +880,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
                   Text(
                     'Loading favorite recipes...',
                     style: TextStyle(color: Colors.grey.shade600),
@@ -882,14 +892,15 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
           : _favoriteRecipes.isEmpty
               ? _buildEmptyState()
               : RefreshIndicator(
-                  onRefresh: () => _loadFavoriteRecipes(forceRefresh: true),
+                  onRefresh: () =>
+                      _loadFavoriteRecipes(forceRefresh: true),
                   child: ListView.builder(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     itemCount: _favoriteRecipes.length,
                     itemBuilder: (context, index) {
                       final recipe = _favoriteRecipes[index];
                       return Card(
-                        margin: EdgeInsets.only(bottom: 12),
+                        margin: const EdgeInsets.only(bottom: 12),
                         elevation: 2,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -898,7 +909,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                           onTap: () => _showRecipeDetails(recipe),
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
-                            padding: EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(12),
                             child: Row(
                               children: [
                                 Container(
@@ -906,27 +917,29 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                   height: 50,
                                   decoration: BoxDecoration(
                                     color: Colors.red.shade50,
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius:
+                                        BorderRadius.circular(10),
                                   ),
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.restaurant,
                                     color: Colors.red,
                                     size: 28,
                                   ),
                                 ),
-                                SizedBox(width: 16),
+                                const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         recipe.recipeName,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 16,
                                         ),
                                       ),
-                                      SizedBox(height: 4),
+                                      const SizedBox(height: 4),
                                       Text(
                                         'Tap to view recipe details',
                                         style: TextStyle(
@@ -938,7 +951,8 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                   ),
                                 ),
                                 PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
+                                  icon: Icon(Icons.more_vert,
+                                      color: Colors.grey.shade600),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -946,8 +960,10 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                     PopupMenuItem(
                                       value: 'view',
                                       child: Row(
-                                        children: [
-                                          Icon(Icons.visibility, size: 20, color: Colors.blue),
+                                        children: const [
+                                          Icon(Icons.visibility,
+                                              size: 20,
+                                              color: Colors.blue),
                                           SizedBox(width: 12),
                                           Text('View Recipe'),
                                         ],
@@ -956,8 +972,10 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                     PopupMenuItem(
                                       value: 'share',
                                       child: Row(
-                                        children: [
-                                          Icon(Icons.share, size: 20, color: Colors.orange),
+                                        children: const [
+                                          Icon(Icons.share,
+                                              size: 20,
+                                              color: Colors.orange),
                                           SizedBox(width: 12),
                                           Text('Share to Feed'),
                                         ],
@@ -966,10 +984,14 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                                     PopupMenuItem(
                                       value: 'remove',
                                       child: Row(
-                                        children: [
-                                          Icon(Icons.delete, size: 20, color: Colors.red),
+                                        children: const [
+                                          Icon(Icons.delete,
+                                              size: 20,
+                                              color: Colors.red),
                                           SizedBox(width: 12),
-                                          Text('Remove', style: TextStyle(color: Colors.red)),
+                                          Text('Remove',
+                                              style: TextStyle(
+                                                  color: Colors.red)),
                                         ],
                                       ),
                                     ),
@@ -998,12 +1020,12 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
   Widget _buildEmptyState() {
     return Center(
       child: SingleChildScrollView(
-        padding: EdgeInsets.all(32),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
                 shape: BoxShape.circle,
@@ -1014,7 +1036,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 color: Colors.red.shade300,
               ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             Text(
               'No Favorite Recipes Yet',
               style: TextStyle(
@@ -1023,7 +1045,7 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 color: Colors.grey.shade800,
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               'When you find recipes you love while scanning products, save them here for easy access anytime!',
               textAlign: TextAlign.center,
@@ -1033,9 +1055,9 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 height: 1.5,
               ),
             ),
-            SizedBox(height: 32),
-            
-            // 🔥 NEW: 4-Button Action Bar (replacing the 2 buttons)
+            const SizedBox(height: 32),
+
+            // Action buttons — Scan, Code, Search (Auto removed)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1053,12 +1075,6 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildActionButton(
-                    icon: Icons.qr_code_scanner,
-                    label: 'Auto',
-                    color: Colors.purple.shade600,
-                    onPressed: () => Navigator.pushNamed(context, '/home'),
-                  ),
-                  _buildActionButton(
                     icon: Icons.camera_alt,
                     label: 'Scan',
                     color: Colors.orange.shade600,
@@ -1068,13 +1084,15 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                     icon: Icons.edit_outlined,
                     label: 'Code',
                     color: Colors.blue.shade600,
-                    onPressed: () => Navigator.pushNamed(context, '/manual-barcode-entry'),
+                    onPressed: () => Navigator.pushNamed(
+                        context, '/manual-barcode-entry'),
                   ),
                   _buildActionButton(
                     icon: Icons.search,
                     label: 'Search',
                     color: Colors.orange.shade800,
-                    onPressed: () => Navigator.pushNamed(context, '/nutrition-search'),
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/nutrition-search'),
                   ),
                 ],
               ),

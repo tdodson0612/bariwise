@@ -15,7 +15,6 @@ import 'package:bari_wise/models/lora_training_pair.dart';
 import 'package:bari_wise/models/ingredient_matrix_entry.dart';
 import 'package:bari_wise/services/lora_dataset_service.dart';
 import 'package:bari_wise/services/lora_inference_service.dart';
-import 'package:bari_wise/config/app_config.dart';
 import 'dart:convert';
 
 class LoraDatasetPage extends StatefulWidget {
@@ -391,7 +390,7 @@ class _OverviewTab extends StatelessWidget {
                   : 'Disabled — using database queries (safe default)'),
               value:       loraEnabled,
               onChanged:   onToggleLora,
-              activeColor: Colors.deepPurple,
+              activeThumbColor: Colors.deepPurple,
               secondary: Icon(
                 loraEnabled
                     ? Icons.psychology

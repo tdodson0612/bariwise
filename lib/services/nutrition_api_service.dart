@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:bari_wise/config/app_config.dart';
 import 'package:bari_wise/models/nutrition_info.dart';
+import 'package:flutter/foundation.dart';
 
 class NutritionApiService {
   /// Base URL for product-by-barcode lookups.
@@ -36,7 +37,7 @@ class NutritionApiService {
       return NutritionInfo.fromJson(data as Map<String, dynamic>);
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ fetchByBarcode error: $e');
+
       }
       return null;
     }
@@ -53,7 +54,7 @@ class NutritionApiService {
 
     try {
       if (AppConfig.enableDebugPrints) {
-        print('🔍 Searching for: "$trimmed" (type: $searchType)');
+debugPrint('🔍 Searching for: "$trimmed" (type: $searchType)');
       }
 
       List<NutritionInfo> rawResults;
@@ -74,18 +75,18 @@ class NutritionApiService {
       }
 
       if (AppConfig.enableDebugPrints) {
-        print('📦 Raw results: ${rawResults.length}');
+
       }
 
       // Filter and score results for relevance
       final scoredResults = _scoreAndFilterResults(rawResults, trimmed);
 
       if (AppConfig.enableDebugPrints) {
-        print('✅ Filtered results: ${scoredResults.length}');
+
         if (scoredResults.isNotEmpty) {
-          print('Top 5 results:');
+
           for (var i = 0; i < scoredResults.length && i < 5; i++) {
-            print('  ${i + 1}. ${scoredResults[i].productName}');
+
           }
         }
       }
@@ -94,7 +95,7 @@ class NutritionApiService {
       return scoredResults.take(20).toList();
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ searchByName error: $e');
+
       }
       return [];
     }
@@ -210,7 +211,7 @@ class NutritionApiService {
       return await _fetchAndParseResults(uri);
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ _searchByBrand error: $e');
+
       }
       return [];
     }
@@ -240,7 +241,7 @@ class NutritionApiService {
       return await _fetchAndParseResults(uri);
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ _searchByIngredient error: $e');
+
       }
       return [];
     }
@@ -285,12 +286,10 @@ class NutritionApiService {
       }
 
       // If no specific substitute, search for "low fat", "reduced sodium", or "organic" versions
-      if (substituteQuery == null) {
-        substituteQuery = 'organic $product OR low fat $product OR reduced sodium $product';
-      }
+      substituteQuery ??= 'organic $product OR low fat $product OR reduced sodium $product';
 
       if (AppConfig.enableDebugPrints) {
-        print('🔄 Substitute query: $substituteQuery');
+
       }
 
       // Search for multiple terms (split by OR)
@@ -313,7 +312,7 @@ class NutritionApiService {
       return allResults;
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ _searchSubstitutes error: $e');
+
       }
       return [];
     }
@@ -353,7 +352,7 @@ class NutritionApiService {
           }
         } catch (e) {
           if (AppConfig.enableDebugPrints) {
-            print('⚠️ Failed to parse product: $e');
+
           }
           continue;
         }
@@ -362,7 +361,7 @@ class NutritionApiService {
       return results;
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('❌ _fetchAndParseResults error: $e');
+
       }
       return [];
     }

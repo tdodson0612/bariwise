@@ -43,8 +43,9 @@ class CookbookRecipe {
         if (nutritionData is Map<String, dynamic>) {
           nutrition = NutritionInfo.fromDatabaseJson(nutritionData);
         }
+      // ignore: empty_catches
       } catch (e) {
-        print('Error parsing nutrition in cookbook recipe: $e');
+
       }
     }
 

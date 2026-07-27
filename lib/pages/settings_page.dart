@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/app_config.dart';
-import '../services/auth_service.dart';
 import '../services/premium_service.dart';
 import '../widgets/app_drawer.dart';
 
@@ -90,10 +89,10 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: const Color(0xFFEEF2F7),
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: Colors.orange.shade700,
+        backgroundColor: const Color(0xFF0A1628),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -449,7 +448,7 @@ class _Section extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -551,7 +550,7 @@ class _ToggleTile extends StatelessWidget {
       subtitle: Text(subtitle,
           style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
       value: value,
-      activeColor: Colors.orange.shade600,
+      activeThumbColor: Colors.orange.shade600,
       onChanged: onChanged,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );

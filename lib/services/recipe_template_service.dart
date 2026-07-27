@@ -1,9 +1,6 @@
 // lib/services/recipe_template_service.dart
 // Handles recipe templating with change detection
 
-import 'dart:convert';
-import '../models/nutrition_info.dart';
-
 class RecipeTemplate {
   final String recipeName;
   final String description;

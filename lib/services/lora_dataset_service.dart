@@ -14,16 +14,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bari_wise/models/lora_training_pair.dart';
 import 'package:bari_wise/models/ingredient_matrix_entry.dart';
 import 'package:bari_wise/models/nutrition_info.dart';
-import 'package:bari_wise/models/recipe_submission.dart';
-import 'package:bari_wise/barihealthbar.dart';
 import 'package:bari_wise/config/app_config.dart';
 import 'database_service_core.dart';
 
 class LoraDatasetService {
   // ── Storage keys ──────────────────────────────────────────────
-  static const String _datasetCacheKey = 'lora_dataset_cache';
   static const String _statsKey        = 'lora_dataset_stats';
-  static const String _exportKey       = 'lora_export_pending';
 
   // ── Phase targets ─────────────────────────────────────────────
   static const int phase1RecipeTarget     = 1000;
@@ -135,7 +131,9 @@ class LoraDatasetService {
             limit: 1,
           );
           if (draftResult == null ||
-              (draftResult as List).isEmpty) continue;
+              (draftResult as List).isEmpty) {
+            continue;
+          }
 
           final draft         = draftResult[0] as Map<String, dynamic>;
           final nutritionJson =
@@ -267,7 +265,6 @@ class LoraDatasetService {
     for (int t = 0; t < templates.length; t++) {
       final tmpl = templates[t];
       for (int i = 0; i < 20; i++) {
-        final servings     = (i % 4) + 1;
         final actualSodium = tmpl.sodiumMg + (i * 15);
 
         final violating = LoraRawRecipe(

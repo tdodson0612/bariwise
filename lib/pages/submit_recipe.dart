@@ -111,9 +111,9 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,
@@ -1206,7 +1206,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
             leading: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: statusColor.withOpacity(0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(statusIcon, color: statusColor),
@@ -1228,7 +1228,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
+                        color: statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: statusColor),
                       ),
@@ -1320,7 +1320,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
                         setState(() => ingredient.customMeasurement = value),
                   )
                 : DropdownButtonFormField<String>(
-                    value: ingredient.measurement,
+                    initialValue: ingredient.measurement,
                     decoration: InputDecoration(
                       labelText: 'Unit',
                       border: OutlineInputBorder(
@@ -1468,7 +1468,7 @@ class _SubmitRecipePageState extends State<SubmitRecipePage> {
           Column(
             children: [
               Container(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 child: Row(
                   children: [
                     _buildTabButton('Submit Recipe', 0),

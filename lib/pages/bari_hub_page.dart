@@ -9,6 +9,12 @@ import '../services/bari_features_service.dart';
 import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
 
+// ─── BBRS Design Tokens ───────────────────────────────────────────────────────
+const _kNavy      = Color(0xFF0A1628);
+const _kNavyLight = Color(0xFF1A2E4A);
+const _kBg        = Color(0xFFEEF2F7);
+const _kGold      = Color(0xFFC9A84C);
+
 class BariHubPage extends StatefulWidget {
   const BariHubPage({super.key});
 
@@ -71,9 +77,10 @@ class _BariHubPageState extends State<BariHubPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _kBg,
       appBar: AppBar(
         title: const Text('Bariatric Health'),
-        backgroundColor: Colors.orange.shade800,
+        backgroundColor: _kNavy,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -87,6 +94,7 @@ class _BariHubPageState extends State<BariHubPage> {
       ),
       body: RefreshIndicator(
         onRefresh: _loadSummary,
+        color: _kGold,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
@@ -229,9 +237,13 @@ class _SummaryCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
+          color: Colors.white.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFDDE3EE)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8, offset: const Offset(0, 2)),
+          ],
         ),
         child: Column(
           children: [
@@ -302,9 +314,13 @@ class _FeatureGrid extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: f.color.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: f.color.withOpacity(0.2)),
+              border: Border.all(color: const Color(0xFFDDE3EE)),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8, offset: const Offset(0, 2)),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,15 +369,17 @@ class _TipCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.orange.shade800,
-            Colors.orange.shade600,
-          ],
+        gradient: const LinearGradient(
+          colors: [_kNavy, _kNavyLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kGold.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(color: _kNavy.withValues(alpha: 0.3),
+              blurRadius: 12, offset: const Offset(0, 4)),
+        ],
       ),
       child: Row(
         children: [

@@ -1,7 +1,7 @@
 // lib/models/tracker_entry.dart
 
 /// Kept for backward-compatible JSON deserialization of existing stored data.
-/// New code uses List<Map<String, dynamic>> with a 'notes' key instead.
+/// New code uses `List<Map<String, dynamic>>` with a 'notes' key instead.
 class SupplementEntry {
   final String name;
   final String amount; // e.g. "500mg", "1 tablet", "2 capsules"

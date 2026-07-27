@@ -36,7 +36,7 @@ class Environment {
     const url = String.fromEnvironment('SUPABASE_URL');
     if (url.isEmpty) {
       if (kDebugMode) {
-        print('WARNING: SUPABASE_URL not set, using fallback');
+
         // Only provide fallback in development
         return isDevelopment 
             ? 'YOUR_DEV_SUPABASE_URL_HERE'
@@ -52,7 +52,7 @@ class Environment {
     const key = String.fromEnvironment('SUPABASE_ANON_KEY');
     if (key.isEmpty) {
       if (kDebugMode) {
-        print('WARNING: SUPABASE_ANON_KEY not set, using fallback');
+
         // Only provide fallback in development
         return isDevelopment 
             ? 'YOUR_DEV_SUPABASE_ANON_KEY_HERE'
@@ -277,20 +277,14 @@ class Environment {
     if (errors.isNotEmpty) {
       final errorMessage = 'Environment validation failed:\n${errors.join('\n')}';
       if (kDebugMode) {
-        print('ERROR: $errorMessage');
+
       }
       throw Exception(errorMessage);
     }
 
     // Log successful validation
     if (enableDebugLogging) {
-      print('✅ Environment validation passed');
-      print('📍 Current environment: $currentEnvironment');
-      print('🔧 Debug logging: $enableDebugLogging');
-      print('📊 Crash reporting: $enableCrashReporting');
-      print('💰 Premium features: $enablePremiumFeatures');
-      print('👥 Social features: $enableSocialFeatures');
-      print('📱 Ads enabled: $enableAds');
+
     }
   }
 
@@ -301,11 +295,11 @@ class Environment {
       validateEnvironment();
       
       if (enableDebugLogging) {
-        print('🚀 Environment initialized successfully');
+
       }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Environment initialization failed: $e');
+
       }
       rethrow;
     }
@@ -344,9 +338,9 @@ class Environment {
   /// Print current configuration (safe for debugging)
   static void printConfig() {
     if (enableDebugLogging) {
-      print('📋 Current Environment Configuration:');
+
       getAllConfig().forEach((key, value) {
-        print('   $key: $value');
+
       });
     }
   }

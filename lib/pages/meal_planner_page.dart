@@ -1,11 +1,20 @@
 // lib/pages/meal_planner_page.dart
-// Section 9 — Meal Planner Workspace
+// Section 9 — Meal Planner Workspace (COMPLETE)
 // Route: '/meal-planner'
 //
 // Three tabs:
 //   1. Weekly Grid    — plan meals for each day of the week
-//   2. Daily Schedule — plan today's meals before logging them
-//   3. Recipe Planner — pick favorite recipes, auto-generate a weekly plan
+//   2. Daily Schedule — plan meals for any selected day (Active Day Selector)
+//   3. Recipe Planner — grid of favorite recipes, stage several, assign to a day
+//
+// Additions in this version (Section 9 gap closure):
+//   • Active Day Selector      — Daily tab can view/edit any day, not just today
+//   • Day Totals Panel         — per-day meal-type breakdown badges
+//   • Planner Totals Panel     — week-level summary stats
+//   • Recipe Suggestion Grid   — Recipe Planner favorites shown as a grid
+//   • Staged Recipes Area      — queue recipes, assign the batch to one day
+//   • Plan Overview Mode       — compact read-only week view toggle
+//   • Unsaved Changes Protection — Add Meal sheet confirms before discarding
 //
 // Storage: SharedPreferences (UI/UX-only phase — no Supabase)
 // Grocery: planned meals auto-populate /grocery-list via GroceryService
@@ -81,6 +90,12 @@ class _MealPlannerPageState extends State<MealPlannerPage>
 
   // Week navigation
   DateTime _weekStart = _getMondayOf(DateTime.now());
+
+  // Active Day Selector (Daily tab) — which day is currently being edited
+  DateTime _selectedDailyDay = DateTime.now();
+
+  // Plan Overview Mode — compact read-only view toggle for Weekly tab
+  bool _overviewMode = false;
 
   static const String _prefKey = 'meal_planner_data';
 
@@ -160,10 +175,12 @@ class _MealPlannerPageState extends State<MealPlannerPage>
   Future<void> _loadFavorites() async {
     try {
       final favs = await FavoriteRecipesService.getFavoriteRecipes();
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _favorites = favs;
         _loadingFavorites = false;
       });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingFavorites = false);
     }
@@ -200,6 +217,36 @@ class _MealPlannerPageState extends State<MealPlannerPage>
 
   List<DateTime> get _weekDays =>
       List.generate(7, (i) => _weekStart.add(Duration(days: i)));
+
+  void _goToPrevWeek() {
+    setState(() {
+      _weekStart = _weekStart.subtract(const Duration(days: 7));
+      _selectedDailyDay = _weekStart;
+    });
+  }
+
+  void _goToNextWeek() {
+    setState(() {
+      _weekStart = _weekStart.add(const Duration(days: 7));
+      _selectedDailyDay = _weekStart;
+    });
+  }
+
+  // ── Day / Planner totals (Section 9) ────────────────────────────────────
+
+  Map<String, int> _countsForDay(DateTime day) {
+    final meals = _mealsForDate(day);
+    final counts = <String, int>{};
+    for (final t in _mealTypes) {
+      counts[t] = meals.where((m) => m.mealType == t).length;
+    }
+    return counts;
+  }
+
+  bool _dayIsFullyCovered(DateTime day) {
+    final counts = _countsForDay(day);
+    return counts.values.every((c) => c > 0);
+  }
 
   // ── Grocery export ─────────────────────────────────────────────────────────
 
@@ -305,7 +352,7 @@ class _MealPlannerPageState extends State<MealPlannerPage>
     }
   }
 
-  // ── Add meal dialog ────────────────────────────────────────────────────────
+  // ── Add meal dialog (Unsaved Changes Protection — Section 9) ───────────────
 
   Future<void> _showAddMealDialog(DateTime date,
       {String? preSelectedType}) async {
@@ -313,229 +360,284 @@ class _MealPlannerPageState extends State<MealPlannerPage>
     String mealType = preSelectedType ?? 'Breakfast';
     FavoriteRecipe? selectedRecipe;
 
+    Future<bool> confirmDiscardIfNeeded(BuildContext dialogCtx) async {
+      if (nameCtrl.text.trim().isEmpty) return true;
+      final discard = await showDialog<bool>(
+        context: dialogCtx,
+        builder: (dctx) => AlertDialog(
+          title: const Text('Discard Meal?'),
+          content: const Text(
+              'You have an unsaved meal name. Discard it without saving?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, false),
+              child: const Text('Keep Editing'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dctx, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Discard'),
+            ),
+          ],
+        ),
+      );
+      return discard == true;
+    }
+
     final result = await showModalBottomSheet<PlannedMeal>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Text(
-                'Add to ${_shortDate(date)}',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              // Meal type selector
-              const Text('Meal Type',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              Row(
-                children: _mealTypes.map((type) {
-                  final sel = mealType == type;
-                  final color =
-                      _mealTypeColors[type] ?? Colors.orange;
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: GestureDetector(
-                        onTap: () => setLocal(() => mealType = type),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8),
+        builder: (ctx, setLocal) => PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final ok = await confirmDiscardIfNeeded(ctx);
+            if (ok && ctx.mounted) Navigator.pop(ctx);
+          },
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle + close button
+                Row(
+                  children: [
+                    const Expanded(child: SizedBox()),
+                    Expanded(
+                      child: Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
                           decoration: BoxDecoration(
-                            color: sel
-                                ? color.withOpacity(0.15)
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: sel
-                                  ? color
-                                  : Colors.grey.shade300,
-                              width: sel ? 2 : 1,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                _mealTypeIcons[type] ?? Icons.restaurant,
-                                size: 18,
-                                color: sel ? color : Colors.grey,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                type,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: sel
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: sel ? color : Colors.grey,
-                                ),
-                              ),
-                            ],
+                            color: Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTap: () async {
+                            final ok = await confirmDiscardIfNeeded(ctx);
+                            if (ok && ctx.mounted) Navigator.pop(ctx);
+                          },
+                          child: Icon(Icons.close_rounded,
+                              size: 20, color: Colors.grey.shade500),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
 
-              const SizedBox(height: 16),
+                Text(
+                  'Add to ${_shortDate(date)}',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
 
-              // From favorites
-              if (_favorites.isNotEmpty) ...[
-                const Text('From Your Favorites (optional)',
+                // Meal type selector
+                const Text('Meal Type',
                     style: TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 8),
-                SizedBox(
-                  height: 44,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _favorites.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final fav = _favorites[i];
-                      final sel = selectedRecipe?.id == fav.id;
-                      return GestureDetector(
-                        onTap: () {
-                          setLocal(() {
-                            if (sel) {
-                              selectedRecipe = null;
-                              nameCtrl.clear();
-                            } else {
-                              selectedRecipe = fav;
-                              nameCtrl.text = fav.recipeName;
-                            }
-                          });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: sel
-                                ? Colors.orange.shade100
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
+                Row(
+                  children: _mealTypes.map((type) {
+                    final sel = mealType == type;
+                    final color =
+                        _mealTypeColors[type] ?? Colors.orange;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: GestureDetector(
+                          onTap: () => setLocal(() => mealType = type),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8),
+                            decoration: BoxDecoration(
                               color: sel
-                                  ? Colors.orange.shade600
-                                  : Colors.grey.shade300,
-                              width: sel ? 2 : 1,
+                                  ? color.withValues(alpha: 0.15)
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: sel
+                                    ? color
+                                    : Colors.grey.shade300,
+                                width: sel ? 2 : 1,
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            fav.recipeName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: sel
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: sel
-                                  ? Colors.orange.shade900
-                                  : Colors.black87,
+                            child: Column(
+                              children: [
+                                Icon(
+                                  _mealTypeIcons[type] ?? Icons.restaurant,
+                                  size: 18,
+                                  color: sel ? color : Colors.grey,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  type,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: sel
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: sel ? color : Colors.grey,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              // Meal name
-              const Text('Meal Name *',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              TextField(
-                controller: nameCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  hintText: 'e.g. Greek yogurt with berries',
-                  isDense: true,
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                        color: Colors.orange.shade700, width: 2),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(
-                            content: Text('Please enter a meal name')),
-                      );
-                      return;
-                    }
-                    Navigator.pop(
-                      ctx,
-                      PlannedMeal(
-                        id: DateTime.now()
-                            .millisecondsSinceEpoch
-                            .toString(),
-                        name: name,
-                        mealType: mealType,
-                        recipeIngredients:
-                            selectedRecipe?.ingredients,
-                        date: date,
                       ),
                     );
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.orange.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                  child: const Text('Add Meal',
-                      style: TextStyle(fontSize: 16)),
+                  }).toList(),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+
+                // From favorites
+                if (_favorites.isNotEmpty) ...[
+                  const Text('From Your Favorites (optional)',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _favorites.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: 8),
+                      itemBuilder: (_, i) {
+                        final fav = _favorites[i];
+                        final sel = selectedRecipe?.id == fav.id;
+                        return GestureDetector(
+                          onTap: () {
+                            setLocal(() {
+                              if (sel) {
+                                selectedRecipe = null;
+                                nameCtrl.clear();
+                              } else {
+                                selectedRecipe = fav;
+                                nameCtrl.text = fav.recipeName;
+                              }
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: sel
+                                  ? Colors.orange.shade100
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: sel
+                                    ? Colors.orange.shade600
+                                    : Colors.grey.shade300,
+                                width: sel ? 2 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              fav.recipeName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: sel
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: sel
+                                    ? Colors.orange.shade900
+                                    : Colors.black87,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Meal name
+                const Text('Meal Name *',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  onChanged: (_) => setLocal(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Greek yogurt with berries',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                          color: Colors.orange.shade700, width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () {
+                      final name = nameCtrl.text.trim();
+                      if (name.isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please enter a meal name')),
+                        );
+                        return;
+                      }
+                      Navigator.pop(
+                        ctx,
+                        PlannedMeal(
+                          id: DateTime.now()
+                              .millisecondsSinceEpoch
+                              .toString(),
+                          name: name,
+                          mealType: mealType,
+                          recipeIngredients:
+                              selectedRecipe?.ingredients,
+                          date: date,
+                        ),
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.orange.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Add Meal',
+                        style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -555,6 +657,18 @@ class _MealPlannerPageState extends State<MealPlannerPage>
         title: const Text('Meal Planner'),
         backgroundColor: Colors.orange.shade700,
         foregroundColor: Colors.white,
+        actions: [
+          // Plan Overview Mode toggle (Section 9) — only meaningful on Weekly tab
+          IconButton(
+            icon: Icon(_overviewMode
+                ? Icons.edit_rounded
+                : Icons.visibility_rounded),
+            tooltip: _overviewMode
+                ? 'Switch to Edit Mode'
+                : 'Switch to Overview Mode',
+            onPressed: () => setState(() => _overviewMode = !_overviewMode),
+          ),
+        ],
         bottom: TabBar(
           controller: _tabs,
           indicatorColor: Colors.white,
@@ -562,7 +676,7 @@ class _MealPlannerPageState extends State<MealPlannerPage>
           unselectedLabelColor: Colors.white60,
           tabs: const [
             Tab(icon: Icon(Icons.grid_view_rounded), text: 'Weekly'),
-            Tab(icon: Icon(Icons.today_rounded), text: 'Today'),
+            Tab(icon: Icon(Icons.today_rounded), text: 'Daily'),
             Tab(icon: Icon(Icons.restaurant_menu_rounded),
                 text: 'Recipes'),
           ],
@@ -576,20 +690,26 @@ class _MealPlannerPageState extends State<MealPlannerPage>
                 _WeeklyTab(
                   weekDays: _weekDays,
                   weekStart: _weekStart,
+                  mealTypes: _mealTypes,
                   mealsForDate: _mealsForDate,
+                  countsForDay: _countsForDay,
+                  dayIsFullyCovered: _dayIsFullyCovered,
                   onAddMeal: _showAddMealDialog,
                   onRemoveMeal: _removeMeal,
                   onExportToGrocery: _exportWeekToGrocery,
-                  onPrevWeek: () => setState(() => _weekStart =
-                      _weekStart.subtract(const Duration(days: 7))),
-                  onNextWeek: () => setState(() =>
-                      _weekStart = _weekStart.add(const Duration(days: 7))),
+                  onPrevWeek: _goToPrevWeek,
+                  onNextWeek: _goToNextWeek,
                   mealTypeColors: _mealTypeColors,
                   mealTypeIcons: _mealTypeIcons,
+                  overviewMode: _overviewMode,
                 ),
                 _DailyTab(
-                  today: DateTime.now(),
+                  selectedDay: _selectedDailyDay,
+                  weekDays: _weekDays,
+                  onSelectDay: (d) =>
+                      setState(() => _selectedDailyDay = d),
                   mealsForDate: _mealsForDate,
+                  countsForDay: _countsForDay,
                   onAddMeal: _showAddMealDialog,
                   onRemoveMeal: _removeMeal,
                   onExportToGrocery: _exportDayToGrocery,
@@ -603,12 +723,10 @@ class _MealPlannerPageState extends State<MealPlannerPage>
                   weekDays: _weekDays,
                   weekStart: _weekStart,
                   mealsForDate: _mealsForDate,
-                  onAddMeal: _showAddMealDialog,
+                  onAddMealDirect: _addMeal,
                   onExportToGrocery: _exportWeekToGrocery,
-                  onPrevWeek: () => setState(() => _weekStart =
-                      _weekStart.subtract(const Duration(days: 7))),
-                  onNextWeek: () => setState(() =>
-                      _weekStart = _weekStart.add(const Duration(days: 7))),
+                  onPrevWeek: _goToPrevWeek,
+                  onNextWeek: _goToNextWeek,
                 ),
               ],
             ),
@@ -626,13 +744,72 @@ class _MealPlannerPageState extends State<MealPlannerPage>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SHARED: DAY TOTALS PANEL (Section 9)
+// ─────────────────────────────────────────────────────────────────────────────
+// Compact badge row showing meal-type counts for a single day.
+
+class _DayTotalsBadges extends StatelessWidget {
+  final Map<String, int> counts;
+  final Map<String, Color> mealTypeColors;
+  final Map<String, IconData> mealTypeIcons;
+
+  const _DayTotalsBadges({
+    required this.counts,
+    required this.mealTypeColors,
+    required this.mealTypeIcons,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final nonZero =
+        counts.entries.where((e) => e.value > 0).toList();
+    if (nonZero.isEmpty) {
+      return Text('Nothing planned',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade400));
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: nonZero.map((e) {
+        final color = mealTypeColors[e.key] ?? Colors.orange;
+        final icon = mealTypeIcons[e.key] ?? Icons.restaurant;
+        return Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 10, color: color),
+              const SizedBox(width: 3),
+              Text('${e.value}',
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: color)),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TAB 1 — WEEKLY GRID
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _WeeklyTab extends StatelessWidget {
   final List<DateTime> weekDays;
   final DateTime weekStart;
+  final List<String> mealTypes;
   final List<PlannedMeal> Function(DateTime) mealsForDate;
+  final Map<String, int> Function(DateTime) countsForDay;
+  final bool Function(DateTime) dayIsFullyCovered;
   final Future<void> Function(DateTime, {String? preSelectedType})
       onAddMeal;
   final void Function(PlannedMeal) onRemoveMeal;
@@ -641,11 +818,15 @@ class _WeeklyTab extends StatelessWidget {
   final VoidCallback onNextWeek;
   final Map<String, Color> mealTypeColors;
   final Map<String, IconData> mealTypeIcons;
+  final bool overviewMode;
 
   const _WeeklyTab({
     required this.weekDays,
     required this.weekStart,
+    required this.mealTypes,
     required this.mealsForDate,
+    required this.countsForDay,
+    required this.dayIsFullyCovered,
     required this.onAddMeal,
     required this.onRemoveMeal,
     required this.onExportToGrocery,
@@ -653,6 +834,7 @@ class _WeeklyTab extends StatelessWidget {
     required this.onNextWeek,
     required this.mealTypeColors,
     required this.mealTypeIcons,
+    required this.overviewMode,
   });
 
   static const _dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -675,6 +857,10 @@ class _WeeklyTab extends StatelessWidget {
     final today = DateTime.now();
     final totalPlanned =
         weekDays.fold<int>(0, (s, d) => s + mealsForDate(d).length);
+    final daysWithMeals =
+        weekDays.where((d) => mealsForDate(d).isNotEmpty).length;
+    final daysFullyCovered =
+        weekDays.where((d) => dayIsFullyCovered(d)).length;
 
     return Column(
       children: [
@@ -692,10 +878,19 @@ class _WeeklyTab extends StatelessWidget {
               ),
               Expanded(
                 child: Center(
-                  child: Text(
-                    _weekLabel(),
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.bold),
+                  child: Column(
+                    children: [
+                      Text(
+                        _weekLabel(),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                      if (overviewMode)
+                        Text('Overview Mode',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade500)),
+                    ],
                   ),
                 ),
               ),
@@ -704,6 +899,29 @@ class _WeeklyTab extends StatelessWidget {
                 onPressed: onNextWeek,
                 color: Colors.orange.shade700,
               ),
+            ],
+          ),
+        ),
+
+        // ── Planner Totals Panel (Section 9) ────────────────────────────
+        Container(
+          color: Colors.white,
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              _PlannerStat(
+                  label: 'Meals Planned',
+                  value: '$totalPlanned',
+                  color: Colors.orange.shade700),
+              _PlannerStat(
+                  label: 'Days Started',
+                  value: '$daysWithMeals/7',
+                  color: Colors.blue.shade700),
+              _PlannerStat(
+                  label: 'Fully Covered',
+                  value: '$daysFullyCovered/7',
+                  color: Colors.green.shade700),
             ],
           ),
         ),
@@ -746,6 +964,7 @@ class _WeeklyTab extends StatelessWidget {
             itemBuilder: (context, i) {
               final day = weekDays[i];
               final meals = mealsForDate(day);
+              final counts = countsForDay(day);
               final isToday = day.year == today.year &&
                   day.month == today.month &&
                   day.day == today.day;
@@ -826,47 +1045,90 @@ class _WeeklyTab extends StatelessWidget {
                             ),
                           ),
                           const Spacer(),
-                          if (meals.isNotEmpty)
-                            Text(
-                              '${meals.length} meal${meals.length == 1 ? '' : 's'}',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade600),
+                          if (!overviewMode)
+                            IconButton(
+                              icon: Icon(Icons.add_circle_rounded,
+                                  color: Colors.orange.shade700,
+                                  size: 22),
+                              onPressed: () => onAddMeal(day),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
                             ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: Icon(Icons.add_circle_rounded,
-                                color: Colors.orange.shade700,
-                                size: 22),
-                            onPressed: () => onAddMeal(day),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
                         ],
                       ),
                     ),
 
-                    // Meals
-                    if (meals.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        child: Text(
-                          'No meals planned',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade400),
+                    // ── Day Totals Panel (Section 9) ────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _DayTotalsBadges(
+                          counts: counts,
+                          mealTypeColors: mealTypeColors,
+                          mealTypeIcons: mealTypeIcons,
                         ),
-                      )
-                    else
-                      ...meals.map((meal) => _MealChip(
-                            meal: meal,
-                            onRemove: () => onRemoveMeal(meal),
-                            color: mealTypeColors[meal.mealType] ??
-                                Colors.orange,
-                            icon: mealTypeIcons[meal.mealType] ??
-                                Icons.restaurant,
-                          )),
+                      ),
+                    ),
+
+                    // Meals — full list in Edit mode, compact icons in Overview mode
+                    if (overviewMode) ...[
+                      if (meals.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                              14, 4, 14, 10),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: meals
+                                .map((m) => Tooltip(
+                                      message: m.name,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: (mealTypeColors[
+                                                      m.mealType] ??
+                                                  Colors.orange)
+                                              .withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          mealTypeIcons[m.mealType] ??
+                                              Icons.restaurant,
+                                          size: 14,
+                                          color: mealTypeColors[
+                                                  m.mealType] ??
+                                              Colors.orange,
+                                        ),
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+                        )
+                      else
+                        const SizedBox(height: 4),
+                    ] else ...[
+                      if (meals.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 6),
+                          child: Text(
+                            'No meals planned',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade400),
+                          ),
+                        )
+                      else
+                        ...meals.map((meal) => _MealChip(
+                              meal: meal,
+                              onRemove: () => onRemoveMeal(meal),
+                              color: mealTypeColors[meal.mealType] ??
+                                  Colors.orange,
+                              icon: mealTypeIcons[meal.mealType] ??
+                                  Icons.restaurant,
+                            )),
+                    ],
 
                     const SizedBox(height: 4),
                   ],
@@ -880,13 +1142,44 @@ class _WeeklyTab extends StatelessWidget {
   }
 }
 
+class _PlannerStat extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _PlannerStat({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 2 — DAILY SCHEDULE
+// TAB 2 — DAILY SCHEDULE (with Active Day Selector — Section 9)
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _DailyTab extends StatelessWidget {
-  final DateTime today;
+  final DateTime selectedDay;
+  final List<DateTime> weekDays;
+  final void Function(DateTime) onSelectDay;
   final List<PlannedMeal> Function(DateTime) mealsForDate;
+  final Map<String, int> Function(DateTime) countsForDay;
   final Future<void> Function(DateTime, {String? preSelectedType})
       onAddMeal;
   final void Function(PlannedMeal) onRemoveMeal;
@@ -895,9 +1188,14 @@ class _DailyTab extends StatelessWidget {
   final Map<String, Color> mealTypeColors;
   final Map<String, IconData> mealTypeIcons;
 
+  static const _dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
   const _DailyTab({
-    required this.today,
+    required this.selectedDay,
+    required this.weekDays,
+    required this.onSelectDay,
     required this.mealsForDate,
+    required this.countsForDay,
     required this.onAddMeal,
     required this.onRemoveMeal,
     required this.onExportToGrocery,
@@ -906,9 +1204,23 @@ class _DailyTab extends StatelessWidget {
     required this.mealTypeIcons,
   });
 
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _dayTitle() {
+    final today = DateTime.now();
+    if (_isSameDay(selectedDay, today)) return "Today's Plan";
+    const names = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+      'Saturday', 'Sunday'
+    ];
+    return "${names[selectedDay.weekday - 1]}'s Plan";
+  }
+
   @override
   Widget build(BuildContext context) {
-    final meals = mealsForDate(today);
+    final meals = mealsForDate(selectedDay);
+    final counts = countsForDay(selectedDay);
     final byType = <String, List<PlannedMeal>>{};
     for (final type in mealTypes) {
       byType[type] =
@@ -920,20 +1232,76 @@ class _DailyTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Active Day Selector (Section 9) ─────────────────────────
+          Row(
+            children: weekDays.map((day) {
+              final sel = _isSameDay(day, selectedDay);
+              final today = _isSameDay(day, DateTime.now());
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: GestureDetector(
+                    onTap: () => onSelectDay(day),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? Colors.orange.shade700
+                            : today
+                                ? Colors.orange.shade50
+                                : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: sel
+                              ? Colors.orange.shade700
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            _dayLabels[day.weekday - 1],
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: sel ? Colors.white : Colors.grey.shade700,
+                            ),
+                          ),
+                          Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: sel ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 16),
+
           // Date header
           Row(
             children: [
               const Icon(Icons.today_rounded, color: Colors.orange),
               const SizedBox(width: 8),
-              Text(
-                "Today's Plan",
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  _dayTitle(),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                ),
               ),
-              const Spacer(),
               if (meals.isNotEmpty)
                 TextButton.icon(
-                  onPressed: () => onExportToGrocery(today),
+                  onPressed: () => onExportToGrocery(selectedDay),
                   icon: const Icon(Icons.shopping_cart_rounded,
                       size: 16),
                   label: const Text('Grocery',
@@ -942,6 +1310,15 @@ class _DailyTab extends StatelessWidget {
                       foregroundColor: Colors.orange.shade700),
                 ),
             ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // ── Day Totals Panel (Section 9) ─────────────────────────────
+          _DayTotalsBadges(
+            counts: counts,
+            mealTypeColors: mealTypeColors,
+            mealTypeIcons: mealTypeIcons,
           ),
 
           const SizedBox(height: 16),
@@ -955,9 +1332,9 @@ class _DailyTab extends StatelessWidget {
             return Container(
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.05),
+                color: color.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: color.withOpacity(0.2)),
+                border: Border.all(color: color.withValues(alpha: 0.2)),
               ),
               child: Column(
                 children: [
@@ -969,7 +1346,7 @@ class _DailyTab extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: color.withOpacity(0.15),
+                            color: color.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(icon, size: 18, color: color),
@@ -985,7 +1362,7 @@ class _DailyTab extends StatelessWidget {
                         ),
                         const Spacer(),
                         TextButton.icon(
-                          onPressed: () => onAddMeal(today,
+                          onPressed: () => onAddMeal(selectedDay,
                               preSelectedType: type),
                           icon: Icon(Icons.add_rounded,
                               size: 16, color: color),
@@ -1088,29 +1465,19 @@ class _DailyTab extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 3 — RECIPE PLANNER
+// TAB 3 — RECIPE PLANNER (Recipe Suggestion Grid + Staged Recipes — Section 9)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _RecipePlannerTab extends StatelessWidget {
+class _RecipePlannerTab extends StatefulWidget {
   final List<FavoriteRecipe> favorites;
   final bool loading;
   final List<DateTime> weekDays;
   final DateTime weekStart;
   final List<PlannedMeal> Function(DateTime) mealsForDate;
-  final Future<void> Function(DateTime, {String? preSelectedType})
-      onAddMeal;
+  final void Function(PlannedMeal) onAddMealDirect;
   final VoidCallback onExportToGrocery;
   final VoidCallback onPrevWeek;
   final VoidCallback onNextWeek;
-
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-
-  static const _dayNames = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-  ];
 
   const _RecipePlannerTab({
     required this.favorites,
@@ -1118,28 +1485,83 @@ class _RecipePlannerTab extends StatelessWidget {
     required this.weekDays,
     required this.weekStart,
     required this.mealsForDate,
-    required this.onAddMeal,
+    required this.onAddMealDirect,
     required this.onExportToGrocery,
     required this.onPrevWeek,
     required this.onNextWeek,
   });
 
+  @override
+  State<_RecipePlannerTab> createState() => _RecipePlannerTabState();
+}
+
+class _RecipePlannerTabState extends State<_RecipePlannerTab> {
+  // ── Staged Recipes Area (Section 9) ─────────────────────────────────────
+  final List<FavoriteRecipe> _staged = [];
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  static const _dayNames = [
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+  ];
+
   String _weekLabel() {
-    final end = weekStart.add(const Duration(days: 6));
-    if (weekStart.month == end.month) {
-      return '${_months[weekStart.month - 1]} ${weekStart.day}–${end.day}';
+    final end = widget.weekStart.add(const Duration(days: 6));
+    if (widget.weekStart.month == end.month) {
+      return '${_months[widget.weekStart.month - 1]} ${widget.weekStart.day}–${end.day}';
     }
-    return '${_months[weekStart.month - 1]} ${weekStart.day} – '
+    return '${_months[widget.weekStart.month - 1]} ${widget.weekStart.day} – '
         '${_months[end.month - 1]} ${end.day}';
   }
 
+  bool _isStaged(FavoriteRecipe recipe) =>
+      _staged.any((r) => r.id == recipe.id);
+
+  void _toggleStage(FavoriteRecipe recipe) {
+    setState(() {
+      if (_isStaged(recipe)) {
+        _staged.removeWhere((r) => r.id == recipe.id);
+      } else {
+        _staged.add(recipe);
+      }
+    });
+  }
+
+  void _assignStagedToDay(DateTime day) {
+    if (_staged.isEmpty) return;
+    final count = _staged.length;
+    for (final recipe in _staged) {
+      widget.onAddMealDirect(PlannedMeal(
+        id: '${DateTime.now().microsecondsSinceEpoch}_${recipe.id}',
+        name: recipe.recipeName,
+        mealType: 'Lunch',
+        recipeIngredients: recipe.ingredients,
+        date: day,
+      ));
+    }
+    setState(() => _staged.clear());
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Added $count recipe${count == 1 ? '' : 's'} to ${_shortDay(day)} (as Lunch — edit type in Weekly/Daily tab if needed)'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  String _shortDay(DateTime day) =>
+      '${_dayNames[day.weekday - 1]} ${day.day}';
+
   @override
   Widget build(BuildContext context) {
-    if (loading) {
+    if (widget.loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (favorites.isEmpty) {
+    if (widget.favorites.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1187,7 +1609,7 @@ class _RecipePlannerTab extends StatelessWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: onPrevWeek,
+                onPressed: widget.onPrevWeek,
                 color: Colors.orange.shade700,
               ),
               Expanded(
@@ -1201,13 +1623,103 @@ class _RecipePlannerTab extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: onNextWeek,
+                onPressed: widget.onNextWeek,
                 color: Colors.orange.shade700,
               ),
             ],
           ),
         ),
         const Divider(height: 1),
+
+        // ── Staged Recipes Area (Section 9) ─────────────────────────────
+        if (_staged.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Colors.orange.shade50,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.playlist_add_check_rounded,
+                        size: 16, color: Colors.orange.shade800),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Staged (${_staged.length}) — tap a day to assign',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setState(() => _staged.clear()),
+                      child: Text('Clear',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.red.shade700)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: _staged
+                      .map((r) => Chip(
+                            label: Text(r.recipeName,
+                                style: const TextStyle(fontSize: 12)),
+                            backgroundColor: Colors.white,
+                            side: BorderSide(
+                                color: Colors.orange.shade300),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            onDeleted: () => _toggleStage(r),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: widget.weekDays.map((day) {
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 2),
+                        child: GestureDetector(
+                          onTap: () => _assignStagedToDay(day),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade700,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  _dayNames[day.weekday - 1],
+                                  style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                                Text(
+                                  '${day.day}',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
 
         Expanded(
           child: SingleChildScrollView(
@@ -1217,7 +1729,7 @@ class _RecipePlannerTab extends StatelessWidget {
               children: [
                 // Export to grocery
                 FilledButton.icon(
-                  onPressed: onExportToGrocery,
+                  onPressed: widget.onExportToGrocery,
                   icon: const Icon(Icons.shopping_cart_rounded),
                   label: const Text('Export This Week to Grocery List'),
                   style: FilledButton.styleFrom(
@@ -1231,7 +1743,7 @@ class _RecipePlannerTab extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
-                // Recipe library
+                // ── Recipe Suggestion Grid (Section 9) ──────────────────
                 const Text(
                   'Your Recipe Library',
                   style: TextStyle(
@@ -1239,154 +1751,101 @@ class _RecipePlannerTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Tap a recipe to assign it to a day this week.',
+                  'Tap recipes to stage them, then assign the batch to a day above.',
                   style: TextStyle(
                       fontSize: 12, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 12),
 
-                ...favorites.map((recipe) => _RecipePlanCard(
-                      recipe: recipe,
-                      weekDays: weekDays,
-                      mealsForDate: mealsForDate,
-                      onSchedule: onAddMeal,
-                    )),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                    childAspectRatio: 1.3,
+                  ),
+                  itemCount: widget.favorites.length,
+                  itemBuilder: (context, i) {
+                    final recipe = widget.favorites[i];
+                    final staged = _isStaged(recipe);
+                    return GestureDetector(
+                      onTap: () => _toggleStage(recipe),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: staged
+                              ? Colors.orange.shade100
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: staged
+                                ? Colors.orange.shade600
+                                : Colors.grey.shade300,
+                            width: staged ? 2 : 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.restaurant_rounded,
+                                    color: Colors.orange.shade700,
+                                    size: 16,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Icon(
+                                  staged
+                                      ? Icons.check_circle_rounded
+                                      : Icons.add_circle_outline_rounded,
+                                  size: 18,
+                                  color: staged
+                                      ? Colors.orange.shade700
+                                      : Colors.grey.shade400,
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            Text(
+                              recipe.recipeName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RECIPE PLAN CARD (for recipe planner tab)
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _RecipePlanCard extends StatelessWidget {
-  final FavoriteRecipe recipe;
-  final List<DateTime> weekDays;
-  final List<PlannedMeal> Function(DateTime) mealsForDate;
-  final Future<void> Function(DateTime, {String? preSelectedType})
-      onSchedule;
-
-  static const _dayNames = [
-    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-  ];
-
-  const _RecipePlanCard({
-    required this.recipe,
-    required this.weekDays,
-    required this.mealsForDate,
-    required this.onSchedule,
-  });
-
-  bool _isScheduledOn(DateTime day) {
-    return mealsForDate(day)
-        .any((m) => m.name == recipe.recipeName);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12)),
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.restaurant_rounded,
-                      color: Colors.orange.shade700, size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    recipe.recipeName,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Schedule for:',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: weekDays.asMap().entries.map((entry) {
-                final i = entry.key;
-                final day = entry.value;
-                final scheduled = _isScheduledOn(day);
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: GestureDetector(
-                      onTap: scheduled
-                          ? null
-                          : () => onSchedule(day),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 6),
-                        decoration: BoxDecoration(
-                          color: scheduled
-                              ? Colors.orange.shade100
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: scheduled
-                                ? Colors.orange.shade400
-                                : Colors.grey.shade300,
-                            width: scheduled ? 2 : 1,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              _dayNames[i],
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: scheduled
-                                    ? Colors.orange.shade800
-                                    : Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Icon(
-                              scheduled
-                                  ? Icons.check_rounded
-                                  : Icons.add_rounded,
-                              size: 14,
-                              color: scheduled
-                                  ? Colors.orange.shade700
-                                  : Colors.grey.shade500,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

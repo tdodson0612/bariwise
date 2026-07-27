@@ -1,5 +1,5 @@
 // lib/pages/recipe_generator_page.dart
-// Section 8 — Recipe Generator Workspace
+// Section 8 — Recipe Generator Workspace (COMPLETE)
 // Standalone screen accessible via route '/recipe-generator'.
 // Supports:
 //   • Manual keyword entry
@@ -7,6 +7,10 @@
 //   • Keyword chip toggling
 //   • Cloudflare Worker recipe search (same logic as RecipeGenerator in home_screen.dart)
 //   • Inline save to favorites, cookbook, grocery list
+//   • Build Recipe Flow — links to existing submit_recipe.dart flow
+//   • Recipe Nutrition Panel — matches saved ingredients, same logic as submit_recipe.dart
+//   • Bariatric Phase Labeling — Liquid / Puree / Soft Foods / Regular
+//   • Open Existing Recipe Flow — pick a saved favorite and load it into this view
 // Route: '/recipe-generator'
 // Arguments (optional): Map<String, dynamic> with key 'keywords' (List<String>)
 //   and optional 'productName' (String)
@@ -19,8 +23,12 @@ import '../services/favorite_recipes_service.dart';
 import '../services/grocery_service.dart';
 import '../services/error_handling_service.dart';
 import '../services/recent_activity_tracker.dart';
+import '../services/recipe_nutrition_service.dart';
+import '../services/saved_ingredients_service.dart';
 import '../widgets/add_to_cookbook_button.dart';
+import '../widgets/recipe_nutrition_display.dart';
 import '../models/favorite_recipe.dart';
+import '../models/nutrition_info.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODEL
@@ -52,6 +60,94 @@ class _Recipe {
       );
 }
 
+// ── Open Existing Recipe Flow (Section 8) ───────────────────────────────────
+// Converts a saved FavoriteRecipe back into a _Recipe for display.
+// Mirrors the ingredient-parsing fallback chain used in favorite_recipes_page.dart
+// (structured JSON list → newline-split → comma-split → raw string).
+
+List<String> _parseIngredientsField(String raw) {
+  if (raw.trim().isEmpty) return [];
+  try {
+    final parsed = jsonDecode(raw);
+    if (parsed is List) {
+      final lines = parsed
+          .map((item) {
+            if (item is Map) {
+              final qty = item['quantity'] ?? '';
+              final unit = item['measurement'] ?? item['unit'] ?? '';
+              final name = item['name'] ?? item['product_name'] ?? '';
+              return '$qty $unit $name'.trim();
+            }
+            return item.toString();
+          })
+          .where((l) => l.trim().isNotEmpty)
+          .toList();
+      if (lines.isNotEmpty) return lines;
+    }
+  } catch (_) {
+    // Not JSON — fall through to text splitting below.
+  }
+
+  final byNewline =
+      raw.split('\n').where((l) => l.trim().isNotEmpty).toList();
+  if (byNewline.length > 1) return byNewline;
+
+  final byComma = raw.split(',').where((l) => l.trim().isNotEmpty).toList();
+  if (byComma.isNotEmpty) return byComma;
+
+  return [raw];
+}
+
+_Recipe _recipeFromFavorite(FavoriteRecipe fav) {
+  return _Recipe(
+    title: fav.recipeName,
+    description: fav.description ?? '',
+    ingredients: _parseIngredientsField(fav.ingredients),
+    instructions: fav.directions,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BARIATRIC PHASE LABELING (Section 8)
+// ─────────────────────────────────────────────────────────────────────────────
+// Heuristic, keyword-based classification. Not a medical determination —
+// purely a UI convenience label based on recipe text content.
+
+enum _BariPhase { liquid, puree, soft, regular }
+
+class _PhaseInfo {
+  final String label;
+  final Color color;
+  final IconData icon;
+  const _PhaseInfo(this.label, this.color, this.icon);
+}
+
+const Map<_BariPhase, _PhaseInfo> _phaseInfo = {
+  _BariPhase.liquid: _PhaseInfo(
+      'Liquid Phase', Color(0xFF1976D2), Icons.local_drink_rounded),
+  _BariPhase.puree: _PhaseInfo(
+      'Puree Phase', Color(0xFF7B1FA2), Icons.blender_rounded),
+  _BariPhase.soft: _PhaseInfo(
+      'Soft Foods Phase', Color(0xFFEF6C00), Icons.rice_bowl_rounded),
+  _BariPhase.regular: _PhaseInfo(
+      'Regular Foods Phase', Color(0xFF2E7D32), Icons.restaurant_rounded),
+};
+
+_BariPhase _classifyPhase(_Recipe recipe) {
+  final text = ('${recipe.title} ${recipe.description} '
+          '${recipe.ingredients.join(' ')} ${recipe.instructions}')
+      .toLowerCase();
+
+  const liquidWords = ['broth', 'shake', 'smoothie', 'liquid diet', 'strained juice'];
+  const pureeWords = ['puree', 'pureed', 'blended', 'pureeing', 'strained'];
+  const softWords = ['soft food', 'mashed', 'ground', 'minced', 'soft diet'];
+
+  if (liquidWords.any((w) => text.contains(w))) return _BariPhase.liquid;
+  if (pureeWords.any((w) => text.contains(w))) return _BariPhase.puree;
+  if (softWords.any((w) => text.contains(w))) return _BariPhase.soft;
+  return _BariPhase.regular;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +174,7 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
   int _currentPage = 0;
   static const int _perPage = 3;
 
-  // Favorites cache (to show filled heart)
+  // Favorites cache (to show filled heart + power Open Existing Recipe Flow)
   List<FavoriteRecipe> _favorites = [];
 
   @override
@@ -132,6 +228,86 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
 
   bool _isFavorited(String title) =>
       _favorites.any((f) => f.recipeName == title);
+
+  // ── Build Recipe Flow (Section 8) ───────────────────────────────────────
+  // Reuses the existing build-a-recipe flow rather than duplicating it here.
+  void _navigateToBuildRecipe() {
+    try {
+      Navigator.pushNamed(context, '/submit-recipe');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recipe builder unavailable')),
+        );
+      }
+    }
+  }
+
+  // ── Open Existing Recipe Flow (Section 8) ───────────────────────────────
+  void _showOpenSavedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Open Saved Recipe'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: _favorites.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Text('You have no saved favorites yet.'),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _favorites.length,
+                  itemBuilder: (context, index) {
+                    final fav = _favorites[index];
+                    return ListTile(
+                      leading: const Icon(Icons.restaurant,
+                          color: Colors.red),
+                      title: Text(fav.recipeName),
+                      subtitle: fav.description != null &&
+                              fav.description!.trim().isNotEmpty
+                          ? Text(
+                              fav.description!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _openSavedRecipe(fav);
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openSavedRecipe(FavoriteRecipe fav) {
+    setState(() {
+      _results = [_recipeFromFavorite(fav)];
+      _hasSearched = true;
+      _currentPage = 0;
+      _keywordTokens = [];
+      _selectedKeywords = {};
+      _productName = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Opened "${fav.recipeName}"'),
+        backgroundColor: Colors.orange,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   // ── Keyword management ────────────────────────────────────────────────────
 
@@ -331,6 +507,16 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
         backgroundColor: Colors.orange.shade700,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_rounded),
+            tooltip: 'Open Saved Recipe',
+            onPressed: _showOpenSavedDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_note_rounded),
+            tooltip: 'Build Your Own Recipe',
+            onPressed: _navigateToBuildRecipe,
+          ),
           if (_keywordTokens.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.clear_all_rounded),
@@ -678,7 +864,34 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
                   color: Colors.grey.shade600,
                   height: 1.5),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _navigateToBuildRecipe,
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text('Build Your Own Recipe'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange.shade800,
+                    side: BorderSide(color: Colors.orange.shade300),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      _favorites.isEmpty ? null : _showOpenSavedDialog,
+                  icon: const Icon(Icons.bookmark_rounded, size: 18),
+                  label: const Text('Open Saved Recipe'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red.shade700,
+                    side: BorderSide(color: Colors.red.shade300),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -711,10 +924,10 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RECIPE CARD
+// RECIPE CARD (stateful — owns its own nutrition-panel state)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _RecipeCard extends StatelessWidget {
+class _RecipeCard extends StatefulWidget {
   final _Recipe recipe;
   final bool isFavorited;
   final VoidCallback onToggleFavorite;
@@ -728,7 +941,99 @@ class _RecipeCard extends StatelessWidget {
   });
 
   @override
+  State<_RecipeCard> createState() => _RecipeCardState();
+}
+
+class _RecipeCardState extends State<_RecipeCard> {
+  bool _isAnalyzingNutrition = false;
+  RecipeNutrition? _nutrition;
+  int _matchedCount = 0;
+
+  // ── Recipe Nutrition Panel (Section 8) ──────────────────────────────────
+  // Same matching approach as submit_recipe.dart: fuzzy-match this recipe's
+  // ingredient strings against the user's saved ingredients, then sum totals.
+  Future<void> _analyzeNutrition() async {
+    setState(() {
+      _isAnalyzingNutrition = true;
+      _nutrition = null;
+      _matchedCount = 0;
+    });
+
+    try {
+      final saved = await SavedIngredientsService.loadSavedIngredients();
+      if (saved.isEmpty) {
+        if (mounted) {
+          setState(() => _isAnalyzingNutrition = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'No saved ingredients yet. Scan and save products first to enable nutrition analysis.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final List<NutritionInfo> matches = [];
+      for (final ingredientText in widget.recipe.ingredients) {
+        final name = ingredientText.trim().toLowerCase();
+        if (name.length < 3) continue;
+
+        final found = saved.where((item) {
+          final itemName = item.productName.toLowerCase();
+          final nameWords = name.split(' ');
+          final itemWords = itemName.split(' ');
+          if (itemName.contains(name) || name.contains(itemName)) return true;
+          for (final word in nameWords) {
+            if (word.length >= 3 && itemWords.any((iw) => iw.contains(word))) {
+              return true;
+            }
+          }
+          return false;
+        }).toList();
+
+        for (final item in found) {
+          if (!matches.any((m) =>
+              m.productName.toLowerCase() == item.productName.toLowerCase())) {
+            matches.add(item);
+          }
+        }
+      }
+
+      if (matches.isEmpty) {
+        if (mounted) {
+          setState(() => _isAnalyzingNutrition = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Could not match these ingredients to your saved items.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      final totals = RecipeNutritionService.calculateTotals(matches);
+      if (mounted) {
+        setState(() {
+          _nutrition = totals;
+          _matchedCount = matches.length;
+          _isAnalyzingNutrition = false;
+        });
+      }
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Nutrition analysis error: $e');
+      if (mounted) setState(() => _isAnalyzingNutrition = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final phase = _classifyPhase(widget.recipe);
+    final info = _phaseInfo[phase]!;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       elevation: 2,
@@ -737,16 +1042,43 @@ class _RecipeCard extends StatelessWidget {
         tilePadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         childrenPadding: EdgeInsets.zero,
-        title: Text(
-          recipe.title,
-          style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.recipe.title,
+              style: const TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: info.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: info.color.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(info.icon, size: 12, color: info.color),
+                  const SizedBox(width: 4),
+                  Text(info.label,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: info.color)),
+                ],
+              ),
+            ),
+          ],
         ),
-        subtitle: recipe.description.isNotEmpty
+        subtitle: widget.recipe.description.isNotEmpty
             ? Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.only(top: 6),
                 child: Text(
-                  recipe.description,
+                  widget.recipe.description,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -759,14 +1091,14 @@ class _RecipeCard extends StatelessWidget {
           children: [
             IconButton(
               icon: Icon(
-                isFavorited
+                widget.isFavorited
                     ? Icons.favorite_rounded
                     : Icons.favorite_border_rounded,
-                color: isFavorited ? Colors.red : Colors.grey.shade400,
+                color: widget.isFavorited ? Colors.red : Colors.grey.shade400,
                 size: 22,
               ),
-              onPressed: onToggleFavorite,
-              tooltip: isFavorited
+              onPressed: widget.onToggleFavorite,
+              tooltip: widget.isFavorited
                   ? 'Remove from favorites'
                   : 'Add to favorites',
               padding: EdgeInsets.zero,
@@ -794,7 +1126,7 @@ class _RecipeCard extends StatelessWidget {
                         color: Colors.orange.shade700),
                     const SizedBox(width: 6),
                     Text(
-                      'Ingredients (${recipe.ingredients.length})',
+                      'Ingredients (${widget.recipe.ingredients.length})',
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -803,7 +1135,7 @@ class _RecipeCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ...recipe.ingredients.map((ing) => Padding(
+                ...widget.recipe.ingredients.map((ing) => Padding(
                       padding:
                           const EdgeInsets.only(left: 8, bottom: 4),
                       child: Row(
@@ -840,9 +1172,74 @@ class _RecipeCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  recipe.instructions,
+                  widget.recipe.instructions,
                   style: const TextStyle(
                       fontSize: 13, height: 1.5),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ── Recipe Nutrition Panel (Section 8) ──────────────────
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.analytics_rounded,
+                              size: 16, color: Colors.teal.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Nutrition Panel',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade800),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_nutrition == null) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _isAnalyzingNutrition
+                                ? null
+                                : _analyzeNutrition,
+                            icon: _isAnalyzingNutrition
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.calculate_outlined,
+                                    size: 16),
+                            label: Text(_isAnalyzingNutrition
+                                ? 'Analyzing…'
+                                : 'Analyze Nutrition'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.teal.shade700,
+                              side: BorderSide(color: Colors.teal.shade300),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          'Matched $_matchedCount saved ingredient${_matchedCount == 1 ? '' : 's'}',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 8),
+                        RecipeNutritionDisplay(nutrition: _nutrition!),
+                      ],
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 16),
@@ -853,26 +1250,26 @@ class _RecipeCard extends StatelessWidget {
                     // Favorite
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: onToggleFavorite,
+                        onPressed: widget.onToggleFavorite,
                         icon: Icon(
-                          isFavorited
+                          widget.isFavorited
                               ? Icons.favorite_rounded
                               : Icons.favorite_border_rounded,
                           size: 16,
-                          color: isFavorited
+                          color: widget.isFavorited
                               ? Colors.red
                               : Colors.grey.shade600,
                         ),
                         label: Text(
-                          isFavorited ? 'Saved' : 'Favorite',
+                          widget.isFavorited ? 'Saved' : 'Favorite',
                           style: const TextStyle(fontSize: 12),
                         ),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: isFavorited
+                          foregroundColor: widget.isFavorited
                               ? Colors.red
                               : Colors.grey.shade700,
                           side: BorderSide(
-                            color: isFavorited
+                            color: widget.isFavorited
                                 ? Colors.red.shade300
                                 : Colors.grey.shade300,
                           ),
@@ -886,9 +1283,9 @@ class _RecipeCard extends StatelessWidget {
                     // Add to Cookbook
                     Expanded(
                       child: AddToCookbookButton(
-                        recipeName: recipe.title,
-                        ingredients: recipe.ingredients.join(', '),
-                        directions: recipe.instructions,
+                        recipeName: widget.recipe.title,
+                        ingredients: widget.recipe.ingredients.join(', '),
+                        directions: widget.recipe.instructions,
                         compact: true,
                       ),
                     ),
@@ -897,7 +1294,7 @@ class _RecipeCard extends StatelessWidget {
                     // Grocery list
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: onAddToGrocery,
+                        onPressed: widget.onAddToGrocery,
                         icon: const Icon(Icons.add_shopping_cart_rounded,
                             size: 16),
                         label: const Text('Grocery',

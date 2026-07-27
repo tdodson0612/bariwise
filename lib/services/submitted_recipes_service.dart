@@ -14,7 +14,7 @@ import 'database_service_core.dart';
 import 'profile_service.dart';
 
 class SubmittedRecipesService {
-  static const String _CACHE_KEY = 'cache_submitted_recipes';
+  static const String _cacheKey = 'cache_submitted_recipes';
 
   // ============================================================
   // OLD SYSTEM: SIMPLE TEXT-BASED SUBMISSIONS
@@ -27,7 +27,7 @@ class SubmittedRecipesService {
 
     try {
       // Try cache
-      final cached = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      final cached = await DatabaseServiceCore.getCachedData(_cacheKey);
       if (cached != null) {
         final decoded = jsonDecode(cached) as List;
         return decoded
@@ -50,7 +50,7 @@ class SubmittedRecipesService {
           .toList();
 
       // Cache result
-      await DatabaseServiceCore.cacheData(_CACHE_KEY, jsonEncode(response));
+      await DatabaseServiceCore.cacheData(_cacheKey, jsonEncode(response));
 
       return recipes;
     } catch (e) {
@@ -93,7 +93,7 @@ class SubmittedRecipesService {
       }
 
       // Clear cache
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
 
     } catch (e) {
       throw Exception('Failed to submit recipe: $e');
@@ -202,7 +202,7 @@ class SubmittedRecipesService {
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
     } catch (e) {
       throw Exception('Failed to update recipe: $e');
     }
@@ -219,7 +219,7 @@ class SubmittedRecipesService {
         filters: {'id': recipeId},
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
     } catch (e) {
       throw Exception('Failed to delete recipe: $e');
     }
@@ -583,7 +583,7 @@ Shared from Recipe Scanner App
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
       AppConfig.debugPrint('✅ Recipe accepted and verified: $recipeId');
     } catch (e) {
       AppConfig.debugPrint('❌ Error accepting recipe: $e');
@@ -620,7 +620,7 @@ Shared from Recipe Scanner App
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
       AppConfig.debugPrint('✅ Recipe declined: $recipeId');
     } catch (e) {
       AppConfig.debugPrint('❌ Error declining recipe: $e');

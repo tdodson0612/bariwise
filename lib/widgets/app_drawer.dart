@@ -626,8 +626,8 @@ class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (loadingContext) => WillPopScope(
-        onWillPop: () async => false,
+      builder: (loadingContext) => PopScope(
+        canPop: false,
         child: const Center(
           child: Card(
             child: Padding(
@@ -709,7 +709,7 @@ class _DrawerHeader extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white38, width: 1.5),
             ),
@@ -747,7 +747,7 @@ class _DrawerHeader extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isPremium
                       ? Colors.amber.shade600
-                      : Colors.white.withOpacity(0.2),
+                      : Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(

@@ -7,7 +7,6 @@ import 'profile_service.dart';           // For getUserProfile + isPremium
 import 'achievements_service.dart';     // For awardBadge
 import 'database_service_core.dart';    // Worker queries + cache
 
-
 class ScanService {
 
   // ==================================================

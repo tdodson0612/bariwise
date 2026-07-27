@@ -10,7 +10,7 @@ import 'profile_service.dart';
 import 'auth_service.dart';
 
 class CustomIngredientsService {
-  static const String _CACHE_KEY = 'cache_custom_ingredients';
+  static const String _cacheKey = 'cache_custom_ingredients';
 
   // ============================================================
   // PUBLIC API
@@ -77,7 +77,7 @@ class CustomIngredientsService {
       );
 
       // Clear cache
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
 
       final result = (response as List).first;
       final ingredientId = result['id'] as String;
@@ -138,7 +138,7 @@ class CustomIngredientsService {
       );
 
       // Clear cache
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
 
       AppConfig.debugPrint('✅ Custom ingredient updated: $ingredientId');
     } catch (e) {
@@ -164,7 +164,7 @@ class CustomIngredientsService {
       );
 
       // Clear cache
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
 
       AppConfig.debugPrint('✅ Custom ingredient deleted: $ingredientId');
     } catch (e) {
@@ -179,7 +179,7 @@ class CustomIngredientsService {
   ) async {
     try {
       // Try cache first
-      final cached = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      final cached = await DatabaseServiceCore.getCachedData(_cacheKey);
       if (cached != null) {
         final data = _decodeCacheData(cached);
         if (data['userId'] == userId) {
@@ -345,7 +345,7 @@ class CustomIngredientsService {
       };
 
       await DatabaseServiceCore.cacheData(
-        _CACHE_KEY,
+        _cacheKey,
         _encodeCacheData(cacheData),
       );
     } catch (e) {

@@ -83,8 +83,6 @@ class _RecipeCardState extends State<RecipeCard> {
       final cachedRatingData = prefs.getString(_getRatingCacheKey());
       final cachedUserRating = prefs.getInt(_getUserRatingCacheKey());
       
-      bool usedCache = false;
-      
       if (cachedRatingData != null) {
         final ratingData = json.decode(cachedRatingData);
         final cacheTime = ratingData['timestamp'] as int?;
@@ -102,7 +100,6 @@ class _RecipeCardState extends State<RecipeCard> {
                 _isLoadingRating = false;
               });
             }
-            usedCache = true;
             return;
           }
         }
@@ -169,17 +166,6 @@ class _RecipeCardState extends State<RecipeCard> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('$_ratingCachePrefix$recipeId');
     await prefs.remove('$_userRatingCachePrefix$recipeId');
-  }
-
-  /// Clear all recipe rating caches (for debugging or logout)
-  static Future<void> clearAllRatingCaches() async {
-    final prefs = await SharedPreferences.getInstance();
-    final keys = prefs.getKeys();
-    for (final key in keys) {
-      if (key.startsWith(_ratingCachePrefix) || key.startsWith(_userRatingCachePrefix)) {
-        await prefs.remove(key);
-      }
-    }
   }
 
   Future<void> _deleteRecipe() async {

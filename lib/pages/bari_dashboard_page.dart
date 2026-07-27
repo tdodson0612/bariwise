@@ -1,14 +1,53 @@
 // lib/pages/bari_dashboard_page.dart
 // Weekly progress dashboard showing trends for all bariatric metrics.
 // Route: '/bari-dashboard'
+//
+// ── Section 13 additions (this session) ──────────────────────────────────
+// - Dashboard Overview: new first tab combining Tracker Summary Cards,
+//   Meal Plan Summary, and Smart Insights.
+// - Tracker Summary Cards: one card per major tracker (Weight, Meals,
+//   Supplements, Hydration, Symptoms, Meal Plan) — each shows its own
+//   system's numbers side-by-side rather than merging anything, per
+//   explicit user direction this session ("connect, don't unify").
+// - Meal Plan Summary: reads meal_planner_page.dart's PlannedMeal data
+//   directly (public class, safe to import) for today's + this week's
+//   planned meal counts.
+// - Smart Insights: simple rule-based pattern checks across the data
+//   already loaded (not AI/ML) — flagged as such, not oversold.
+// - Dashboard Filters: 7 / 30 / 90 day range selector, applies to the
+//   Nutrients tab chart and Overview computations.
+// - Bug fix (found during verification, not introduced this session):
+//   the local-fallback snapshot path (used when Supabase has under a
+//   week of data) never set `waterCups`, so Water silently showed no
+//   data on any locally-filled day even if the user logged water in
+//   tracker_page.dart. Fixed by parsing TrackerEntry.waterIntake.
 
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/bari_models.dart';
 import '../services/bari_features_service.dart';
 import '../services/tracker_service.dart';
 import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
+import 'meal_planner_page.dart' show PlannedMeal;
+
+const _kDNavy      = Color(0xFF0A1628);
+const _kDNavyLight = Color(0xFF1A2E4A);
+const _kDBg        = Color(0xFFEEF2F7);
+const _kDGold      = Color(0xFFC9A84C);
+
+// Mirrors the private `_prefKey` in meal_planner_page.dart's State class.
+// Duplicated intentionally — that key is a private (`_`-prefixed) const
+// and Dart library privacy prevents cross-file reuse without exporting
+// it. Same additive-only approach used for tracker_landing_page.dart's
+// reads of extended_tracker_page.dart's keys earlier this session.
+const String _kMealPlannerData = 'meal_planner_data';
+
+// Mirrors extended_tracker_page.dart's private `_kWeight` key, for the
+// same reason as above.
+const String _kExtWeight = 'ext_tracker_weight';
 
 class BariDashboardPage extends StatefulWidget {
   const BariDashboardPage({super.key});
@@ -26,6 +65,18 @@ class _BariDashboardPageState extends State<BariDashboardPage>
   List<SymptomEntry> _symptoms = [];
   BariWeeklyGoal? _weekGoal;
 
+  // ── Section 13 additions: filter + summary-card data ────────────────
+  int _rangeDays = 30;
+
+  double? _todayHydrationCups;
+  List<SupplementSchedule> _supplementSchedules = [];
+  List<SupplementTakenEntry> _supplementTakenToday = [];
+
+  Map<String, List<PlannedMeal>> _mealPlan = {};
+
+  double? _extWeightLatestKg;
+  String? _extWeightLatestDate;
+
   final _proteinCtrl = TextEditingController();
   final _sodiumCtrl = TextEditingController();
   final _sugarCtrl = TextEditingController();
@@ -37,7 +88,7 @@ class _BariDashboardPageState extends State<BariDashboardPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    _tabs = TabController(length: 4, vsync: this);
     _loadData();
     RecentActivityTracker.recordScreen(label: 'Dashboard', route: '/bari-dashboard');
   }
@@ -54,14 +105,26 @@ class _BariDashboardPageState extends State<BariDashboardPage>
     super.dispose();
   }
 
+  static double? _parseWaterCupsFromString(String water) {
+    final match = RegExp(r'^(\d+\.?\d*)').firstMatch(water.trim());
+    if (match == null) return null;
+    return double.tryParse(match.group(1)!);
+  }
+
+  String _todayDateKey() {
+    final d = DateTime.now();
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _loadData() async {
+    if (mounted) setState(() => _loading = true);
     try {
       final userId =
           Supabase.instance.client.auth.currentUser?.id ?? '';
       final [supaSnapshots, symptoms, goal] = await Future.wait([
-        BariFeaturesService.getDailySnapshots(days: 30),
+        BariFeaturesService.getDailySnapshots(days: _rangeDays),
         BariFeaturesService.getSymptomLog(
-            from: DateTime.now().subtract(const Duration(days: 30))),
+            from: DateTime.now().subtract(Duration(days: _rangeDays))),
         BariFeaturesService.getCurrentWeekGoal(),
       ]);
 
@@ -69,6 +132,12 @@ class _BariDashboardPageState extends State<BariDashboardPage>
           supaSnapshots as List<BariNutrientSnapshot>;
 
       if (combined.length < 7) {
+        // NOTE: TrackerService.getLastSevenDays is hardcoded to 7 days
+        // regardless of the selected filter range — this local-fallback
+        // path was not modified beyond the water-cups fix, so it still
+        // only ever contributes up to 7 days even when a 30/90-day
+        // range is selected. Flagging as a pre-existing limitation of
+        // this fallback, not something introduced or silently widened.
         final localEntries =
             await TrackerService.getLastSevenDays(userId);
         for (final entry in localEntries) {
@@ -87,6 +156,12 @@ class _BariDashboardPageState extends State<BariDashboardPage>
               sugarG: totals['sugar'],
               sodiumMg: totals['sodium'],
               fiberG: totals['fiber'],
+              // ✅ Section 13 bug fix: previously omitted entirely, which
+              // silently showed "no data" for Water on any locally-filled
+              // day even when the user had logged water that day.
+              waterCups: entry.waterIntake != null
+                  ? _parseWaterCupsFromString(entry.waterIntake!)
+                  : null,
               dailyScore: entry.dailyScore,
               weightKg: entry.weight,
               supplementCount: entry.supplements.length,
@@ -98,11 +173,82 @@ class _BariDashboardPageState extends State<BariDashboardPage>
 
       final weekGoal = goal as BariWeeklyGoal?;
 
+      // ── Section 13: Tracker Summary Card data loads ──────────────────
+      double? todayHydration;
+      List<SupplementSchedule> schedules = [];
+      List<SupplementTakenEntry> takenToday = [];
+      try {
+        final today = DateTime.now();
+        final todayStart = DateTime(today.year, today.month, today.day);
+        final todayEnd = todayStart.add(const Duration(days: 1));
+        final results = await Future.wait([
+          BariFeaturesService.getHydrationLog(from: todayStart, to: todayEnd),
+          BariFeaturesService.getSupplementSchedules(),
+          BariFeaturesService.getSupplementTakenLog(
+              from: todayStart, to: todayEnd),
+        ]);
+        final hydrationEntries = results[0] as List;
+        todayHydration =
+            hydrationEntries.fold<double>(0, (s, e) => s + (e.cups as double));
+        schedules = results[1] as List<SupplementSchedule>;
+        takenToday = results[2] as List<SupplementTakenEntry>;
+      } catch (e) {
+        AppConfig.debugPrint('Dashboard summary-card load error: $e');
+      }
+
+      // ── Section 13: Meal Plan Summary data load ──────────────────────
+      Map<String, List<PlannedMeal>> mealPlan = {};
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_kMealPlannerData);
+        if (raw != null) {
+          final decoded = jsonDecode(raw) as Map<String, dynamic>;
+          for (final entry in decoded.entries) {
+            mealPlan[entry.key] = (entry.value as List)
+                .map((m) => PlannedMeal.fromJson(m as Map<String, dynamic>))
+                .toList();
+          }
+        }
+      } catch (e) {
+        AppConfig.debugPrint('Dashboard meal-plan load error: $e');
+      }
+
+      // ── Section 13: extended_tracker_page.dart Weight system read ────
+      double? extWeightKg;
+      String? extWeightDate;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString(_kExtWeight);
+        if (raw != null) {
+          final list = jsonDecode(raw) as List;
+          if (list.isNotEmpty) {
+            // Entries are inserted most-recent-first in
+            // extended_tracker_page.dart, but read defensively by date
+            // rather than assuming order.
+            final sorted = list
+                .map((j) => j as Map<String, dynamic>)
+                .toList()
+              ..sort((a, b) =>
+                  (b['date'] as String).compareTo(a['date'] as String));
+            extWeightKg = (sorted.first['weightKg'] as num).toDouble();
+            extWeightDate = sorted.first['date'] as String?;
+          }
+        }
+      } catch (e) {
+        AppConfig.debugPrint('Dashboard ext-weight load error: $e');
+      }
+
       if (mounted) {
         setState(() {
           _snapshots = combined;
           _symptoms = symptoms as List<SymptomEntry>;
           _weekGoal = weekGoal;
+          _todayHydrationCups = todayHydration;
+          _supplementSchedules = schedules;
+          _supplementTakenToday = takenToday;
+          _mealPlan = mealPlan;
+          _extWeightLatestKg = extWeightKg;
+          _extWeightLatestDate = extWeightDate;
           _loading = false;
           _proteinCtrl.text =
               weekGoal?.goalProteinG?.toStringAsFixed(0) ?? '60';
@@ -163,23 +309,100 @@ class _BariDashboardPageState extends State<BariDashboardPage>
     }
   }
 
+  void _onRangeChanged(int days) {
+    if (days == _rangeDays) return;
+    setState(() => _rangeDays = days);
+    _loadData();
+  }
+
+  BariNutrientSnapshot? get _todaySnapshot {
+    final todayKey = _todayDateKey();
+    for (final s in _snapshots) {
+      if (s.snapshotDate.toIso8601String().startsWith(todayKey)) return s;
+    }
+    return null;
+  }
+
+  int get _todayPlannedMealCount =>
+      (_mealPlan[_todayDateKey()] ?? []).length;
+
+  int get _weekPlannedMealCount {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    int count = 0;
+    for (int i = 0; i < 7; i++) {
+      final day = monday.add(Duration(days: i));
+      final key =
+          '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+      count += (_mealPlan[key] ?? []).length;
+    }
+    return count;
+  }
+
+  int get _todaySymptomCount {
+    final now = DateTime.now();
+    return _symptoms
+        .where((s) =>
+            s.loggedAt.year == now.year &&
+            s.loggedAt.month == now.month &&
+            s.loggedAt.day == now.day)
+        .length;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _kDBg,
       appBar: AppBar(
         title: const Text('Bariatric Dashboard'),
-        backgroundColor: Colors.orange.shade800,
+        backgroundColor: _kDNavy,
         foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabs,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Nutrients'),
-            Tab(icon: Icon(Icons.sick_rounded), text: 'Symptoms'),
-            Tab(icon: Icon(Icons.flag_rounded), text: 'Goals'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: Column(
+            children: [
+              // ── Section 13: Dashboard Filters ─────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [7, 30, 90].map((d) {
+                    final sel = _rangeDays == d;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text('$d days',
+                            style: const TextStyle(fontSize: 12)),
+                        selected: sel,
+                        selectedColor: _kDGold.withValues(alpha: 0.25),
+                        backgroundColor: Colors.white.withValues(alpha: 0.08),
+                        labelStyle: TextStyle(
+                            color: sel ? _kDGold : Colors.white70),
+                        side: BorderSide(
+                            color: sel ? _kDGold : Colors.white24),
+                        onSelected: (_) => _onRangeChanged(d),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              TabBar(
+                controller: _tabs,
+                indicatorColor: _kDGold,
+                indicatorWeight: 3,
+                labelColor: _kDGold,
+                unselectedLabelColor: Colors.white54,
+                isScrollable: true,
+                tabs: const [
+                  Tab(icon: Icon(Icons.dashboard_rounded), text: 'Overview'),
+                  Tab(icon: Icon(Icons.bar_chart_rounded), text: 'Nutrients'),
+                  Tab(icon: Icon(Icons.sick_rounded), text: 'Symptoms'),
+                  Tab(icon: Icon(Icons.flag_rounded), text: 'Goals'),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: _loading
@@ -187,6 +410,21 @@ class _BariDashboardPageState extends State<BariDashboardPage>
           : TabBarView(
               controller: _tabs,
               children: [
+                _OverviewTab(
+                  rangeDays: _rangeDays,
+                  todaySnapshot: _todaySnapshot,
+                  todayHydrationCups: _todayHydrationCups,
+                  supplementSchedules: _supplementSchedules,
+                  supplementTakenToday: _supplementTakenToday,
+                  extWeightLatestKg: _extWeightLatestKg,
+                  extWeightLatestDate: _extWeightLatestDate,
+                  todayPlannedMealCount: _todayPlannedMealCount,
+                  weekPlannedMealCount: _weekPlannedMealCount,
+                  todaySymptomCount: _todaySymptomCount,
+                  snapshots: _snapshots,
+                  symptoms: _symptoms,
+                  onGoToNutrients: () => _tabs.animateTo(1),
+                ),
                 _NutrientTab(snapshots: _snapshots),
                 _SymptomTab(symptoms: _symptoms),
                 _GoalsTab(
@@ -209,6 +447,468 @@ class _BariDashboardPageState extends State<BariDashboardPage>
   static DateTime _getMondayOfCurrentWeek() {
     final now = DateTime.now();
     return now.subtract(Duration(days: now.weekday - 1));
+  }
+}
+
+// ============================================================
+// TAB 0 — OVERVIEW (Section 13 addition)
+// ============================================================
+
+class _OverviewTab extends StatelessWidget {
+  final int rangeDays;
+  final BariNutrientSnapshot? todaySnapshot;
+  final double? todayHydrationCups;
+  final List<SupplementSchedule> supplementSchedules;
+  final List<SupplementTakenEntry> supplementTakenToday;
+  final double? extWeightLatestKg;
+  final String? extWeightLatestDate;
+  final int todayPlannedMealCount;
+  final int weekPlannedMealCount;
+  final int todaySymptomCount;
+  final List<BariNutrientSnapshot> snapshots;
+  final List<SymptomEntry> symptoms;
+  final VoidCallback onGoToNutrients;
+
+  const _OverviewTab({
+    required this.rangeDays,
+    required this.todaySnapshot,
+    required this.todayHydrationCups,
+    required this.supplementSchedules,
+    required this.supplementTakenToday,
+    required this.extWeightLatestKg,
+    required this.extWeightLatestDate,
+    required this.todayPlannedMealCount,
+    required this.weekPlannedMealCount,
+    required this.todaySymptomCount,
+    required this.snapshots,
+    required this.symptoms,
+    required this.onGoToNutrients,
+  });
+
+  bool _isTakenToday(SupplementSchedule s) => supplementTakenToday
+      .any((t) => t.scheduleId == s.id || t.name == s.name);
+
+  /// Weight card: compares the local tracker_page.dart weight (folded
+  /// into today's snapshot, if present) against the separate
+  /// extended_tracker_page.dart weight system by date, and shows
+  /// whichever is more recent. Flags with a warning icon if both exist
+  /// and disagree — surfaces the duplication rather than resolving it.
+  Widget _buildWeightCard() {
+    final trackerPageKg = todaySnapshot?.weightKg;
+    final trackerPageDate = todaySnapshot?.snapshotDate;
+
+    double? displayKg;
+    String? sourceLabel;
+    bool conflict = false;
+
+    if (trackerPageKg != null && extWeightLatestKg != null) {
+      displayKg = trackerPageKg;
+      sourceLabel = 'Tracker';
+      if ((trackerPageKg - extWeightLatestKg!).abs() > 0.5) {
+        conflict = true;
+      }
+    } else if (trackerPageKg != null) {
+      displayKg = trackerPageKg;
+      sourceLabel = 'Tracker';
+    } else if (extWeightLatestKg != null) {
+      displayKg = extWeightLatestKg;
+      sourceLabel = 'Extended';
+    }
+
+    return _TrackerSummaryCard(
+      icon: Icons.monitor_weight_rounded,
+      color: Colors.blue.shade700,
+      title: 'Weight',
+      value: displayKg != null
+          ? '${(displayKg * 2.20462).toStringAsFixed(1)} lbs'
+          : '—',
+      subtitle: displayKg == null
+          ? 'Not logged'
+          : conflict
+              ? '⚠ $sourceLabel system · two systems differ'
+              : '$sourceLabel system'
+                  '${trackerPageDate != null ? ' · today' : extWeightLatestDate != null ? ' · $extWeightLatestDate' : ''}',
+      subtitleColor: conflict ? Colors.orange.shade800 : null,
+    );
+  }
+
+  Widget _buildMealsCard() {
+    final score = todaySnapshot?.dailyScore;
+    return _TrackerSummaryCard(
+      icon: Icons.restaurant_rounded,
+      color: Colors.orange.shade700,
+      title: 'Nutrition',
+      value: score != null ? '$score pts' : '—',
+      subtitle: score != null ? "Today's score" : 'No meals logged today',
+    );
+  }
+
+  Widget _buildSupplementsCard() {
+    if (supplementSchedules.isEmpty) {
+      return _TrackerSummaryCard(
+        icon: Icons.medication_rounded,
+        color: Colors.teal.shade700,
+        title: 'Supplements',
+        value: '—',
+        subtitle: 'No schedule set up',
+      );
+    }
+    final takenCount =
+        supplementSchedules.where(_isTakenToday).length;
+    return _TrackerSummaryCard(
+      icon: Icons.medication_rounded,
+      color: Colors.teal.shade700,
+      title: 'Supplements',
+      value: '$takenCount/${supplementSchedules.length}',
+      subtitle: 'Taken today (scheduled)',
+    );
+  }
+
+  Widget _buildHydrationCard() {
+    return _TrackerSummaryCard(
+      icon: Icons.water_drop_rounded,
+      color: Colors.lightBlue.shade700,
+      title: 'Hydration',
+      value: todayHydrationCups != null
+          ? '${todayHydrationCups!.toStringAsFixed(1)} cups'
+          : '0 cups',
+      subtitle: 'Logged today',
+    );
+  }
+
+  Widget _buildSymptomsCard() {
+    return _TrackerSummaryCard(
+      icon: Icons.sick_rounded,
+      color: todaySymptomCount > 0 ? Colors.red.shade600 : Colors.green.shade600,
+      title: 'Symptoms',
+      value: '$todaySymptomCount',
+      subtitle: todaySymptomCount > 0 ? 'Logged today' : 'None today',
+    );
+  }
+
+  Widget _buildMealPlanCard() {
+    return _TrackerSummaryCard(
+      icon: Icons.event_note_rounded,
+      color: Colors.purple.shade700,
+      title: 'Meal Plan',
+      value: '$todayPlannedMealCount today',
+      subtitle: '$weekPlannedMealCount planned this week',
+    );
+  }
+
+  List<String> _buildInsights() {
+    // Simple, rule-based pattern checks over data already loaded —
+    // not AI/ML. Flagged as such rather than oversold as "smart" in
+    // any predictive sense.
+    final insights = <String>[];
+
+    final recentWithProtein =
+        snapshots.where((s) => s.proteinG != null).toList();
+    if (recentWithProtein.isNotEmpty) {
+      final avgProtein = recentWithProtein
+              .map((s) => s.proteinG!)
+              .reduce((a, b) => a + b) /
+          recentWithProtein.length;
+      if (avgProtein < 42) {
+        insights.add(
+            'Protein has averaged ${avgProtein.toStringAsFixed(0)}g/day over the last $rangeDays days — below the 60g target.');
+      }
+    }
+
+    final recentWithSodium =
+        snapshots.where((s) => s.sodiumMg != null).toList();
+    if (recentWithSodium.isNotEmpty) {
+      final avgSodium = recentWithSodium
+              .map((s) => s.sodiumMg!)
+              .reduce((a, b) => a + b) /
+          recentWithSodium.length;
+      if (avgSodium > 1800) {
+        insights.add(
+            'Sodium has averaged ${avgSodium.toStringAsFixed(0)}mg/day — above the 1500mg target.');
+      }
+    }
+
+    final weighted = snapshots.where((s) => s.weightKg != null).toList();
+    if (weighted.length >= 2) {
+      final change = weighted.last.weightKg! - weighted.first.weightKg!;
+      if (change.abs() >= 0.5) {
+        final lbs = (change.abs() * 2.20462).toStringAsFixed(1);
+        insights.add(change < 0
+            ? 'Weight is down $lbs lbs over the last $rangeDays days (Tracker system).'
+            : 'Weight is up $lbs lbs over the last $rangeDays days (Tracker system).');
+      }
+    }
+
+    if ((todayHydrationCups ?? 0) < 4) {
+      insights.add('Hydration is under 4 cups so far today.');
+    }
+
+    if (todayPlannedMealCount == 0) {
+      insights.add('No meals planned for today yet — check the Meal Planner.');
+    }
+
+    final last7Symptoms = symptoms
+        .where((s) =>
+            s.loggedAt.isAfter(DateTime.now().subtract(const Duration(days: 7))))
+        .length;
+    if (last7Symptoms >= 3) {
+      insights.add(
+          '$last7Symptoms symptoms logged in the last 7 days — consider discussing patterns with your care team.');
+    }
+
+    if (insights.isEmpty) {
+      insights.add('Everything looks on track — keep it up!');
+    }
+    return insights;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Last $rangeDays days',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          const SizedBox(height: 12),
+          const Text('At a Glance',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 96,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _buildWeightCard(),
+                _buildMealsCard(),
+                _buildSupplementsCard(),
+                _buildHydrationCard(),
+                _buildSymptomsCard(),
+                _buildMealPlanCard(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _MealPlanSummaryCard(
+            todayCount: todayPlannedMealCount,
+            weekCount: weekPlannedMealCount,
+          ),
+          const SizedBox(height: 20),
+          _InsightsCard(insights: _buildInsights()),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: onGoToNutrients,
+            icon: const Icon(Icons.bar_chart_rounded),
+            label: const Text('View Full Nutrient Trends'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _kDNavy,
+              side: const BorderSide(color: _kDNavy),
+              minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackerSummaryCard extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color? subtitleColor;
+
+  const _TrackerSummaryCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    this.subtitleColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 150,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDDE3EE)),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(title,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(subtitle,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: subtitleColor ?? Colors.grey.shade500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+}
+
+class _MealPlanSummaryCard extends StatelessWidget {
+  final int todayCount;
+  final int weekCount;
+
+  const _MealPlanSummaryCard({
+    required this.todayCount,
+    required this.weekCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDDE3EE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.event_note_rounded, color: Colors.purple.shade700),
+              const SizedBox(width: 8),
+              const Text('Meal Plan Summary',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('$todayCount',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple.shade700)),
+                    Text('Planned today',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 36, color: Colors.grey.shade200),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('$weekCount',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple.shade700)),
+                    Text('Planned this week',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (todayCount == 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Nothing planned for today yet — visit the Meal Planner to add meals.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightsCard extends StatelessWidget {
+  final List<String> insights;
+
+  const _InsightsCard({required this.insights});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDDE3EE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights_rounded, color: _kDGold),
+              const SizedBox(width: 8),
+              const Text('Insights',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pattern-based observations from your logged data — not medical advice.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 12),
+          ...insights.map((text) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(Icons.circle,
+                          size: 6, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child: Text(text,
+                            style: const TextStyle(fontSize: 13, height: 1.4))),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
   }
 }
 
@@ -286,7 +986,7 @@ class _NutrientTabState extends State<_NutrientTab> {
                   child: ChoiceChip(
                     label: Text(entry.value.label),
                     selected: sel,
-                    selectedColor: entry.value.color.withOpacity(0.2),
+                    selectedColor: entry.value.color.withValues(alpha: 0.2),
                     side: BorderSide(
                         color: sel
                             ? entry.value.color
@@ -315,7 +1015,7 @@ class _NutrientTabState extends State<_NutrientTab> {
             ],
           ),
           const SizedBox(height: 20),
-          const Text('Last 30 days',
+          const Text('Recent trend',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           const SizedBox(height: 10),
           _SimpleBarChart(
@@ -352,9 +1052,10 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFDDE3EE)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
@@ -439,7 +1140,7 @@ class _SimpleBarChart extends StatelessWidget {
                           ? Colors.grey.shade200
                           : isOver
                               ? Colors.red.shade300
-                              : color.withOpacity(0.8),
+                              : color.withValues(alpha: 0.8),
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
                     ),
@@ -489,7 +1190,7 @@ class _SymptomTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Last 30 days — ${symptoms.length} entries',
+          Text('${symptoms.length} entries in the selected range',
               style: const TextStyle(color: Colors.grey, fontSize: 13)),
           const SizedBox(height: 16),
           ...byType.entries.map((entry) {
@@ -523,7 +1224,7 @@ class _SymptomTab extends StatelessWidget {
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: _severityColor(avgSeverity.round())
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -539,7 +1240,7 @@ class _SymptomTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${entries.length} log${entries.length == 1 ? "" : "s"} in last 30 days',
+                      '${entries.length} log${entries.length == 1 ? "" : "s"} in selected range',
                       style:
                           const TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
@@ -664,22 +1365,25 @@ class _GoalsTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Card(
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-            color: Colors.orange.shade50,
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [_kDNavy, _kDNavyLight],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight),
+              border: Border.all(color: _kDGold.withValues(alpha: 0.3)),
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Icon(Icons.flag_rounded, color: Colors.orange),
+                  const Icon(Icons.flag_rounded, color: _kDGold),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       weekGoal != null
                           ? 'Goals set for this week. Update anytime.'
                           : 'Set your bariatric nutrition goals for the week.',
-                      style: const TextStyle(fontSize: 13),
+                      style: const TextStyle(fontSize: 13, color: Colors.white),
                     ),
                   ),
                 ],
@@ -704,7 +1408,8 @@ class _GoalsTab extends StatelessWidget {
                   : const Icon(Icons.save_rounded),
               label: Text(saving ? 'Saving…' : 'Save Weekly Goals'),
               style: FilledButton.styleFrom(
-                  backgroundColor: Colors.orange.shade700),
+                  backgroundColor: _kDNavy,
+                  side: BorderSide(color: _kDGold.withValues(alpha: 0.4))),
               onPressed: saving ? null : onSave,
             ),
           ),

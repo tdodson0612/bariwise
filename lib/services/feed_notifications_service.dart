@@ -298,7 +298,7 @@ class FeedNotificationsService {
         return [];
       }
 
-      final allNotifications = List<Map<String, dynamic>>.from(result as List);
+      final allNotifications = List<Map<String, dynamic>>.from(result);
       
       final startIndex = offset.clamp(0, allNotifications.length);
       final endIndex = (offset + limit).clamp(0, allNotifications.length);
@@ -340,7 +340,7 @@ class FeedNotificationsService {
           );
 
           if (postResult != null && (postResult as List).isNotEmpty) {
-            final post = (postResult as List).first;
+            final post = (postResult).first;
             
             enriched.add({
               ...notification,
@@ -367,7 +367,7 @@ class FeedNotificationsService {
           );
 
           if (commentResult != null && (commentResult as List).isNotEmpty) {
-            final comment = (commentResult as List).first;
+            final comment = (commentResult).first;
             
             enriched.add({
               ...notification,
@@ -459,7 +459,7 @@ class FeedNotificationsService {
         return 0;
       }
 
-      return (result as List).length;
+      return (result).length;
     } catch (e) {
       AppConfig.debugPrint('❌ Error getting unread count: $e');
       return 0;

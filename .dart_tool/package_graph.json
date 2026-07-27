@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "bari_wise",
-      "version": "1.0.1+21",
+      "version": "1.0.1+22",
       "dependencies": [
         "amplify_storage_s3_dart",
         "app_links",
@@ -30,7 +30,8 @@
         "permission_handler",
         "share_plus",
         "shared_preferences",
-        "supabase_flutter"
+        "supabase_flutter",
+        "timezone"
       ],
       "devDependencies": [
         "change_app_package_name",
@@ -98,6 +99,14 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "timezone",
+      "version": "0.10.1",
+      "dependencies": [
+        "http",
+        "path"
       ]
     },
     {
@@ -581,6 +590,11 @@
       ]
     },
     {
+      "name": "synchronized",
+      "version": "3.4.0",
+      "dependencies": []
+    },
+    {
       "name": "file",
       "version": "7.0.1",
       "dependencies": [
@@ -680,14 +694,6 @@
       "dependencies": [
         "flutter",
         "permission_handler_platform_interface"
-      ]
-    },
-    {
-      "name": "timezone",
-      "version": "0.10.1",
-      "dependencies": [
-        "http",
-        "path"
       ]
     },
     {
@@ -1817,11 +1823,6 @@
       "dependencies": [
         "fixnum"
       ]
-    },
-    {
-      "name": "synchronized",
-      "version": "3.4.0",
-      "dependencies": []
     }
   ],
   "configVersion": 1

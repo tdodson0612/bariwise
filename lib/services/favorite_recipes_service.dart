@@ -16,12 +16,12 @@ import '../config/app_config.dart';
 /// - Graceful degradation when database is unavailable
 /// - Backward-compatible method names
 class FavoriteRecipesService {
-  static const String _CACHE_KEY = 'favorite_recipes_cache';
-  static const Duration _CACHE_DURATION = Duration(minutes: 5);
+  static const String _cacheKey = 'favorite_recipes_cache';
+  static const Duration _cacheDuration = Duration(minutes: 5);
   
   // In-memory cache to prevent duplicate checks during rapid operations
   static final Map<String, DateTime> _recentOperations = {};
-  static const Duration _OPERATION_COOLDOWN = Duration(milliseconds: 500);
+  static const Duration _operationCooldown = Duration(milliseconds: 500);
 
   // ==================== BACKWARD-COMPATIBLE PUBLIC API ====================
 
@@ -350,7 +350,7 @@ class FavoriteRecipesService {
         return null;
       }
 
-      return FavoriteRecipe.fromJson((response as List).first);
+      return FavoriteRecipe.fromJson((response).first);
       
     } catch (e) {
       AppConfig.debugPrint('⚠️ Error getting favorite by name: $e');
@@ -379,7 +379,7 @@ class FavoriteRecipesService {
         return null;
       }
 
-      return FavoriteRecipe.fromJson((response as List).first);
+      return FavoriteRecipe.fromJson((response).first);
       
     } catch (e) {
       AppConfig.debugPrint('⚠️ Error getting favorite by recipe ID: $e');
@@ -526,27 +526,6 @@ class FavoriteRecipesService {
 
   // ==================== PRIVATE HELPER METHODS ====================
 
-  /// Check if recipe exists in favorites
-  static Future<bool> _checkIfExists(String recipeName, String userId) async {
-    try {
-      final response = await DatabaseServiceCore.workerQuery(
-        action: 'select',
-        table: 'favorite_recipes',
-        columns: ['id'],
-        filters: {
-          'user_id': userId,
-          'recipe_name': recipeName,
-        },
-        limit: 1,
-      );
-
-      return response != null && (response as List).isNotEmpty;
-    } catch (e) {
-      AppConfig.debugPrint('⚠️ Error checking if favorite exists: $e');
-      return false; // Assume it doesn't exist on error
-    }
-  }
-
   /// Check if an operation was performed recently
   static bool _isRecentOperation(String operationKey) {
     final lastOperation = _recentOperations[operationKey];
@@ -555,7 +534,7 @@ class FavoriteRecipesService {
     }
     
     final timeSince = DateTime.now().difference(lastOperation);
-    return timeSince < _OPERATION_COOLDOWN;
+    return timeSince < _operationCooldown;
   }
 
   /// Record an operation to prevent duplicates
@@ -585,7 +564,7 @@ class FavoriteRecipesService {
   /// Get cached favorites
   static Future<List<FavoriteRecipe>?> _getCachedFavorites({bool ignoreExpiry = false}) async {
     try {
-      final cachedJson = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      final cachedJson = await DatabaseServiceCore.getCachedData(_cacheKey);
       if (cachedJson == null) {
         return null;
       }
@@ -599,7 +578,7 @@ class FavoriteRecipesService {
       // Check if cache is expired
       if (!ignoreExpiry) {
         final age = DateTime.now().difference(timestamp);
-        if (age > _CACHE_DURATION) {
+        if (age > _cacheDuration) {
           AppConfig.debugPrint('⚠️ Cache expired (${age.inMinutes}m old)');
           return null;
         }
@@ -622,7 +601,7 @@ class FavoriteRecipesService {
       };
       
       await DatabaseServiceCore.cacheData(
-        _CACHE_KEY,
+        _cacheKey,
         jsonEncode(cacheData),
       );
     } catch (e) {
@@ -634,7 +613,7 @@ class FavoriteRecipesService {
   /// Clear the cache
   static Future<void> _clearCache() async {
     try {
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
     } catch (e) {
       AppConfig.debugPrint('⚠️ Failed to clear cache: $e');
       // Non-critical

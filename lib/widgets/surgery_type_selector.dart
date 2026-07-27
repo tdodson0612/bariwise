@@ -28,8 +28,8 @@ class SurgeryTypeSelector extends StatelessWidget {
             border: Border.all(color: Colors.grey.shade300),
           ),
           child: DropdownButtonFormField<String>(
-            value: currentValue.isEmpty 
-                ? SurgeryNutritionProfile.OTHER 
+            initialValue: currentValue.isEmpty 
+                ? SurgeryNutritionProfile.other 
                 : currentValue,
             decoration: const InputDecoration(
               labelText: 'Which type of bari surgery do you have?',

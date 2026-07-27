@@ -1,7 +1,6 @@
 // lib/widgets/cookbook_section.dart - COMPLETE WITH NUTRITION TABS AND SUBMIT BUTTON
 import 'package:flutter/material.dart';
 import 'package:bari_wise/widgets/nutrition_facts_label.dart';
-import 'package:bari_wise/models/nutrition_info.dart';
 import '../models/cookbook_recipe.dart';
 import '../services/cookbook_service.dart';
 import '../config/app_config.dart';
@@ -274,7 +273,7 @@ class _CookbookSectionState extends State<CookbookSection> {
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       blurRadius: 4,
                       offset: const Offset(0, -2),
                     ),

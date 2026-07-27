@@ -94,10 +94,10 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
       
-      print('📦 Using cached comments (${comments.length} found)');
+debugPrint('📦 Using cached comments (${comments.length} found)');
       return comments;
     } catch (e) {
-      print('Error loading cached comments: $e');
+
       return null;
     }
   }
@@ -110,9 +110,10 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getCommentsCacheKey(), json.encode(cacheData));
-      print('💾 Cached ${comments.length} comments');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching comments: $e');
+
     }
   }
 
@@ -120,8 +121,9 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_getCommentsCacheKey());
+    // ignore: empty_catches
     } catch (e) {
-      print('Error invalidating comments cache: $e');
+
     }
   }
 
@@ -155,8 +157,9 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getFavoriteCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching favorite status: $e');
+
     }
   }
 
@@ -226,7 +229,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
       }
     } catch (e) {
       // Silently fail - tips section just won't show
-      print('Could not load surgery type: $e');
+
     }
   }
 
@@ -943,7 +946,6 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> with SingleTickerPr
         return 'Consult your bariatric team for personalized nutrition advice.';
     }
   }
-
 
   @override
   Widget build(BuildContext context) {

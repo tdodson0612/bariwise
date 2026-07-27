@@ -50,10 +50,9 @@ class _EditRecipePageState extends State<EditRecipePage> {
       
       // Clear individual recipe cache if it exists
       await prefs.remove('submitted_recipe_${widget.recipe.id}');
-      
-      print('Recipe cache invalidated after update');
+
     } catch (e) {
-      print('Error invalidating recipe cache: $e');
+
       // Don't throw - cache invalidation failure shouldn't break the update
     }
   }

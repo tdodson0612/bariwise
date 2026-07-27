@@ -6,9 +6,9 @@ import 'auth_service.dart';
 import 'profile_data_access.dart';
 
 class PremiumService {
-  static const int FREE_DAILY_SCANS = 3;
-  static const String SCAN_COUNT_KEY = 'daily_scan_count';
-  static const String LAST_SCAN_DATE_KEY = 'last_scan_date';
+  static const int freeDailyScans = 3;
+  static const String scanCountKey = 'daily_scan_count';
+  static const String lastScanDateKey = 'last_scan_date';
 
   // ==================================================
   // CHECK IF USER IS PREMIUM
@@ -20,7 +20,7 @@ class PremiumService {
       final profile = await ProfileService.getUserProfile(AuthService.currentUserId!);
       return profile?['is_premium'] ?? false;
     } catch (e) {
-      print('Error checking premium status: $e');
+
       return false;
     }
   }
@@ -52,19 +52,19 @@ class PremiumService {
 
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().split('T')[0];
-    final lastScanDate = prefs.getString(LAST_SCAN_DATE_KEY) ?? '';
-    final currentCount = prefs.getInt(SCAN_COUNT_KEY) ?? 0;
+    final lastScanDate = prefs.getString(lastScanDateKey) ?? '';
+    final currentCount = prefs.getInt(scanCountKey) ?? 0;
 
     // Reset at midnight for new day
     if (lastScanDate != today) {
-      await prefs.setString(LAST_SCAN_DATE_KEY, today);
-      await prefs.setInt(SCAN_COUNT_KEY, 0);
-      return FREE_DAILY_SCANS;
+      await prefs.setString(lastScanDateKey, today);
+      await prefs.setInt(scanCountKey, 0);
+      return freeDailyScans;
     }
 
     // ⭐ FIXED: Ensure we never return negative numbers
-    final remaining = FREE_DAILY_SCANS - currentCount;
-    return remaining.clamp(0, FREE_DAILY_SCANS);
+    final remaining = freeDailyScans - currentCount;
+    return remaining.clamp(0, freeDailyScans);
   }
 
   // ==================================================
@@ -76,14 +76,14 @@ class PremiumService {
 
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().split('T')[0];
-    final lastScanDate = prefs.getString(LAST_SCAN_DATE_KEY) ?? '';
+    final lastScanDate = prefs.getString(lastScanDateKey) ?? '';
     
     // Reset if new day
     if (lastScanDate != today) {
       return 0;
     }
 
-    return prefs.getInt(SCAN_COUNT_KEY) ?? 0;
+    return prefs.getInt(scanCountKey) ?? 0;
   }
 
   // ==================================================
@@ -98,10 +98,10 @@ class PremiumService {
 
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().split('T')[0];
-    await prefs.setString(LAST_SCAN_DATE_KEY, today);
+    await prefs.setString(lastScanDateKey, today);
     
-    final currentCount = prefs.getInt(SCAN_COUNT_KEY) ?? 0;
-    await prefs.setInt(SCAN_COUNT_KEY, currentCount + 1);
+    final currentCount = prefs.getInt(scanCountKey) ?? 0;
+    await prefs.setInt(scanCountKey, currentCount + 1);
 
     return true;
   }
@@ -115,7 +115,7 @@ class PremiumService {
   static Future<void> resetDailyScanCount() async {
     final prefs = await SharedPreferences.getInstance();
     final today = DateTime.now().toIso8601String().split('T')[0];
-    await prefs.setString(LAST_SCAN_DATE_KEY, today);
-    await prefs.setInt(SCAN_COUNT_KEY, 0);
+    await prefs.setString(lastScanDateKey, today);
+    await prefs.setInt(scanCountKey, 0);
   }
 }

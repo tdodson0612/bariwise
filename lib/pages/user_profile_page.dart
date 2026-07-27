@@ -185,8 +185,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getProfileCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching profile: $e');
+
     }
   }
 
@@ -197,8 +198,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getFriendshipCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching friendship: $e');
+
     }
   }
 
@@ -209,8 +211,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getPicturesCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching pictures: $e');
+
     }
   }
 
@@ -221,8 +224,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getRecipesCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching recipes: $e');
+
     }
   }
 
@@ -233,8 +237,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString(_getFriendsCacheKey(), json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching friends: $e');
+
     }
   }
 
@@ -335,7 +340,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading pictures: $e');
+
       if (mounted) {
         setState(() {
           _pictures = [];
@@ -383,7 +388,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading recipes: $e');
+
       if (mounted) {
         setState(() {
           _submittedRecipes = [];
@@ -435,7 +440,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading friends: $e');
+
       if (mounted) {
         setState(() {
           _friends = [];
@@ -465,7 +470,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         });
       }
     } catch (e) {
-      print('Error loading favorites count: $e');
+
       if (mounted) {
         setState(() {
           _favoriteRecipesCount = 0;
@@ -479,21 +484,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_getFriendshipCacheKey());
+    // ignore: empty_catches
     } catch (e) {
-      print('Error invalidating cache: $e');
-    }
-  }
 
-  static Future<void> invalidateUserCache(String userId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('user_profile_$userId');
-      await prefs.remove('friendship_status_$userId');
-      await prefs.remove('user_pictures_$userId');
-      await prefs.remove('user_recipes_$userId');
-      await prefs.remove('user_friends_$userId');
-    } catch (e) {
-      print('Error invalidating user cache: $e');
     }
   }
 
@@ -874,8 +867,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
           );
         },
       );
+    // ignore: empty_catches
     } catch (e) {
-      print('Error showing friends dialog: $e');
+
     }
   }
 

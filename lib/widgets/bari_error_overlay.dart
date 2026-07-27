@@ -1,6 +1,5 @@
 // lib/widgets/bari_error_overlay.dart
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 /// barry the belly character showing error messages in a cute way
 class BariErrorOverlay extends StatefulWidget {
@@ -103,7 +102,7 @@ class _BariErrorOverlayState extends State<BariErrorOverlay>
                           color: Colors.white,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color: Colors.black.withValues(alpha: 0.2),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -134,7 +133,7 @@ class _BariErrorOverlayState extends State<BariErrorOverlay>
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha: 0.1),
                               blurRadius: 16,
                               offset: const Offset(0, 4),
                             ),
@@ -147,7 +146,7 @@ class _BariErrorOverlayState extends State<BariErrorOverlay>
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: widget.color.withOpacity(0.1),
+                                color: widget.color.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
@@ -189,10 +188,10 @@ class _BariErrorOverlayState extends State<BariErrorOverlay>
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: widget.color.withOpacity(0.05),
+                                  color: widget.color.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: widget.color.withOpacity(0.2),
+                                    color: widget.color.withValues(alpha: 0.2),
                                     width: 1,
                                   ),
                                 ),

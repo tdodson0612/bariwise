@@ -40,7 +40,7 @@ class PremiumGateController extends ChangeNotifier {
 
   @override
   void dispose() {
-    print('DEBUG: Disposing PremiumGateController');
+
     _isDisposed = true;
     _retryTimer?.cancel();
     _retryTimer = null;
@@ -51,18 +51,18 @@ class PremiumGateController extends ChangeNotifier {
 
   Future<void> initialize() async {
     if (_initializationCompleter != null && !_initializationCompleter!.isCompleted) {
-      print('DEBUG: Initialization already in progress, waiting...');
+
       return _initializationCompleter!.future;
     }
 
     if (_isDisposed) {
-      print('DEBUG: Controller disposed, skipping initialization');
+
       return;
     }
 
     _initializationCompleter = Completer<void>();
     
-    print('DEBUG: Starting PremiumGateController initialization (attempt ${_retryCount + 1})');
+debugPrint('DEBUG: Starting PremiumGateController initialization (attempt ${_retryCount + 1})');
     _isLoading = true;
     _initializationFailed = false;
     
@@ -72,11 +72,9 @@ class PremiumGateController extends ChangeNotifier {
 
     try {
       if (AuthService.isLoggedIn) {
-        print('DEBUG: User is logged in, checking premium status');
-        
+
         _isPremium = await _checkPremiumWithTimeout();
-        print('DEBUG: Premium status result: $_isPremium');
-        
+
         if (_isPremium) {
           // ⭐ FIXED: Premium users get unlimited scans
           _remainingScans = -1;
@@ -88,7 +86,7 @@ class PremiumGateController extends ChangeNotifier {
           _totalScansUsed = 3 - _remainingScans;
         }
       } else {
-        print('DEBUG: User is NOT logged in - using defaults');
+
         _isPremium = false;
         _remainingScans = 3;
         _totalScansUsed = 0;
@@ -98,7 +96,7 @@ class PremiumGateController extends ChangeNotifier {
       _initializationFailed = false;
       
     } catch (e, stackTrace) {
-      print('DEBUG: Error in initialization (attempt ${_retryCount + 1}): $e');
+debugPrint('DEBUG: Error in initialization (attempt ${_retryCount + 1}): $e');
       logger.e(
         'Error initializing premium status',
         error: e,
@@ -113,9 +111,7 @@ class PremiumGateController extends ChangeNotifier {
     if (!_isDisposed) {
       notifyListeners();
     }
-    
-    print('DEBUG: Initialization complete. isPremium: $_isPremium, remainingScans: $_remainingScans');
-    
+
     if (!_initializationCompleter!.isCompleted) {
       _initializationCompleter!.complete();
     }
@@ -128,17 +124,16 @@ class PremiumGateController extends ChangeNotifier {
     
     if (_retryCount < maxRetries) {
       final delaySeconds = 2 * _retryCount;
-      print('DEBUG: Retrying initialization in $delaySeconds seconds...');
-      
+
       _retryTimer?.cancel();
       _retryTimer = Timer(Duration(seconds: delaySeconds), () {
         if (!_isDisposed && _retryCount < maxRetries) {
-          print('DEBUG: Executing retry attempt ${_retryCount + 1}');
+
           initialize();
         }
       });
     } else {
-      print('DEBUG: Max retries reached, using fallback values');
+
       _initializationFailed = true;
       _isPremium = false;
       _remainingScans = 3;
@@ -155,7 +150,7 @@ class PremiumGateController extends ChangeNotifier {
         Future.delayed(Duration(seconds: 10), () => false),
       ]).timeout(Duration(seconds: 12));
     } catch (e) {
-      print('DEBUG: Premium check timeout or error: $e');
+
       return false;
     }
   }
@@ -175,23 +170,21 @@ class PremiumGateController extends ChangeNotifier {
       // ⭐ FIXED: Ensure no negative numbers for free users
       return result.clamp(0, 3);
     } catch (e) {
-      print('DEBUG: Scan count check timeout or error: $e');
+
       return 3;
     }
   }
 
   Future<void> refresh() async {
     if (_isDisposed) return;
-    
-    print('DEBUG: Manual refresh requested');
+
     _retryTimer?.cancel();
     _retryCount = 0;
     await initialize();
   }
 
   void reset() {
-    print('DEBUG: Resetting PremiumGateController');
-    
+
     _retryTimer?.cancel();
     _retryTimer = null;
     _initializationCompleter?.complete();
@@ -288,7 +281,7 @@ class PremiumGateController extends ChangeNotifier {
         Future.delayed(Duration(seconds: 5), () => true),
       ]).timeout(Duration(seconds: 7));
     } catch (e) {
-      print('DEBUG: Scan increment timeout or error: $e');
+
       return true;
     }
   }
@@ -304,8 +297,7 @@ class PremiumGateController extends ChangeNotifier {
       if (!_isDisposed) {
         notifyListeners();
       }
-      
-      print('DEBUG: Added $count bonus scans. New total: $_remainingScans');
+
     } catch (e, stackTrace) {
       logger.e("Error adding bonus scans", error: e, stackTrace: stackTrace);
     }

@@ -290,7 +290,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: _getScoreColor(recipe.healthScore)
-                                        .withOpacity(0.1),
+                                        .withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
                                       color: _getScoreColor(recipe.healthScore),
@@ -360,7 +360,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
+                      color: Colors.black.withValues(alpha: 0.12),
                       blurRadius: 4,
                       offset: const Offset(0, -2),
                     ),
@@ -660,7 +660,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
             child: Column(
               children: [
                 _buildNutrientRow('Calories',
-                    '${recipe.totalNutrition!.calories.toStringAsFixed(0)}'),
+                    recipe.totalNutrition!.calories.toStringAsFixed(0)),
                 _buildNutrientRow('Protein',
                     '${recipe.totalNutrition!.protein.toStringAsFixed(1)}g'),
                 _buildNutrientRow('Carbs',
@@ -841,7 +841,7 @@ class _MyCookbookPageState extends State<MyCookbookPage> {
                             ),
                             decoration: BoxDecoration(
                               color: _getScoreColor(recipe.healthScore)
-                                  .withOpacity(0.1),
+                                  .withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
                                 color: _getScoreColor(recipe.healthScore),

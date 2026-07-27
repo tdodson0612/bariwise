@@ -327,7 +327,7 @@ class _WaterBottleWidget extends StatelessWidget {
             heightFactor: progress,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.shade400.withOpacity(0.6),
+                color: Colors.blue.shade400.withValues(alpha: 0.6),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(6),
                   bottomRight: Radius.circular(6),

@@ -332,7 +332,7 @@ class _AddSupplementSheetState extends State<_AddSupplementSheet> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _timeOfDay,
+            initialValue: _timeOfDay,
             decoration: InputDecoration(
               labelText: 'Time of day',
               border: OutlineInputBorder(

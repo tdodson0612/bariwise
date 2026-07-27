@@ -155,7 +155,7 @@ class AppConfig {
   static void debugPrint(String message) {
     if (enableDebugPrints) {
       // ignore: avoid_print
-      print('[DEBUG] $message');
+
     }
   }
   

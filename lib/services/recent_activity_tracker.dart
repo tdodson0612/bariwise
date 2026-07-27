@@ -11,7 +11,6 @@
 // Static-class pattern to match the existing AuthService / TrackerService style.
 
 import '../config/app_config.dart';
-import '../models/bari_models.dart';
 import 'bari_features_service.dart';
 import 'tracker_service.dart';
 

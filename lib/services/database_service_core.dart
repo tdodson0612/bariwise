@@ -14,54 +14,54 @@ class DatabaseServiceCore {
   // ==============================
   // PRIVATE CACHE KEYS (original)
   // ==============================
-  static const String _CACHE_BADGES = 'cache_badges';
-  static const String _CACHE_USER_BADGES = 'cache_user_badges_';
-  static const String _CACHE_USER_PROFILE = 'cache_user_profile_';
-  static const String _CACHE_PROFILE_TIMESTAMP = 'cache_profile_timestamp_';
-  static const String _CACHE_FRIENDS = 'cache_friends_';
-  static const String _CACHE_MESSAGES = 'cache_messages_';
-  static const String _CACHE_LAST_MESSAGE_TIME = 'cache_last_message_time_';
-  static const String _CACHE_POSTS = 'cache_posts';
-  static const String _CACHE_LAST_POST_TIME = 'cache_last_post_time';
-  static const String _CACHE_USER_POSTS = 'cache_user_posts_';
-  static const String _CACHE_SUBMITTED_RECIPES = 'cache_submitted_recipes';
-  static const String _CACHE_FAVORITE_RECIPES = 'cache_favorite_recipes';
+  static const String _cacheBadges = 'cache_badges';
+  static const String _cacheUserBadges = 'cache_user_badges_';
+  static const String _cacheUserProfile = 'cache_user_profile_';
+  static const String _cacheProfileTimestamp = 'cache_profile_timestamp_';
+  static const String _cacheFriends = 'cache_friends_';
+  static const String _cacheMessages = 'cache_messages_';
+  static const String _cacheLastMessageTime = 'cache_last_message_time_';
+  static const String _cachePosts = 'cache_posts';
+  static const String _cacheLastPostTime = 'cache_last_post_time';
+  static const String _cacheUserPosts = 'cache_user_posts_';
+  static const String _cacheSubmittedRecipes = 'cache_submitted_recipes';
+  static const String _cacheFavoriteRecipes = 'cache_favorite_recipes';
 
   // ==============================
   // PRIVATE BUCKET NAMES
   // ==============================
-  static const String _PROFILE_BUCKET = 'profile-pictures';
-  static const String _BACKGROUND_BUCKET = 'background-pictures';
-  static const String _ALBUM_BUCKET = 'photo-album';
+  static const String _profileBucket = 'profile-pictures';
+  static const String _backgroundBucket = 'background-pictures';
+  static const String _albumBucket = 'photo-album';
 
-  static const List<String> _KNOWN_BUCKETS = [
-    _PROFILE_BUCKET,
-    _BACKGROUND_BUCKET,
-    _ALBUM_BUCKET,
+  static const List<String> _knownBuckets = [
+    _profileBucket,
+    _backgroundBucket,
+    _albumBucket,
   ];
 
   // ==============================
   // PUBLIC CONSTANT ALIASES
   // ==============================
   // → So other services can use the same keys/buckets safely
-  static const String CACHE_BADGES = _CACHE_BADGES;
-  static const String CACHE_USER_BADGES = _CACHE_USER_BADGES;
-  static const String CACHE_USER_PROFILE = _CACHE_USER_PROFILE;
-  static const String CACHE_PROFILE_TIMESTAMP = _CACHE_PROFILE_TIMESTAMP;
-  static const String CACHE_FRIENDS = _CACHE_FRIENDS;
-  static const String CACHE_MESSAGES = _CACHE_MESSAGES;
-  static const String CACHE_LAST_MESSAGE_TIME = _CACHE_LAST_MESSAGE_TIME;
-  static const String CACHE_POSTS = _CACHE_POSTS;
-  static const String CACHE_LAST_POST_TIME = _CACHE_LAST_POST_TIME;
-  static const String CACHE_USER_POSTS = _CACHE_USER_POSTS;
-  static const String CACHE_SUBMITTED_RECIPES = _CACHE_SUBMITTED_RECIPES;
-  static const String CACHE_FAVORITE_RECIPES = _CACHE_FAVORITE_RECIPES;
+  static const String cacheBadges = _cacheBadges;
+  static const String cacheUserBadges = _cacheUserBadges;
+  static const String cacheUserProfile = _cacheUserProfile;
+  static const String cacheProfileTimestamp = _cacheProfileTimestamp;
+  static const String cacheFriends = _cacheFriends;
+  static const String cacheMessages = _cacheMessages;
+  static const String cacheLastMessageTime = _cacheLastMessageTime;
+  static const String cachePosts = _cachePosts;
+  static const String cacheLastPostTime = _cacheLastPostTime;
+  static const String cacheUserPosts = _cacheUserPosts;
+  static const String cacheSubmittedRecipes = _cacheSubmittedRecipes;
+  static const String cacheFavoriteRecipes = _cacheFavoriteRecipes;
 
-  static const String PROFILE_BUCKET = _PROFILE_BUCKET;
-  static const String BACKGROUND_BUCKET = _BACKGROUND_BUCKET;
-  static const String ALBUM_BUCKET = _ALBUM_BUCKET;
+  static const String profileBucket = _profileBucket;
+  static const String backgroundBucket = _backgroundBucket;
+  static const String albumBucket = _albumBucket;
 
-  static const List<String> KNOWN_BUCKETS = _KNOWN_BUCKETS;
+  static const List<String> knownBuckets = _knownBuckets;
 
   // ==================================================
   // CURRENT USER ID & AUTH CHECK (Uses Supabase auth)
@@ -148,9 +148,9 @@ class DatabaseServiceCore {
     final prefs = await _getPrefs();
     final keys = prefs.getKeys().where((key) =>
       key.contains(currentUserId!) ||
-      key == _CACHE_BADGES ||
-      key == _CACHE_POSTS ||
-      key == _CACHE_LAST_POST_TIME
+      key == _cacheBadges ||
+      key == _cachePosts ||
+      key == _cacheLastPostTime
     ).toList();
     for (final key in keys) {
       await prefs.remove(key);
@@ -163,8 +163,8 @@ class DatabaseServiceCore {
     final targetUserId = userId ?? currentUserId;
     if (targetUserId == null) return;
     
-    await clearCache('$_CACHE_USER_PROFILE$targetUserId');
-    await clearCache('$_CACHE_PROFILE_TIMESTAMP$targetUserId');
+    await clearCache('$_cacheUserProfile$targetUserId');
+    await clearCache('$_cacheProfileTimestamp$targetUserId');
     await clearCache('user_profile_$targetUserId'); // Legacy key
     await clearCache('user_pictures'); // Picture gallery cache
     
@@ -420,7 +420,7 @@ class DatabaseServiceCore {
       final uri = Uri.parse(url);
       final segments = uri.pathSegments;
 
-      for (final bucket in _KNOWN_BUCKETS) {
+      for (final bucket in _knownBuckets) {
         final bucketIndex = segments.indexOf(bucket);
         if (bucketIndex != -1 && bucketIndex < segments.length - 1) {
           final filePath = segments.sublist(bucketIndex + 1).join('/');
@@ -496,7 +496,7 @@ class DatabaseServiceCore {
         filters: {'id': recipeId},
       );
       
-      await _clearCache(_CACHE_SUBMITTED_RECIPES);
+      await _clearCache(_cacheSubmittedRecipes);
     } catch (e) {
       throw Exception('Failed to delete submitted recipe: $e');
     }

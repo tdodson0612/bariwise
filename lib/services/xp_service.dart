@@ -6,7 +6,6 @@ import 'auth_service.dart';              // For currentUserId + ensureLoggedIn()
 import 'database_service_core.dart';     // Worker queries + cache helpers
 import 'profile_service.dart';           // For getUserProfile()
 
-
 class XPService {
 
   // ==================================================

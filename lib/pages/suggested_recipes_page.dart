@@ -131,10 +131,10 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
           .map((e) => Recipe.fromJson(e))
           .toList();
 
-      print('📦 Using cached recipes (${recipes.length} found)');
+debugPrint('📦 Using cached recipes (${recipes.length} found)');
       return recipes;
     } catch (e) {
-      print('Error loading cached recipes: $e');
+
       return null;
     }
   }
@@ -148,9 +148,10 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
         'ingredients': widget.productIngredients,
       };
       await prefs.setString(_getRecipeCacheKey(), json.encode(cacheData));
-      print('💾 Cached ${recipes.length} recipes');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching recipes: $e');
+
     }
   }
 
@@ -189,8 +190,9 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
       };
       await prefs.setString(
           'favorite_status_$recipeName', json.encode(cacheData));
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching favorite status: $e');
+
     }
   }
 
@@ -290,7 +292,7 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
         });
       }
     } catch (e) {
-      print('Error loading recipes: $e');
+
       if (await _checkIngredientsExist()) {
         _loadFallbackRecipes();
       } else {
@@ -335,7 +337,7 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
       }
       return false;
     } catch (e) {
-      print('Error checking ingredients: $e');
+
       return false;
     }
   }
@@ -400,7 +402,7 @@ class _SuggestedRecipesPageState extends State<SuggestedRecipesPage> {
         await _cacheRecipes(_allRecipes);
       }
     } catch (e) {
-      print('Error loading more recipes: $e');
+
       if (mounted) {
         setState(() {
           _isLoading = false;

@@ -75,10 +75,6 @@ class _ContactScreenState extends State<ContactScreen> {
     });
 
     try {
-      print('📤 Submitting contact form...');
-      print('Name: ${_nameController.text}');
-      print('Email: ${_emailController.text}');
-      print('Message length: ${_messageController.text.length}');
 
       // Show loading snackbar
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,8 +104,6 @@ class _ContactScreenState extends State<ContactScreen> {
         email: _emailController.text.trim(),
         message: _messageController.text.trim(),
       );
-
-      print('✅ Contact form submitted successfully');
 
       if (!mounted) return;
 
@@ -144,9 +138,7 @@ class _ContactScreenState extends State<ContactScreen> {
         _isEmailValid = false;
         _messageLength = 0;
       });
-    } catch (error, stackTrace) {
-      print('❌ Error submitting contact form: $error');
-      print('Stack trace: $stackTrace');
+    } catch (error) {
 
       if (!mounted) return;
 

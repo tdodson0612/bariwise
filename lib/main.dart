@@ -57,7 +57,11 @@ import 'pages/supplement_schedule_page.dart';
 import 'pages/symptom_log_page.dart';
 import 'pages/alcohol_log_page.dart';
 import 'pages/recipe_generator_page.dart';
+import 'pages/meal_planner_page.dart';
+import 'pages/list_generator_page.dart';
+import 'pages/extended_tracker_page.dart';
 import 'services/bari_notification_service.dart';
+import 'pages/account_preferences_page.dart';
 
 // ── Settings ──────────────────────────────────────────────────────────────
 import 'pages/settings_page.dart';
@@ -183,8 +187,7 @@ void main() async {
     runApp(const MyApp());
   } catch (e) {
     if (AppConfig.enableDebugPrints) {
-      print('❌ Critical app initialization failed: $e');
-      print('Stack trace: ${StackTrace.current}');
+
     }
     runApp(_buildErrorApp(e));
   }
@@ -230,7 +233,7 @@ Widget _buildErrorApp(dynamic error) {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, size: 80, color: iconColor),
@@ -353,6 +356,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  // ignore: unused_field — tracks premium for UI, used in _checkPremiumStatus
   bool _isPremium = false;
   bool _isReady = false;
   bool _showOnboarding = false;
@@ -506,29 +510,13 @@ class _MyAppState extends State<MyApp> {
             .getSessionFromUrl(uri)
             .timeout(const Duration(seconds: 10));
 
-        if (response.session != null) {
-          AppConfig.debugPrint(
-              '✅ Session parsed from URL (fallback path)');
-          _handleRecoverySession(response.session!);
-        } else {
-          AppConfig.debugPrint(
-              '⚠️ No session in URL — showing expired link');
-          _navigateToExpiredLink();
-        }
-      } catch (e) {
+        AppConfig.debugPrint(
+            '✅ Session parsed from URL (fallback path)');
+        _handleRecoverySession(response.session);
+            } catch (e) {
         AppConfig.debugPrint('⚠️ getSessionFromUrl failed: $e');
       }
     }
-  }
-
-  void _navigateToExpiredLink() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _navigatorKey.currentState?.pushNamedAndRemoveUntil(
-        '/reset-password',
-        (route) => false,
-        arguments: null,
-      );
-    });
   }
 
   Future<void> _checkPremiumStatus() async {
@@ -603,8 +591,12 @@ class _MyAppState extends State<MyApp> {
         '/symptom-log':          (context) => const SymptomLogPage(),
         '/alcohol-log':          (context) => const AlcoholLogPage(),
         '/recipe-generator':     (context) => const RecipeGeneratorPage(),
+        '/meal-planner':         (context) => const MealPlannerPage(),
+        '/list-generator':       (context) => const ListGeneratorPage(),
+        '/extended-tracker':     (context) => const ExtendedTrackerPage(),
         '/lora-dataset':         (context) => const AdminGuard(child: LoraDatasetPage()),
-        '/reset-password': (context) {
+        '/account-preferences':  (context) => const AccountPreferencesPage(),
+        '/reset-password':       (context) {
           final session =
               ModalRoute.of(context)?.settings.arguments as Session?;
           return ResetPasswordPage(session: session);
@@ -632,7 +624,7 @@ class _MyAppState extends State<MyApp> {
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(

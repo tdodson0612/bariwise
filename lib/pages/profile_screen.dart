@@ -13,14 +13,11 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import '../services/favorite_recipes_service.dart';
 import '../widgets/cookbook_section.dart';
-
 import '../widgets/surgery_type_selector.dart';
 import '../services/tracker_service.dart';
 import '../barihealthbar.dart'; // ✅ Keep the original import
-
 // 🔥 NEW — listens to refresh_profile events
 import 'package:bari_wise/services/profile_events.dart';
-
 import '../widgets/app_drawer.dart';
 import '../widgets/premium_gate.dart';
 import '../widgets/recipe_card.dart';
@@ -33,23 +30,17 @@ import '../pages/user_profile_page.dart';
 import '../pages/edit_recipe_page.dart';
 import '../pages/submit_recipe.dart';
 import '../config/app_config.dart';
-
 class ProfileScreen extends StatefulWidget {
   final List<String> favoriteRecipes;
-
   const ProfileScreen({super.key, required this.favoriteRecipes});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
-
 class _ProfileScreenState extends State<ProfileScreen>
     with AutomaticKeepAliveClientMixin {
-
   // 🔧 URLs instead of local files
   String? _profileImageUrl;
   String? _backgroundImageUrl;
-
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   bool _isEditingName = false;
@@ -57,25 +48,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _userName = 'User';
   String _userEmail = '';
   bool _isLoading = false;
-
   List<Map<String, dynamic>> _friends = [];
   bool _friendsListVisible = true;
   bool _isLoadingFriends = false;
-
   List<String> _pictures = [];
   bool _isLoadingPictures = false;
   static const int _maxPictures = 20;
   bool _picturesExpanded = true;
   static const String _picturesExpandedKey = 'pictures_section_expanded';
-
   List<SubmittedRecipe> _submittedRecipes = [];
   bool _isLoadingRecipes = false;
-
   // 🔥 NEW: Favorite recipes state
   int _favoriteRecipesCount = 0;
   bool _isLoadingFavoritesCount = false;
-
-
   String? _currentSurgeryType;
   int? _todayScore;
   int? _weeklyScore;
@@ -86,27 +71,25 @@ class _ProfileScreenState extends State<ProfileScreen>
   double? _weekOverWeekWeightLoss;
   bool _isLoadingWeightLoss = false;
   bool _weightLossVisible = false;
-
   late final PremiumGateController _premiumController;
   bool _isPremium = false;
   int _totalScansUsed = 0;
   bool _hasUsedAllFreeScans = false;
-
   // 🔥 NEW — stream subscription
   late final StreamSubscription _profileUpdateSub;
-
+  // 🔥 NEW (Section 7) — Personalization Preview state
+  List<String> _previewRestrictions = [];
+  List<String> _previewSupplements = [];
+  bool _isLoadingPreview = false;
   // Cache configuration
   static const Duration _recipesCacheDuration = Duration(minutes: 5);
   static const Duration _picturesCacheDuration = Duration(minutes: 10);
   static const Duration _friendsCacheDuration = Duration(minutes: 2);
-
   @override
   bool get wantKeepAlive => true;
-
   @override
   void initState() {
     super.initState();
-
     _initializePremiumController();
     _loadProfile();
     _loadFriends();
@@ -118,32 +101,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     _loadWeeklyScore();
     _loadWeeklyWeightAverage();
     _loadWeekOverWeekWeightLoss();
-
-
+    _loadPersonalizationPreview(); // 🔥 NEW (Section 7)
     // 🔥 Listen for background push-triggered profile refreshes
     _profileUpdateSub = profileUpdateStreamController.stream.listen((_) async {
-      print("🔄 ProfileScreen: received refresh_profile event");
+
       await _loadProfile();
     });
   }
-
   @override
   void dispose() {
     _profileUpdateSub.cancel();
-
     _nameController.dispose();
     _emailController.dispose();
-
     _premiumController.removeListener(_updatePremiumState);
     super.dispose();
   }
-
   void _initializePremiumController() {
     _premiumController = PremiumGateController();
     _premiumController.addListener(_updatePremiumState);
     _updatePremiumState();
   }
-
   void _updatePremiumState() {
     if (mounted) {
       setState(() {
@@ -153,36 +130,26 @@ class _ProfileScreenState extends State<ProfileScreen>
       });
     }
   }
-
-
   // ========== CACHING HELPERS ==========
-
   Future<List<SubmittedRecipe>?> _getCachedRecipes() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cached = prefs.getString('user_submitted_recipes');
-
       if (cached == null) return null;
-
       final data = json.decode(cached);
       final timestamp = data['_cached_at'] as int?;
-
       if (timestamp == null) return null;
-
       final age = DateTime.now().millisecondsSinceEpoch - timestamp;
       if (age > _recipesCacheDuration.inMilliseconds) return null;
-
       final recipes =
           (data['recipes'] as List).map((e) => SubmittedRecipe.fromJson(e)).toList();
-
-      print('📦 Using cached submitted recipes (${recipes.length} found)');
+debugPrint('📦 Using cached submitted recipes (${recipes.length} found)');
       return recipes;
     } catch (e) {
-      print('Error loading cached recipes: $e');
+
       return null;
     }
   }
-
   Future<void> _cacheRecipes(List<SubmittedRecipe> recipes) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -191,46 +158,39 @@ class _ProfileScreenState extends State<ProfileScreen>
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString('user_submitted_recipes', json.encode(cacheData));
-      print('💾 Cached ${recipes.length} submitted recipes');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching recipes: $e');
+
     }
   }
-
   Future<void> _invalidateRecipesCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_submitted_recipes');
+    // ignore: empty_catches
     } catch (e) {
-      print('Error invalidating recipes cache: $e');
+
     }
   }
-
   Future<List<String>?> _getCachedPictures() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cached = prefs.getString('user_pictures');
-
       if (cached == null) return null;
-
       final data = json.decode(cached);
       final timestamp = data['_cached_at'] as int?;
-
       if (timestamp == null) return null;
-
       final age = DateTime.now().millisecondsSinceEpoch - timestamp;
       if (age > _picturesCacheDuration.inMilliseconds) return null;
-
       final pictures = List<String>.from(data['pictures']);
-
-      print('📦 Using cached pictures (${pictures.length} found)');
+debugPrint('📦 Using cached pictures (${pictures.length} found)');
       return pictures;
     } catch (e) {
-      print('Error loading cached pictures: $e');
+
       return null;
     }
   }
-
   Future<void> _cachePictures(List<String> pictures) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -239,48 +199,41 @@ class _ProfileScreenState extends State<ProfileScreen>
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString('user_pictures', json.encode(cacheData));
-      print('💾 Cached ${pictures.length} pictures');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching pictures: $e');
+
     }
   }
-
   Future<void> _invalidatePicturesCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_pictures');
+    // ignore: empty_catches
     } catch (e) {
-      print('Error invalidating pictures cache: $e');
+
     }
   }
-
   Future<List<Map<String, dynamic>>?> _getCachedFriends() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final cached = prefs.getString('user_friends');
-
       if (cached == null) return null;
-
       final data = json.decode(cached);
       final timestamp = data['_cached_at'] as int?;
-
       if (timestamp == null) return null;
-
       final age = DateTime.now().millisecondsSinceEpoch - timestamp;
       if (age > _friendsCacheDuration.inMilliseconds) return null;
-
       final friends = (data['friends'] as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-
-      print('📦 Using cached friends (${friends.length} found)');
+debugPrint('📦 Using cached friends (${friends.length} found)');
       return friends;
     } catch (e) {
-      print('Error loading cached friends: $e');
+
       return null;
     }
   }
-
   Future<void> _cacheFriends(List<Map<String, dynamic>> friends) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -289,21 +242,21 @@ class _ProfileScreenState extends State<ProfileScreen>
         '_cached_at': DateTime.now().millisecondsSinceEpoch,
       };
       await prefs.setString('user_friends', json.encode(cacheData));
-      print('💾 Cached ${friends.length} friends');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching friends: $e');
+
     }
   }
-
   Future<void> _invalidateFriendsCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_friends');
+    // ignore: empty_catches
     } catch (e) {
-      print('Error invalidating friends cache: $e');
+
     }
   }
-
 // ======================================================
 // FIXED RUNTIME PERMISSIONS FOR ANDROID + iOS
 // ======================================================
@@ -323,7 +276,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       return true;
     }
-
     // ---- GALLERY (Photo Library) ----
     if (Platform.isAndroid) {
       // Android: Try photos permission first (Android 13+)
@@ -347,7 +299,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       
       return status.isGranted;
     }
-
     // iOS & iPadOS - Use unified photo library permission
     final status = await Permission.photos.request();
     
@@ -363,21 +314,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     
     return true;
   }
-
-
   // ========== LOAD FUNCTIONS WITH CACHING ==========
-
   Future<void> _loadSubmittedRecipes({bool forceRefresh = false}) async {
     if (!mounted) return;
-
     setState(() {
       _isLoadingRecipes = true;
     });
-
     try {
       if (!forceRefresh) {
         final cachedRecipes = await _getCachedRecipes();
-
         if (cachedRecipes != null) {
           if (mounted) {
             setState(() {
@@ -391,10 +336,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           return;
         }
       }
-
       final recipes = await SubmittedRecipesService.getSubmittedRecipes();
       await _cacheRecipes(recipes);
-
       if (mounted) {
         setState(() {
           // 🔥 UPDATED: Filter to show only verified recipes
@@ -405,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
     } catch (e) {
-      print('Error loading recipes: $e');
+
       if (mounted) {
         setState(() {
           _submittedRecipes = [];
@@ -414,16 +357,13 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _deleteRecipe(int recipeId) async {
     setState(() {
       _isLoading = true;
     });
-
     try {
       await DatabaseServiceCore.deleteSubmittedRecipe(recipeId);
       await _invalidateRecipesCache();
-
       if (mounted) {
         await _loadSubmittedRecipes(forceRefresh: true);
         ErrorHandlingService.showSuccess(
@@ -447,7 +387,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _editRecipe(SubmittedRecipe recipe) async {
     final result = await Navigator.push<bool>(
       context,
@@ -455,24 +394,19 @@ class _ProfileScreenState extends State<ProfileScreen>
         builder: (context) => EditRecipePage(recipe: recipe),
       ),
     );
-
     if (result == true) {
       await _invalidateRecipesCache();
       await _loadSubmittedRecipes(forceRefresh: true);
     }
   }
-
   Future<void> _loadPictures({bool forceRefresh = false}) async {
     if (!mounted) return;
-
     setState(() {
       _isLoadingPictures = true;
     });
-
     try {
       if (!forceRefresh) {
         final cachedPictures = await _getCachedPictures();
-
         if (cachedPictures != null) {
           if (mounted) {
             setState(() {
@@ -483,10 +417,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           return;
         }
       }
-
       final pictures = await PictureService.getCurrentUserPictures();
       await _cachePictures(pictures);
-
       if (mounted) {
         setState(() {
           _pictures = pictures;
@@ -494,7 +426,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
     } catch (e) {
-      print('Error loading pictures: $e');
 
       if (!forceRefresh) {
         final stalePictures = await _getCachedPictures();
@@ -506,7 +437,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           return;
         }
       }
-
       if (mounted) {
         setState(() {
           _pictures = [];
@@ -515,7 +445,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _uploadPicture(ImageSource source) async {
     if (_pictures.length >= _maxPictures) {
       ErrorHandlingService.showSimpleError(
@@ -524,9 +453,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       );
       return;
     }
-
     bool startedUpload = false;
-
     try {
       // ✅ Request permission using the helper function
       final allowed = await requestImagePermission(source);
@@ -534,7 +461,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         _showPermissionError(source == ImageSource.camera ? 'Camera' : 'Photos');
         return;
       }
-
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(
         source: source,
@@ -542,51 +468,39 @@ class _ProfileScreenState extends State<ProfileScreen>
         maxHeight: 1920,
         imageQuality: 85,
       );
-
       if (pickedFile == null) {
         AppConfig.debugPrint('⚠️ No image selected by user');
         return;  // User cancelled - don't show error
       }
-
       if (!mounted) {
         AppConfig.debugPrint('⚠️ Widget unmounted during image selection');
         return;
       }
-
       AppConfig.debugPrint('📸 Image picked: ${pickedFile.path}');
-
       // 🔥 ADDED: Verify file exists before uploading
       final imageFile = File(pickedFile.path);
       if (!await imageFile.exists()) {
         throw Exception('Selected image file not found. Please try again.');
       }
-
       // 🔥 ADDED: Check file size
       final fileSize = await imageFile.length();
       if (fileSize == 0) {
         throw Exception('Selected image is empty. Please choose a different image.');
       }
-
       AppConfig.debugPrint('📏 Image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
-
       setState(() {
         _isLoadingPictures = true;
       });
       startedUpload = true;
-
       AppConfig.debugPrint('🚀 Starting gallery upload...');
       final url = await PictureService.uploadPicture(imageFile);
-
       AppConfig.debugPrint('✅ Gallery upload complete: $url');
-
       // 🔥 FIX: Invalidate cache AND force immediate refresh
       await _invalidatePicturesCache();
-
       // Force immediate reload (loading state handled by _loadPictures)
       if (mounted) {
         await _loadPictures(forceRefresh: true);
       }
-
       if (mounted) {
         ErrorHandlingService.showSuccess(
           context,
@@ -666,7 +580,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _deletePicture(String pictureUrl) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -688,17 +601,14 @@ class _ProfileScreenState extends State<ProfileScreen>
         );
       },
     );
-
     if (confirm == true && mounted) {
       setState(() {
         _isLoadingPictures = true;
       });
-
       try {
         await PictureService.deletePicture(pictureUrl);
         await _invalidatePicturesCache();
         await _loadPictures(forceRefresh: true);
-
         if (mounted) {
           ErrorHandlingService.showSuccess(
               context, 'Picture deleted successfully');
@@ -708,7 +618,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           setState(() {
             _isLoadingPictures = false;
           });
-
           await ErrorHandlingService.handleError(
             context: context,
             error: e,
@@ -720,7 +629,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   void _showPictureOptionsDialog(String pictureUrl) {
     showDialog(
       context: context,
@@ -752,20 +660,16 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
   }
-
   Future<void> _setAsProfilePicture(String pictureUrl) async {
     setState(() {
       _isLoading = true;
     });
-
     try {
       await PictureService.setPictureAsProfilePicture(pictureUrl);
-
       // Update local state
       setState(() {
         _profileImageUrl = pictureUrl;
       });
-
       if (mounted) {
         ErrorHandlingService.showSuccess(context, 'Profile picture updated!');
       }
@@ -787,7 +691,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   void _showFullScreenImage(String imageUrl, int index) {
     Navigator.push(
       context,
@@ -846,7 +749,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
   void _showPictureUploadDialog() {
     showDialog(
       context: context,
@@ -878,7 +780,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
   }
-
   // Helper method for showing permission errors (iPad-optimized)
   void _showPermissionError(String permissionType) {
     if (!mounted) return;
@@ -969,14 +870,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
   Future<void> _loadFriends({bool forceRefresh = false}) async {
     if (!mounted) return;
-
     setState(() {
       _isLoadingFriends = true;
     });
-
     try {
       final currentUserId = AuthService.currentUserId;
       if (currentUserId == null) {
@@ -988,13 +886,10 @@ class _ProfileScreenState extends State<ProfileScreen>
         }
         return;
       }
-
       if (!forceRefresh) {
         final cachedFriends = await _getCachedFriends();
-
         if (cachedFriends != null) {
           final visibility = await FriendsVisibilityService.getFriendsListVisibility();
-
           if (mounted) {
             setState(() {
               _friends = cachedFriends;
@@ -1005,11 +900,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           return;
         }
       }
-
       final friends = await FriendsVisibilityService.getUserFriends(currentUserId);
       final visibility = await FriendsVisibilityService.getFriendsListVisibility();
       await _cacheFriends(friends);
-
       if (mounted) {
         setState(() {
           _friends = friends;
@@ -1018,7 +911,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         });
       }
     } catch (e) {
-      print('Error loading friends: $e');
 
       if (!forceRefresh) {
         final staleFriends = await _getCachedFriends();
@@ -1030,7 +922,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           return;
         }
       }
-
       if (mounted) {
         setState(() {
           _friends = [];
@@ -1039,14 +930,11 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _loadFavoriteRecipesCount() async {
     if (!mounted) return;
-
     setState(() {
       _isLoadingFavoritesCount = true;
     });
-
     try {
       final count = await FavoriteRecipesService.getFavoriteRecipesCount();
       
@@ -1067,10 +955,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   // CRITICAL FIX FOR profile_screen.dart
   // Replace the _loadSurgeryType method with this improved version
-
   Future<void> _loadSurgeryType() async {
     if (!mounted) return;
     
@@ -1095,7 +981,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           _currentSurgeryType = surgeryType ?? 'Not specified';
         });
         
-        AppConfig.debugPrint('✅ Surgery type loaded: ${_currentSurgeryType}');
+        AppConfig.debugPrint('✅ Surgery type loaded: $_currentSurgeryType');
       }
     } catch (e, stackTrace) {
       AppConfig.debugPrint('❌ Error loading surgery type: $e');
@@ -1182,7 +1068,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   /// Load weekly weight average from tracker
   Future<void> _loadWeeklyWeightAverage() async {
     if (!mounted) return;
@@ -1219,7 +1104,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   /// Load week-over-week weight loss from tracker
   Future<void> _loadWeekOverWeekWeightLoss() async {
     if (!mounted) return;
@@ -1258,8 +1142,98 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
+  /// 🔥 NEW (Section 7) — Load Personalization Preview data
+  /// Reads the same SharedPreferences keys written by onboarding_page.dart
+  Future<void> _loadPersonalizationPreview() async {
+    if (!mounted) return;
+    setState(() => _isLoadingPreview = true);
+    try {
+      final userId = AuthService.currentUserId;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoadingPreview = false);
+        return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      final restrictions =
+          prefs.getStringList('intake_dietary_restrictions_$userId') ?? [];
+      final supplements =
+          prefs.getStringList('intake_supplement_baseline_$userId') ?? [];
+      if (mounted) {
+        setState(() {
+          _previewRestrictions = restrictions;
+          _previewSupplements = supplements;
+          _isLoadingPreview = false;
+        });
+      }
+    } catch (e) {
+      AppConfig.debugPrint('⚠️ Error loading personalization preview: $e');
+      if (mounted) setState(() => _isLoadingPreview = false);
+    }
+  }
+  /// 🔥 NEW (Section 7) — Reset just the personalization inputs
+  /// (surgery type, dietary restrictions, supplement baseline).
+  /// Distinct from full account deletion below.
+  Future<void> _resetPersonalizationPreferences() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Personalization Preferences'),
+        content: const Text(
+          'This clears your surgery type, dietary restrictions, and supplement '
+          'baseline. Your AI recommendations will reset to general defaults '
+          'until you set these again.\n\n'
+          'This does NOT delete your account or any other data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
 
-
+    setState(() => _isLoadingPreview = true);
+    try {
+      final userId = AuthService.currentUserId;
+      if (userId != null) {
+        await ProfileService.updateSurgeryType(userId, 'Not specified');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('intake_dietary_restrictions_$userId');
+        await prefs.remove('intake_supplement_baseline_$userId');
+      }
+      if (mounted) {
+        setState(() {
+          _currentSurgeryType = 'Not specified';
+          _previewRestrictions = [];
+          _previewSupplements = [];
+          _isLoadingPreview = false;
+        });
+        // Recalculate scores now that surgery type changed
+        await _loadTodayScore();
+        await _loadWeeklyScore();
+        ErrorHandlingService.showSuccess(
+            context, 'Personalization preferences reset.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingPreview = false);
+        await ErrorHandlingService.handleError(
+          context: context,
+          error: e,
+          category: ErrorHandlingService.databaseError,
+          customMessage: 'Unable to reset preferences',
+          onRetry: _resetPersonalizationPreferences,
+        );
+      }
+    }
+  }
   Future<void> _toggleFriendsVisibility(bool isVisible) async {
     try {
       await FriendsVisibilityService.updateFriendsListVisibility(isVisible);
@@ -1267,7 +1241,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() {
           _friendsListVisible = isVisible;
         });
-
         ErrorHandlingService.showSuccess(
           context,
           isVisible
@@ -1287,7 +1260,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _confirmDeleteAccount() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -1313,31 +1285,23 @@ class _ProfileScreenState extends State<ProfileScreen>
         ],
       ),
     );
-
     if (confirm != true || !mounted) return;
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       // ✅ Call the DatabaseService method that handles everything
       await AccountDeletionService.deleteAccountCompletely();
-
       if (!mounted) return;
-
       // ✅ Sign out
       await AuthService.signOut();
-
       if (!mounted) return;
-
       // ✅ Navigate to login
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/login',
         (route) => false,
       );
-
       // ✅ Show success message
       Future.delayed(Duration(milliseconds: 500), () {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1348,13 +1312,9 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         );
       });
+    } catch (e) {
 
-    } catch (e, stackTrace) {
-      print('❌ Error deleting account: $e');
-      print('Stack trace: $stackTrace');
-      
       if (!mounted) return;
-
       // Better error handling with specific messages
       String errorMessage = 'Unable to delete account';
       
@@ -1374,7 +1334,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         // Show the actual error to help debug
         errorMessage = 'Delete failed: ${e.toString().substring(0, e.toString().length > 100 ? 100 : e.toString().length)}';
       }
-
       // Show detailed error dialog
       showDialog(
         context: context,
@@ -1415,21 +1374,16 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   // 🔧 Load profile + background URLs from database
   Future<void> _loadProfile() async {
     if (!mounted) return;
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       final prefs = await SharedPreferences.getInstance();
-
       // Load from database
       final profile = await ProfileService.getCurrentUserProfile();
-
       if (profile != null && mounted) {
         final userName = profile['username'] ?? 'User';
         final userEmail = profile['email'] ?? '';
@@ -1437,10 +1391,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         // ✅ Use the correct field names from database
         final profilePictureUrl = profile['profile_picture'] as String?;
         final backgroundPictureUrl = profile['profile_background'] as String?;
-
         AppConfig.debugPrint('👤 Profile picture: $profilePictureUrl');
         AppConfig.debugPrint('🏞️ Background picture: $backgroundPictureUrl');
-
         // Save to local preferences for fallback
         await prefs.setString('user_name', userName);
         await prefs.setString('user_email', userEmail);
@@ -1450,10 +1402,8 @@ class _ProfileScreenState extends State<ProfileScreen>
         if (backgroundPictureUrl != null) {
           await prefs.setString('background_picture_url', backgroundPictureUrl);
         }
-
         // 🔥 NEW: Restore pictures collapse state
         final expandedState = prefs.getBool(_picturesExpandedKey) ?? true;
-
         if (mounted) {
           setState(() {
             _userName = userName;
@@ -1474,7 +1424,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         final savedProfilePicture = prefs.getString('profile_picture_url');
         final savedBackgroundPicture = prefs.getString('background_picture_url');
         final expandedState = prefs.getBool(_picturesExpandedKey) ?? true;
-
         if (mounted) {
           setState(() {
             _userName = savedName;
@@ -1499,7 +1448,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         final savedProfilePicture = prefs.getString('profile_picture_url');
         final savedBackgroundPicture = prefs.getString('background_picture_url');
         final expandedState = prefs.getBool(_picturesExpandedKey) ?? true;
-
         if (mounted) {
           setState(() {
             _userName = savedName;
@@ -1522,7 +1470,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _savePicturesExpandedState(bool expanded) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1531,10 +1478,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       AppConfig.debugPrint('Error saving pictures expanded state: $e');
     }
   }
-
   // 🔧 Upload profile picture to Supabase Storage and save URL to database
-
-
   Future<void> _pickImage(ImageSource source) async {
     try {
       AppConfig.debugPrint('👤 Starting profile image selection (source: $source)');
@@ -1550,7 +1494,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       
       AppConfig.debugPrint('✅ Permission granted');
-
       // 🔥 Pick image with error handling
       AppConfig.debugPrint('📸 Opening image picker...');
       final picker = ImagePicker();
@@ -1575,19 +1518,15 @@ class _ProfileScreenState extends State<ProfileScreen>
         
         throw Exception('Failed to open image picker: $pickerError');
       }
-
       if (pickedFile == null) {
         AppConfig.debugPrint('⚠️ No profile image selected by user (cancelled)');
         return;  // User cancelled - don't show error
       }
-
       AppConfig.debugPrint('✅ Image picked: ${pickedFile.path}');
-
       if (!mounted) {
         AppConfig.debugPrint('⚠️ Widget unmounted during profile image selection');
         return;
       }
-
       // 🔥 Verify file exists
       final imageFile = File(pickedFile.path);
       if (!await imageFile.exists()) {
@@ -1596,7 +1535,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       
       AppConfig.debugPrint('✅ Image file exists');
-
       // 🔥 Check file size
       final fileSize = await imageFile.length();
       AppConfig.debugPrint('📏 Profile image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
@@ -1610,11 +1548,9 @@ class _ProfileScreenState extends State<ProfileScreen>
         AppConfig.debugPrint('❌ Image file too large: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
         throw Exception('Image too large (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB). Maximum 10 MB allowed.');
       }
-
       setState(() {
         _isLoading = true;
       });
-
       AppConfig.debugPrint('🚀 Starting profile picture upload...');
       
       final url = await PictureService.uploadProfilePicture(imageFile);
@@ -1626,7 +1562,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           _profileImageUrl = url;
           _isLoading = false;
         });
-
         ErrorHandlingService.showSuccess(context, 'Profile picture updated!');
       }
     } catch (e, stackTrace) {
@@ -1637,7 +1572,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() {
           _isLoading = false;
         });
-
         // 🔥 Better error categorization
         final errorString = e.toString().toLowerCase();
         
@@ -1712,10 +1646,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   // 🔧 Upload background to Supabase Storage and save URL to database
   // Replace the _pickBackgroundImage method in profile_screen.dart with this:
-
   Future<void> _pickBackgroundImage(ImageSource source) async {
     try {
       AppConfig.debugPrint('🎨 Starting background image selection (source: $source)');
@@ -1731,7 +1663,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       
       AppConfig.debugPrint('✅ Permission granted');
-
       // 🔥 IMPROVED: Pick image with detailed logging
       AppConfig.debugPrint('📸 Opening image picker...');
       final picker = ImagePicker();
@@ -1756,19 +1687,15 @@ class _ProfileScreenState extends State<ProfileScreen>
         
         throw Exception('Failed to open image picker: $pickerError');
       }
-
       if (pickedFile == null) {
         AppConfig.debugPrint('⚠️ No background image selected by user (cancelled)');
         return;  // User cancelled - don't show error
       }
-
       AppConfig.debugPrint('✅ Image picked: ${pickedFile.path}');
-
       if (!mounted) {
         AppConfig.debugPrint('⚠️ Widget unmounted during background image selection');
         return;
       }
-
       // 🔥 IMPROVED: Verify file exists with detailed error
       final imageFile = File(pickedFile.path);
       if (!await imageFile.exists()) {
@@ -1777,7 +1704,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
       
       AppConfig.debugPrint('✅ Image file exists');
-
       // 🔥 IMPROVED: Check file size with detailed logging
       final fileSize = await imageFile.length();
       AppConfig.debugPrint('📏 Background image size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
@@ -1791,23 +1717,19 @@ class _ProfileScreenState extends State<ProfileScreen>
         AppConfig.debugPrint('❌ Image file too large: ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB');
         throw Exception('Image too large (${(fileSize / 1024 / 1024).toStringAsFixed(1)} MB). Maximum 10 MB allowed.');
       }
-
       setState(() {
         _isLoading = true;
       });
-
       AppConfig.debugPrint('🚀 Starting background picture upload...');
       
       final url = await PictureService.uploadBackgroundPicture(imageFile);
       
       AppConfig.debugPrint('✅ Background picture upload complete: $url');
-
       if (mounted) {
         setState(() {
           _backgroundImageUrl = url;
           _isLoading = false;
         });
-
         ErrorHandlingService.showSuccess(context, 'Background updated!');
       }
     } catch (e, stackTrace) {
@@ -1818,7 +1740,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() {
           _isLoading = false;
         });
-
         // 🔥 IMPROVED: Better error categorization
         final errorString = e.toString().toLowerCase();
         
@@ -1893,21 +1814,17 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _removeBackgroundImage() async {
     try {
       setState(() {
         _isLoading = true;
       });
-
       await DatabaseServiceCore.removeBackgroundPicture();
-
       if (mounted) {
         setState(() {
           _backgroundImageUrl = null;
           _isLoading = false;
         });
-
         ErrorHandlingService.showSuccess(context, 'Background reset to default');
       }
     } catch (e) {
@@ -1915,7 +1832,6 @@ class _ProfileScreenState extends State<ProfileScreen>
         setState(() {
           _isLoading = false;
         });
-
         await ErrorHandlingService.handleError(
           context: context,
           error: e,
@@ -1925,31 +1841,25 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _saveUserName() async {
     if (_nameController.text.trim().isEmpty) {
       ErrorHandlingService.showSimpleError(context, 'Name cannot be empty');
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       await ProfileService.updateProfile(
         username: _nameController.text.trim(),
       );
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_name', _nameController.text.trim());
-
       if (mounted) {
         setState(() {
           _userName = _nameController.text.trim();
           _isEditingName = false;
         });
-
         ErrorHandlingService.showSuccess(
             context, 'Name updated successfully!');
       }
@@ -1971,36 +1881,29 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Future<void> _saveUserEmail() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) {
       ErrorHandlingService.showSimpleError(context, 'Email cannot be empty');
       return;
     }
-
     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
       ErrorHandlingService.showSimpleError(
           context, 'Please enter a valid email address');
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       await ProfileService.updateProfile(email: email);
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_email', email);
-
       if (mounted) {
         setState(() {
           _userEmail = email;
           _isEditingEmail = false;
         });
-
         ErrorHandlingService.showSuccess(
             context, 'Email updated successfully!');
       }
@@ -2022,7 +1925,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   Widget _sectionContainer({required Widget child}) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2033,7 +1935,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: child,
     );
   }
-
   void _toggleEditName() {
     setState(() {
       _isEditingName = !_isEditingName;
@@ -2042,7 +1943,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     });
   }
-
   void _toggleEditEmail() {
     setState(() {
       _isEditingEmail = !_isEditingEmail;
@@ -2051,21 +1951,18 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     });
   }
-
   void _cancelEditName() {
     setState(() {
       _isEditingName = false;
       _nameController.text = _userName;
     });
   }
-
   void _cancelEditEmail() {
     setState(() {
       _isEditingEmail = false;
       _emailController.text = _userEmail;
     });
   }
-
   void _showImagePickerDialog() {
     showDialog(
       context: context,
@@ -2097,7 +1994,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
   }
-
   void _showBackgroundPickerDialog() {
     showDialog(
       context: context,
@@ -2140,7 +2036,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
   }
-
   void _navigateToUserProfile(String userId) {
     try {
       Navigator.push(
@@ -2160,7 +2055,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   void _navigateToSearchUsers() {
     try {
       Navigator.pushNamed(context, '/search-users');
@@ -2172,7 +2066,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       }
     }
   }
-
   void _showFullFriendsList() {
     try {
       showDialog(
@@ -2236,11 +2129,11 @@ class _ProfileScreenState extends State<ProfileScreen>
           );
         },
       );
+    // ignore: empty_catches
     } catch (e) {
-      print('Error showing friends dialog: $e');
+
     }
   }
-
   Widget _buildPremiumStatusSection() {
     return _sectionContainer(
       child: Column(
@@ -2321,7 +2214,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
   Widget _buildPicturesSection() {
     return _sectionContainer(
       child: Column(
@@ -2463,7 +2355,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
   Widget _buildSubmittedRecipesSection() {
     return _sectionContainer(
       child: Column(
@@ -2489,7 +2380,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         builder: (context) => const SubmitRecipePage(),
                       ),
                     );
-
                     if (result == true && mounted) {
                       await _invalidateRecipesCache();
                       await _loadSubmittedRecipes(forceRefresh: true);
@@ -2551,7 +2441,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                             builder: (context) => const SubmitRecipePage(),
                           ),
                         );
-
                         if (result == true && mounted) {
                           await _invalidateRecipesCache();
                           await _loadSubmittedRecipes(forceRefresh: true);
@@ -2582,11 +2471,9 @@ class _ProfileScreenState extends State<ProfileScreen>
               itemCount: _submittedRecipes.length,
               itemBuilder: (context, index) {
                 final recipe = _submittedRecipes[index];
-
                 if (recipe.id == null) {
                   return const SizedBox.shrink();
                 }
-
                 return RecipeCard(
                   recipe: recipe,
                   onDelete: () => _deleteRecipe(recipe.id!),
@@ -2601,11 +2488,129 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
+  /// 🔥 NEW (Section 7) — Personalization Preview section
+  Widget _buildPersonalizationPreviewSection() {
+    final hasData = (_currentSurgeryType != null &&
+            _currentSurgeryType != 'Not specified') ||
+        _previewRestrictions.isNotEmpty ||
+        _previewSupplements.isNotEmpty;
+    return _sectionContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded,
+                  color: Colors.deepPurple, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Personalization Preview',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This is what powers your AI recipe, supplement, and meal plan recommendations.',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 14),
+          if (_isLoadingPreview) ...[
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ] else ...[
+            _previewChipRow(
+              'Surgery Type',
+              _currentSurgeryType != null && _currentSurgeryType != 'Not specified'
+                  ? [_currentSurgeryType!]
+                  : [],
+              Colors.red,
+            ),
+            const SizedBox(height: 10),
+            _previewChipRow(
+                'Dietary Restrictions', _previewRestrictions, Colors.orange),
+            const SizedBox(height: 10),
+            _previewChipRow('Supplements', _previewSupplements, Colors.blue),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/ai-personalization'),
+                    icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                    label: const Text('View AI Recommendations'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed:
+                      hasData ? _resetPersonalizationPreferences : null,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  label: const Text('Reset'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  Widget _previewChipRow(String label, List<String> values, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 6),
+        values.isEmpty
+            ? Text(
+                'Not set',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic),
+              )
+            : Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: values
+                    .map((v) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: color.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(v,
+                              style: TextStyle(fontSize: 12, color: color)),
+                        ))
+                    .toList(),
+              ),
+      ],
+    );
+  }
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
@@ -2679,7 +2684,6 @@ class _ProfileScreenState extends State<ProfileScreen>
               await _invalidateRecipesCache();
               await _invalidatePicturesCache();
               await _invalidateFriendsCache();
-
               await Future.wait([
                 _loadSubmittedRecipes(forceRefresh: true),
                 _loadPictures(forceRefresh: true),
@@ -2691,6 +2695,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 _loadWeeklyScore(),
                 _loadWeeklyWeightAverage(),
                 _loadWeekOverWeekWeightLoss(),
+                _loadPersonalizationPreview(), // 🔥 NEW (Section 7)
               ]);
             },
             child: SingleChildScrollView(
@@ -3020,7 +3025,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 );
                               }
-
                               final friend = _friends[index];
                               return GestureDetector(
                                 onTap: () => _navigateToUserProfile(friend['id']),
@@ -3169,7 +3173,6 @@ _sectionContainer(
   ),
 ),
 const SizedBox(height: 20),
-
 PremiumGate(
   feature: PremiumFeature.favoriteRecipes,
   featureName: 'Favorite Recipes',
@@ -3239,9 +3242,7 @@ PremiumGate(
     ),
   ),
 ),
-
 const SizedBox(height: 20),
-
           // Bariatric Surgery Type Selection
           _sectionContainer(
             child: Column(
@@ -3335,7 +3336,9 @@ const SizedBox(height: 20),
             ),
           ),
           const SizedBox(height: 20),
-
+          // 🔥 NEW (Section 7) — Personalization Preview
+          _buildPersonalizationPreviewSection(),
+          const SizedBox(height: 20),
           // Health Scores Section - BARIWISE VERSION
           _sectionContainer(
             child: Column(
@@ -3514,7 +3517,6 @@ const SizedBox(height: 20),
             ),
           ),
           const SizedBox(height: 20),
-
           // Weight Stats Section (only show if user has weight data and visibility is on)
           if (_weeklyWeightAverage != null) ...[
             _sectionContainer(
@@ -3708,13 +3710,11 @@ const SizedBox(height: 20),
             ),
             const SizedBox(height: 20),
           ],
-
           // 🔥 COOKBOOK SECTION
           _sectionContainer(
             child: const CookbookSection(),
           ),
           const SizedBox(height: 20),
-
           // DANGER ZONE
           _sectionContainer(
             child: Column(

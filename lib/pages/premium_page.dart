@@ -104,21 +104,6 @@ class _PremiumPageState extends State<PremiumPage>
     }
   }
 
-  /// Check if cached data is still valid
-  Future<bool> _isCacheValid(String timestampKey, Duration expiry) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final timestampStr = prefs.getString(timestampKey);
-      if (timestampStr == null) return false;
-
-      final timestamp = DateTime.parse(timestampStr);
-      final age = DateTime.now().difference(timestamp);
-      return age < expiry;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Check if it's a new day (for daily scan count reset)
   Future<bool> _isNewDay() async {
     try {
@@ -257,15 +242,6 @@ class _PremiumPageState extends State<PremiumPage>
   Future<void> _refreshPremiumStatus() async {
     setState(() => _isRefreshing = true);
     await _checkPremiumStatus(forceRefresh: true);
-  }
-
-  /// Invalidate cache when user performs a scan
-  static Future<void> invalidateScanCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_scanCountCacheKey);
-      await prefs.remove(_scanCountTimestampKey);
-    } catch (_) {}
   }
 
   /// Invalidate cache when user purchases premium
@@ -654,7 +630,7 @@ class _PremiumPageState extends State<PremiumPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -766,7 +742,7 @@ class _PremiumPageState extends State<PremiumPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -828,7 +804,7 @@ class _PremiumPageState extends State<PremiumPage>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),
@@ -878,7 +854,7 @@ class _PremiumPageState extends State<PremiumPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -1023,7 +999,7 @@ class _PremiumPageState extends State<PremiumPage>
             'Processed securely through '
             '${Platform.isIOS ? 'the App Store' : 'Google Play'}. '
             'All sales are final per '
-            '${Platform.isIOS ? "Apple\'s" : "Google\'s"} standard refund policy. '
+            '${Platform.isIOS ? "Apple's" : "Google's"} standard refund policy. '
             'By purchasing, you agree to our Terms of Service and Privacy Policy.',
             style: const TextStyle(fontSize: 11, color: Colors.grey),
             textAlign: TextAlign.center,

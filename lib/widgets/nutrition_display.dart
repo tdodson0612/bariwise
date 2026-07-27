@@ -21,9 +21,9 @@ class NutritionDisplay extends StatelessWidget {
     // - Carbs: 4 cal/g
     // - Fat: 9 cal/g
 
-    final protein = nutrition.protein ?? 0.0;
-    final carbs = nutrition.carbs ?? 0.0;
-    final fat = nutrition.fat ?? 0.0;
+    final protein = nutrition.protein;
+    final carbs = nutrition.carbs;
+    final fat = nutrition.fat;
 
     final proteinCals = protein * 4;
     final carbsCals = carbs * 4;
@@ -54,17 +54,17 @@ class NutritionDisplay extends StatelessWidget {
         macros['fat']! > 0;
 
     // Local nullable-safe values
-    final calories = nutrition.calories ?? 0.0;
-    final fat = nutrition.fat ?? 0.0;
-    final saturatedFat = nutrition.saturatedFat ?? 0.0;
+    final calories = nutrition.calories;
+    final fat = nutrition.fat;
+    final saturatedFat = nutrition.saturatedFat;
     final monounsaturatedFat = nutrition.monounsaturatedFat;
     final polyunsaturatedFat = nutrition.polyunsaturatedFat;
     final transFat = nutrition.transFat;
-    final carbs = nutrition.carbs ?? 0.0;
-    final sugar = nutrition.sugar ?? 0.0;
+    final carbs = nutrition.carbs;
+    final sugar = nutrition.sugar;
     final fiber = nutrition.fiber ?? 0.0;
-    final protein = nutrition.protein ?? 0.0;
-    final sodium = nutrition.sodium ?? 0.0;
+    final protein = nutrition.protein;
+    final sodium = nutrition.sodium;
     final iron = nutrition.iron;
     final potassium = nutrition.potassium;
     final cholesterol = nutrition.cholesterol;
@@ -122,12 +122,12 @@ class NutritionDisplay extends StatelessWidget {
             _buildNutrientRow('Cholesterol', '${cholesterol?.toStringAsFixed(0) ?? 'N/A'} mg', 'MICRO'),
             _buildNutrientRow('Cobalt', '${cobalt?.toStringAsFixed(1) ?? 'N/A'} mcg', 'MICRO'),
 
-            // OTHER NUTRIENTS (if present)
+            // other NUTRIENTS (if present)
             if (_hasOtherNutrients()) ...[
               const SizedBox(height: 16),
               const Divider(thickness: 2),
               const SizedBox(height: 12),
-              _buildSectionHeader('OTHER NUTRIENTS'),
+              _buildSectionHeader('other NUTRIENTS'),
               const SizedBox(height: 8),
               
               if (nutrition.vitaminA != null)

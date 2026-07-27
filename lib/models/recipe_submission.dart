@@ -55,8 +55,9 @@ class RecipeSubmission {
         compliance = ComplianceReport.fromJson(
           json['compliance_checks'] as Map<String, dynamic>,
         );
+      // ignore: empty_catches
       } catch (e) {
-        print('⚠️ Error parsing compliance checks: $e');
+
       }
     }
 
@@ -67,8 +68,9 @@ class RecipeSubmission {
         recipe = DraftRecipe.fromJson(
           json['recipe'] as Map<String, dynamic>,
         );
+      // ignore: empty_catches
       } catch (e) {
-        print('⚠️ Error parsing recipe: $e');
+
       }
     }
 

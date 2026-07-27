@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element
 // lib/home_screen.dart - FULLY FIXED VERSION WITH POST COMPOSER oh yeah!
 import 'dart:io';
 import 'dart:async';
@@ -214,11 +215,9 @@ class NutritionApiService {
         final data = json.decode(response.body);
         
         if (AppConfig.enableDebugPrints) {
-          print('📡 OpenFoodFacts API Response:');
-          print('  Status: ${data['status']}');
-          print('  Product name: ${data['product']?['product_name']}');
-          print('  Nutriments keys: ${data['product']?['nutriments']?.keys.toList()}');
-          print('  Sample nutriment: ${data['product']?['nutriments']?['energy-kcal_100g']}');
+
+debugPrint('  Nutriments keys: ${data['product']?['nutriments']?.keys.toList()}');
+
         }
         
         if (data['status'] == 1) {
@@ -229,7 +228,7 @@ class NutritionApiService {
       return null;
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print('Nutrition API Error: $e');
+
       }
       return null;
     }
@@ -249,7 +248,7 @@ class BarcodeScannerService {
       }
       return null;
     } catch (e) {
-      print('Barcode Scanner Error: $e');
+
       return null;
     } finally {
       await barcodeScanner.close();
@@ -295,21 +294,20 @@ class _HomePageState extends State<HomePage>
   final ScrollController _feedScrollController = ScrollController();
 
   // Like state tracking
-  Map<String, bool> _postLikeStatus = {};
-  Map<String, int> _postLikeCounts = {};
-  Map<String, bool> _expandedComments = {};
-  Map<String, List<Map<String, dynamic>>> _postComments = {};
-  Map<String, bool> _savedPosts = {};
+  final Map<String, bool> _postLikeStatus = {};
+  final Map<String, int> _postLikeCounts = {};
+  final Map<String, bool> _expandedComments = {};
+  final Map<String, List<Map<String, dynamic>>> _postComments = {};
+  final Map<String, bool> _savedPosts = {};
   final Map<String, TextEditingController> _commentControllers = {};
 
   // 🔥 NEW: Comment like tracking
-  Map<String, Map<String, bool>> _commentLikeStatus = {};
-  Map<String, Map<String, int>> _commentLikeCounts = {};
+  final Map<String, Map<String, bool>> _commentLikeStatus = {};
+  final Map<String, Map<String, int>> _commentLikeCounts = {};
 
   // 🔥 NEW: Reply tracking
-  Map<String, String?> _replyingToCommentId = {};
-  Map<String, Map<String, bool>> _expandedReplies = {};
-
+  final Map<String, String?> _replyingToCommentId = {};
+  final Map<String, Map<String, bool>> _expandedReplies = {};
 
   late final PremiumGateController _premiumController;
 
@@ -484,7 +482,7 @@ class _HomePageState extends State<HomePage>
         
         if (!wasPremium && isPremiumNow) {
           if (AppConfig.enableDebugPrints) {
-            print("🎉 User became PREMIUM - disposing all ads");
+
           }
           
           _interstitialAd?.dispose();
@@ -498,7 +496,7 @@ class _HomePageState extends State<HomePage>
         
         if (wasPremium && !isPremiumNow) {
           if (AppConfig.enableDebugPrints) {
-            print("⬇️ User lost PREMIUM - loading ads");
+
           }
           
           _loadInterstitialAd();
@@ -511,7 +509,7 @@ class _HomePageState extends State<HomePage>
   Future<void> _initializeAsync() async {
     try {
       if (AppConfig.enableDebugPrints) {
-        print("🏠 HOME: Starting initialization...");
+
       }
       
       // Wait a bit for session to be ready
@@ -523,7 +521,7 @@ class _HomePageState extends State<HomePage>
       final currentUserId = AuthService.currentUserId;
       if (currentUserId == null) {
         if (AppConfig.enableDebugPrints) {
-          print("⚠️ HOME: No user session found, skipping favorite load");
+
         }
         
         // Set empty favorites and continue
@@ -541,7 +539,7 @@ class _HomePageState extends State<HomePage>
       }
       
       if (AppConfig.enableDebugPrints) {
-        print("✅ HOME: Session found: $currentUserId");
+
       }
       
       if (!mounted || _isDisposed) return;
@@ -551,11 +549,11 @@ class _HomePageState extends State<HomePage>
         await _premiumController.refresh();
         
         if (AppConfig.enableDebugPrints) {
-          print("🔐 HOME: Premium status: $_isPremium");
+
         }
       } catch (e) {
         if (AppConfig.enableDebugPrints) {
-          print("⚠️ HOME: Premium check failed (non-critical): $e");
+debugPrint("⚠️ HOME: Premium check failed (non-critical): $e");
         }
       }
       
@@ -564,7 +562,7 @@ class _HomePageState extends State<HomePage>
       // Load ads if free user
       if (!_isPremium) {
         if (AppConfig.enableDebugPrints) {
-          print("📺 HOME: Loading ads for FREE user");
+
         }
         _loadInterstitialAd();
         _loadRewardedAd();
@@ -575,11 +573,11 @@ class _HomePageState extends State<HomePage>
       // Load favorites in background (non-blocking)
       _loadFavoriteRecipes().then((_) {
         if (AppConfig.enableDebugPrints) {
-          print("✅ HOME: Favorites loaded successfully");
+
         }
       }).catchError((e) {
         if (AppConfig.enableDebugPrints) {
-          print("⚠️ HOME: Failed to load favorites (non-critical): $e");
+debugPrint("⚠️ HOME: Failed to load favorites (non-critical): $e");
         }
         // Don't show error - just set empty list
         if (mounted && !_isDisposed) {
@@ -588,12 +586,12 @@ class _HomePageState extends State<HomePage>
       });
       
       if (AppConfig.enableDebugPrints) {
-        print("✅ HOME: Initialization complete");
+
       }
 
     } catch (e) {
       if (AppConfig.enableDebugPrints) {
-        print("❌ HOME: Initialization error: $e");
+
       }
       
       // Silent fail - user can still use the app
@@ -608,7 +606,7 @@ class _HomePageState extends State<HomePage>
   void _loadInterstitialAd() {
     if (_isDisposed || _isPremium) {
       if (AppConfig.enableDebugPrints && _isPremium) {
-        print("🚫 Not loading interstitial - user is PREMIUM");
+
       }
       return;
     }
@@ -616,7 +614,7 @@ class _HomePageState extends State<HomePage>
     // google_mobile_ads only has a plugin on Android/iOS — skip on macOS/web/desktop
     if (!Platform.isAndroid && !Platform.isIOS) {
       if (AppConfig.enableDebugPrints) {
-        print("🚫 Skipping interstitial ad - not supported on this platform");
+
       }
       return;
     }
@@ -634,19 +632,19 @@ class _HomePageState extends State<HomePage>
             ad.setImmersiveMode(true);
             
             if (AppConfig.enableDebugPrints) {
-              print("✅ Interstitial ad loaded (FREE user)");
+debugPrint("✅ Interstitial ad loaded (FREE user)");
             }
           } else {
             ad.dispose();
             if (AppConfig.enableDebugPrints) {
-              print("🚫 Disposed ad - user is PREMIUM (became premium during load)");
+debugPrint("🚫 Disposed ad - user is PREMIUM (became premium during load)");
             }
           }
         },
         onAdFailedToLoad: (error) {
           _isAdReady = false;
           if (AppConfig.enableDebugPrints) {
-            print("❌ Interstitial failed to load: $error");
+
           }
         },
       ),
@@ -656,7 +654,7 @@ class _HomePageState extends State<HomePage>
   void _loadRewardedAd() {
     if (_isDisposed || _isPremium) {
       if (AppConfig.enableDebugPrints && _isPremium) {
-        print("🚫 Not loading rewarded ad - user is PREMIUM");
+
       }
       return;
     }
@@ -664,7 +662,7 @@ class _HomePageState extends State<HomePage>
     // google_mobile_ads only has a plugin on Android/iOS — skip on macOS/web/desktop
     if (!Platform.isAndroid && !Platform.isIOS) {
       if (AppConfig.enableDebugPrints) {
-        print("🚫 Skipping rewarded ad - not supported on this platform");
+
       }
       return;
     }
@@ -681,19 +679,19 @@ class _HomePageState extends State<HomePage>
             _isRewardedAdReady = true;
             
             if (AppConfig.enableDebugPrints) {
-              print("✅ Rewarded ad loaded (FREE user)");
+debugPrint("✅ Rewarded ad loaded (FREE user)");
             }
           } else {
             ad.dispose();
             if (AppConfig.enableDebugPrints) {
-              print("🚫 Disposed rewarded ad - user is PREMIUM (became premium during load)");
+debugPrint("🚫 Disposed rewarded ad - user is PREMIUM (became premium during load)");
             }
           }
         },
         onAdFailedToLoad: (error) {
           _isRewardedAdReady = false;
           if (AppConfig.enableDebugPrints) {
-            print("❌ Rewarded ad failed to load: $error");
+
           }
         },
       ),
@@ -706,11 +704,11 @@ class _HomePageState extends State<HomePage>
     if (_isDisposed || isPremiumNow || !_isAdReady || _interstitialAd == null) {
       if (AppConfig.enableDebugPrints) {
         if (isPremiumNow) {
-          print("🚫 BLOCKED AD: User is PREMIUM");
+
         } else if (!_isAdReady) {
-          print("⚠️ Ad not ready");
+
         } else if (_interstitialAd == null) {
-          print("⚠️ No ad loaded");
+
         }
       }
       onAdClosed();
@@ -718,7 +716,7 @@ class _HomePageState extends State<HomePage>
     }
 
     if (AppConfig.enableDebugPrints) {
-      print("📺 Showing interstitial ad to FREE user");
+
     }
 
     _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
@@ -747,7 +745,7 @@ class _HomePageState extends State<HomePage>
       final currentUserId = AuthService.currentUserId;
       if (currentUserId == null) {
         if (AppConfig.enableDebugPrints) {
-          print('⏭️ Skipping favorites sync - no user logged in');
+
         }
         return;
       }
@@ -785,13 +783,13 @@ class _HomePageState extends State<HomePage>
 
         await _saveFavoritesToLocalCache(favoriteRecipes);
         if (AppConfig.enableDebugPrints) {
-          print('✅ Synced ${favoriteRecipes.length} favorites from database');
+
         }
       }
     } catch (e) {
       // Silent fail - don't show error popup on home screen load
       if (AppConfig.enableDebugPrints) {
-        print('⚠️ Error syncing favorites (non-critical): $e');
+debugPrint('⚠️ Error syncing favorites (non-critical): $e');
       }
       // Continue without favorites - not critical for home screen
     }
@@ -887,7 +885,7 @@ class _HomePageState extends State<HomePage>
     final userId = AuthService.currentUserId;
     if (userId == null) {
       if (AppConfig.enableDebugPrints) {
-        print('⚠️ Cannot load favorites: No user ID');
+
       }
       if (mounted && !_isDisposed) {
         setState(() => _favoriteRecipes = []);
@@ -932,9 +930,10 @@ class _HomePageState extends State<HomePage>
       final serialized = favorites.map((recipe) => jsonEncode(recipe.toCache())).toList();
 
       await prefs.setStringList('favorite_recipes_detailed', serialized);
-      print('✅ Synced favorites to cache');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error saving favorites locally: $e');
+
     }
   }
 
@@ -1023,10 +1022,7 @@ class _HomePageState extends State<HomePage>
   }
 
   Future<void> _debugCheckAllCaches() async {
-    print('\n========================================');
-    print('🔍 DEBUG: Checking ALL cache keys...');
-    print('========================================\n');
-    
+
     final prefs = await SharedPreferences.getInstance();
     final allKeys = prefs.getKeys().toList()..sort();
     
@@ -1036,38 +1032,30 @@ class _HomePageState extends State<HomePage>
       key.toLowerCase().contains('badge') ||
       key.toLowerCase().contains('cached')
     ).toList();
-    
-    print('📊 Total cache keys: ${allKeys.length}');
-    print('📬 Message/badge related keys: ${relevantKeys.length}\n');
-    
+
     if (relevantKeys.isEmpty) {
-      print('✅ No message/badge cache keys found (this is suspicious!)\n');
+debugPrint('✅ No message/badge cache keys found (this is suspicious!)\n');
     } else {
-      print('🔎 RELEVANT CACHE KEYS:\n');
-      
+
       for (final key in relevantKeys) {
         final value = prefs.get(key);
-        print('Key: $key');
-        print('  Type: ${value.runtimeType}');
-        
+
         if (value is String) {
           try {
             final decoded = jsonDecode(value);
             final preview = decoded.toString();
-            print('  Value (parsed): ${preview.length > 200 ? '${preview.substring(0, 200)}...' : preview}');
+debugPrint('  Value (parsed): ${preview.length > 200 ? '${preview.substring(0, 200)}...' : preview}');
           } catch (_) {
             final preview = value.length > 100 ? '${value.substring(0, 100)}...' : value;
-            print('  Value: $preview');
+
           }
         } else {
-          print('  Value: $value');
+
         }
-        print('');
+
       }
     }
-    
-    print('\n🎯 CHECKING SPECIFIC BADGE CACHE KEYS:\n');
-    
+
     final knownKeys = [
       'cached_unread_count',
       'cached_unread_count_time',
@@ -1079,11 +1067,9 @@ class _HomePageState extends State<HomePage>
     for (final key in knownKeys) {
       final value = prefs.get(key);
       if (value != null) {
-        print('✅ Found: $key');
-        print('   Value: $value');
-        print('   Type: ${value.runtimeType}\n');
+
       } else {
-        print('❌ Missing: $key\n');
+
       }
     }
     
@@ -1091,18 +1077,14 @@ class _HomePageState extends State<HomePage>
     if (cachedTime != null) {
       final age = DateTime.now().millisecondsSinceEpoch - cachedTime;
       final ageSeconds = (age / 1000).round();
-      print('⏰ Badge cache age: $ageSeconds seconds');
-      print('   Fresh?: ${age < 3000 ? "YES ✅" : "NO ❌ (stale!)"}\n');
+
+debugPrint('   Fresh?: ${age < 3000 ? "YES ✅" : "NO ❌ (stale!)"}\n');
     }
-    
-    print('========================================');
-    print('🔍 DEBUG CHECK COMPLETE');
-    print('========================================\n');
+
   }
 
   Future<void> _debugClearAllCaches() async {
-    print('\n🗑️ NUCLEAR OPTION: Clearing ALL caches...\n');
-    
+
     final prefs = await SharedPreferences.getInstance();
     
     final keys = prefs.getKeys().where((key) => 
@@ -1112,22 +1094,17 @@ class _HomePageState extends State<HomePage>
       key.toLowerCase().contains('cached') ||
       key.toLowerCase().contains('chat')
     ).toList();
-    
-    print('Found ${keys.length} cache keys to clear:');
+
     for (final key in keys) {
-      print('  - $key');
+
       await prefs.remove(key);
     }
-    
-    print('\n✅ All message/badge caches cleared!');
-    print('🔄 Now force refresh the badge...\n');
-    
+
     await MenuIconWithBadge.invalidateCache();
     await AppDrawer.invalidateUnreadCache();
     
     MenuIconWithBadge.globalKey.currentState?.refresh();
-    
-    print('✅ Badge refresh triggered!\n');
+
   }
 
   Future<void> _performScan() async {
@@ -1140,20 +1117,20 @@ class _HomePageState extends State<HomePage>
       final isPremiumNow = _premiumController.isPremium;
       
       if (AppConfig.enableDebugPrints) {
-        print("🔍 Scan requested - Premium: $isPremiumNow, Ad Ready: $_isAdReady");
+
       }
 
       if (!isPremiumNow && _isAdReady) {
         if (AppConfig.enableDebugPrints) {
-          print("📺 Showing ad before scan (FREE user)");
+debugPrint("📺 Showing ad before scan (FREE user)");
         }
         _showInterstitialAd(() => _executePerformScan());
       } else {
         if (AppConfig.enableDebugPrints) {
           if (isPremiumNow) {
-            print("✅ Skipping ad (PREMIUM user)");
+debugPrint("✅ Skipping ad (PREMIUM user)");
           } else {
-            print("⚠️ Skipping ad (no ad ready)");
+debugPrint("⚠️ Skipping ad (no ad ready)");
           }
         }
         _executePerformScan();
@@ -1232,20 +1209,20 @@ class _HomePageState extends State<HomePage>
       final isPremiumNow = _premiumController.isPremium;
       
       if (AppConfig.enableDebugPrints) {
-        print("📸 Photo requested - Premium: $isPremiumNow, Ad Ready: $_isAdReady");
+
       }
 
       if (!isPremiumNow && _isAdReady) {
         if (AppConfig.enableDebugPrints) {
-          print("📺 Showing ad before photo (FREE user)");
+debugPrint("📺 Showing ad before photo (FREE user)");
         }
         _showInterstitialAd(() => _executeTakePhoto());
       } else {
         if (AppConfig.enableDebugPrints) {
           if (isPremiumNow) {
-            print("✅ Skipping ad (PREMIUM user)");
+debugPrint("✅ Skipping ad (PREMIUM user)");
           } else {
-            print("⚠️ Skipping ad (no ad ready)");
+debugPrint("⚠️ Skipping ad (no ad ready)");
           }
         }
         _executeTakePhoto();
@@ -1491,7 +1468,7 @@ class _HomePageState extends State<HomePage>
             Container(
               padding: EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.2),
+                color: Colors.orange.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.wifi_off, color: Colors.orange),
@@ -1720,10 +1697,10 @@ class _HomePageState extends State<HomePage>
                           Navigator.pop(context);
                           _resetToHome();
                         },
-                        child: Text('Cancel'),
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.symmetric(vertical: 14),
                         ),
+                        child: Text('Cancel'),
                       ),
                     ),
                   ],
@@ -2198,7 +2175,7 @@ class _HomePageState extends State<HomePage>
         setState(() => _isLoadingFeed = false);
       }
       AppConfig.debugPrint('❌ Error loading feed: $e');
-      print('Error loading feed: $e');
+
     }
   }
 
@@ -2794,7 +2771,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-
   Future<void> _loadMorePosts() async {
     if (_isLoadingMorePosts || !_hasMorePosts) return;
 
@@ -2833,8 +2809,6 @@ class _HomePageState extends State<HomePage>
       AppConfig.debugPrint('❌ Error loading more posts: $e');
     }
   }
-
-
 
   // 🔥 NEW: Report harassment
   Future<void> _reportPost(Map<String, dynamic> post) async {
@@ -4204,7 +4178,7 @@ class _HomePageState extends State<HomePage>
             borderRadius: effectiveRadius,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
+                color: Colors.black.withValues(alpha: 0.1),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -4240,7 +4214,7 @@ class _HomePageState extends State<HomePage>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: ExpansionTile(
@@ -4513,7 +4487,7 @@ class _HomePageState extends State<HomePage>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -4838,7 +4812,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-
   String _formatPostTime(dynamic timestamp) {
     try {
       final DateTime postTime = timestamp is String 
@@ -4911,9 +4884,9 @@ class _HomePageState extends State<HomePage>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
+          color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Column(
           children: [
@@ -4973,7 +4946,7 @@ class _HomePageState extends State<HomePage>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -5078,7 +5051,7 @@ class _HomePageState extends State<HomePage>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.shade900.withOpacity(0.25),
+            color: Colors.orange.shade900.withValues(alpha: 0.25),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -5096,7 +5069,7 @@ class _HomePageState extends State<HomePage>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.favorite_rounded, color: Colors.white, size: 24),
@@ -5131,7 +5104,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-
   Widget _buildSmartPromptCard() {
     if (_loadingSmartPrompt || _smartPrompt == null) return const SizedBox.shrink();
     final prompt = _smartPrompt!;
@@ -5144,7 +5116,7 @@ class _HomePageState extends State<HomePage>
         border: Border.all(color: Colors.orange.shade100),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -5208,7 +5180,7 @@ class _HomePageState extends State<HomePage>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -5272,7 +5244,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-
   Widget _buildInitialView() {
     return Container(
       decoration: BoxDecoration(
@@ -5295,11 +5266,11 @@ class _HomePageState extends State<HomePage>
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(25),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -5397,7 +5368,7 @@ class _HomePageState extends State<HomePage>
                 borderRadius: BorderRadius.circular(15),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -5745,7 +5716,7 @@ class _HomePageState extends State<HomePage>
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -5891,7 +5862,7 @@ class _HomePageState extends State<HomePage>
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(10),
       ),
       child: ExpansionTile(
@@ -6036,7 +6007,7 @@ class _HomePageState extends State<HomePage>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -6094,7 +6065,7 @@ class _HomePageState extends State<HomePage>
                         decoration: BoxDecoration(
                           color: selected 
                               ? Colors.orange 
-                              : Colors.white.withOpacity(0.15),
+                              : Colors.white.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: selected ? Colors.white : Colors.white30,
@@ -6576,7 +6547,7 @@ class _FriendPickerDialogState extends State<_FriendPickerDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text('Tag Friends'),
-      content: Container(
+      content: SizedBox(
         width: double.maxFinite,
         child: ListView.builder(
           shrinkWrap: true,

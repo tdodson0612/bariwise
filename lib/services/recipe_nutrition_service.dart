@@ -116,7 +116,7 @@ class RecipeNutritionService {
     for (final item in items) {
       totalCalories += item.calories;
       totalFat += item.fat;
-      totalSaturatedFat += item.saturatedFat ?? 0.0;
+      totalSaturatedFat += item.saturatedFat;
       totalMonounsaturatedFat += item.monounsaturatedFat ?? 0.0;
       totalTransFat += item.transFat ?? 0.0;
       totalSugar += item.sugar;

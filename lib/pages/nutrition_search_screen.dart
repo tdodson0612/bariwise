@@ -7,7 +7,6 @@ import 'package:bari_wise/services/nutrition_api_service.dart';
 import 'package:bari_wise/widgets/nutrition_display.dart';
 import 'package:bari_wise/services/error_handling_service.dart';
 import 'package:bari_wise/services/search_history_service.dart';
-import 'package:bari_wise/barihealthbar.dart';
 import 'package:bari_wise/widgets/nutrition_facts_label.dart';
 import 'package:bari_wise/services/saved_ingredients_service.dart';
 import 'package:bari_wise/services/grocery_service.dart';
@@ -95,8 +94,9 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
       if (mounted) {
         setState(() => _favoriteRecipes = recipes);
       }
+    // ignore: empty_catches
     } catch (e) {
-      print('Error loading favorites: $e');
+
     }
   }
 
@@ -378,7 +378,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
 
       return [];
     } catch (e) {
-      print('Error searching recipes: $e');
+
       return [];
     }
   }
@@ -407,11 +407,11 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
     int score = 50; // Start at neutral
     
     // Get nullable-safe values
-    final protein = nutrition.protein ?? 0.0;
-    final sugar = nutrition.sugar ?? 0.0;
-    final fat = nutrition.fat ?? 0.0;
+    final protein = nutrition.protein;
+    final sugar = nutrition.sugar;
+    final fat = nutrition.fat;
     final fiber = nutrition.fiber ?? 0.0;
-    final sodium = nutrition.sodium ?? 0.0;
+    final sodium = nutrition.sodium;
     
     // Protein is good
     if (protein > 20) {
@@ -459,10 +459,10 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
     final cautions = <String>[];
     
     // Get nullable-safe values
-    final sugar = nutrition.sugar ?? 0.0;
-    final fat = nutrition.fat ?? 0.0;
-    final protein = nutrition.protein ?? 0.0;
-    final sodium = nutrition.sodium ?? 0.0;
+    final sugar = nutrition.sugar;
+    final fat = nutrition.fat;
+    final protein = nutrition.protein;
+    final sodium = nutrition.sodium;
     
     // High sugar warning (common issue for all bariatric surgeries)
     if (sugar > 10) {
@@ -608,7 +608,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -691,7 +691,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -736,7 +736,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                       decoration: BoxDecoration(
                         color: selected 
                             ? Colors.orange 
-                            : Colors.white.withOpacity(0.15),
+                            : Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: selected ? Colors.white : Colors.white30,

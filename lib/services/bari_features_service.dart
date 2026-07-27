@@ -125,7 +125,7 @@ class BariFeaturesService {
     AppConfig.debugPrint(
         '💊 Supplement schedule created: ${schedule.name}');
     return SupplementSchedule.fromMap(
-        inserted as Map<String, dynamic>);
+        inserted);
   }
 
   /// Soft-delete a supplement schedule by marking it inactive.
@@ -305,7 +305,7 @@ class BariFeaturesService {
         .maybeSingle();
 
     if (data == null) return null;
-    return BariWeeklyGoal.fromMap(data as Map<String, dynamic>);
+    return BariWeeklyGoal.fromMap(data);
   }
 
   /// Insert or update the current week's nutrition goal.
@@ -323,7 +323,7 @@ class BariFeaturesService {
         .single();
 
     AppConfig.debugPrint('🎯 Bariatric weekly goals saved');
-    return BariWeeklyGoal.fromMap(result as Map<String, dynamic>);
+    return BariWeeklyGoal.fromMap(result);
   }
 
   // ================================================================

@@ -5,7 +5,6 @@ import 'package:bari_wise/services/nutrition_api_service.dart';
 import 'package:bari_wise/models/nutrition_info.dart';
 import 'package:bari_wise/widgets/nutrition_display.dart';
 import 'package:bari_wise/services/error_handling_service.dart';
-import '../services/recipe_nutrition_service.dart';
 import '../barihealthbar.dart';
 
 class ManualBarcodeEntryScreen extends StatefulWidget {

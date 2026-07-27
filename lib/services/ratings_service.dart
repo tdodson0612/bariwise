@@ -6,7 +6,6 @@ import '../config/app_config.dart';
 import 'auth_service.dart';            // Auth + currentUserId
 import 'database_service_core.dart';   // Worker query
 
-
 class RatingsService {
 
   // ==================================================

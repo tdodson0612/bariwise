@@ -10,6 +10,7 @@ import 'friends_service.dart';
 import 'database_service_core.dart';
 import '../widgets/menu_icon_with_badge.dart';
 import '../widgets/app_drawer.dart';
+import 'package:flutter/foundation.dart';
 
 class MessagingService {
   // ✅ Track if we're currently updating read status to prevent race conditions
@@ -143,13 +144,12 @@ class MessagingService {
   // ==============================================
   static Future<int> getUnreadMessageCount() async {
     if (AuthService.currentUserId == null) {
-      print('❌ getUnreadMessageCount: No user ID');
+
       return 0;
     }
 
     try {
       final uid = AuthService.currentUserId!;
-      print('📬 Fetching unread count for user: $uid');
 
       // ✅ FIXED: Use boolean false instead of integer 0
       final response = await DatabaseServiceCore.workerQuery(
@@ -163,16 +163,15 @@ class MessagingService {
       );
 
       final count = (response as List).length;
-      print('📬 Database returned $count unread messages');
-      
+
       // Show sample of messages for debugging
       if (count > 0 && AppConfig.enableDebugPrints) {
-        print('📬 Sample unread messages: ${response.take(3).toList()}');
+debugPrint('📬 Sample unread messages: ${response.take(3).toList()}');
       }
       
       return count;
     } catch (e) {
-      print('⚠️ Error getting unread count: $e');
+
       return 0;
     }
   }
@@ -379,53 +378,47 @@ class MessagingService {
   // ==============================================
   static Future<void> refreshUnreadBadge() async {
     try {
-      print('🔄 refreshUnreadBadge() started');
+debugPrint('🔄 refreshUnreadBadge() started');
       
       // Step 1: Invalidate ALL badge caches
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('cached_unread_count');
       await prefs.remove('cached_unread_count_time');
-      print('🗑️ Badge caches cleared from SharedPreferences');
-      
+
       // Step 2: Small delay to ensure cache is cleared
       await Future.delayed(Duration(milliseconds: 100));
       
       // Step 3: Force fetch fresh count directly from database
-      print('📡 Fetching fresh count from database...');
+
       final freshCount = await getUnreadMessageCount();
-      print('📬 Fresh count from database: $freshCount');
-      
+
       // Step 4: Update cache with new count and fresh timestamp
       final now = DateTime.now().millisecondsSinceEpoch;
       await prefs.setInt('cached_unread_count', freshCount);
       await prefs.setInt('cached_unread_count_time', now);
-      print('💾 New count cached: $freshCount at timestamp $now');
-      
+
       // Step 5: Force both widgets to rebuild with new data
-      print('🔄 Triggering widget refreshes...');
-      
+
       // Refresh MenuIconWithBadge
       final menuIconState = MenuIconWithBadge.globalKey.currentState;
       if (menuIconState != null) {
         await menuIconState.refresh();
-        print('✅ MenuIconWithBadge refreshed');
+
       } else {
-        print('⚠️ MenuIconWithBadge state not available');
+
       }
       
       // ✅ FIXED: Call the public refresh() method instead of private _loadUnreadCount
       final drawerState = AppDrawer.globalKey.currentState;
       if (drawerState != null) {
         await drawerState.refresh();
-        print('✅ AppDrawer refreshed');
+
       } else {
-        print('⚠️ AppDrawer state not available');
+
       }
-      
-      print('✅ Badge refresh complete: displayed count should be $freshCount');
-      
+
     } catch (e) {
-      print('❌ Error refreshing badge: $e');
+
       // Don't rethrow - failing to refresh badge shouldn't crash the app
     }
   }
@@ -449,14 +442,13 @@ class MessagingService {
       for (final key in messageCacheKeys) {
         await prefs.remove(key);
       }
-      
-      print('🗑️ Invalidated ${messageCacheKeys.length} message cache keys');
-      
+
       // Force refresh badges
       await refreshUnreadBadge();
       
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error invalidating message caches: $e');
+
     }
   }
 

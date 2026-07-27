@@ -104,7 +104,7 @@ class FoodClassifierService {
     }
     
     // 4. Fallback: if all APIs fail, assume not food
-    print('⚠️ All LLM APIs failed for word: $word');
+
     return false;
   }
 
@@ -113,8 +113,7 @@ class FoodClassifierService {
   // ============================================
   static Future<bool?> _tryGroq(String word) async {
     try {
-      print('🟢 Trying Groq for: $word');
-      
+
       final response = await http.post(
         Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
         headers: {
@@ -144,17 +143,17 @@ class FoodClassifierService {
             .toLowerCase()
             .trim();
         final isFood = answer.contains('yes');
-        print('✅ Groq result for "$word": $isFood');
+
         return isFood;
       } else if (response.statusCode == 429) {
-        print('⚠️ Groq rate limit reached');
+
         return null; // Try next provider
       } else {
-        print('⚠️ Groq error: ${response.statusCode}');
+
         return null;
       }
     } catch (e) {
-      print('⚠️ Groq exception: $e');
+
       return null;
     }
   }
@@ -164,8 +163,7 @@ class FoodClassifierService {
   // ============================================
   static Future<bool?> _tryGemini(String word) async {
     try {
-      print('🔵 Trying Gemini for: $word');
-      
+
       final response = await http.post(
         Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$_geminiApiKey'),
         headers: {'Content-Type': 'application/json'},
@@ -188,17 +186,17 @@ class FoodClassifierService {
             .toLowerCase()
             .trim();
         final isFood = answer.contains('yes');
-        print('✅ Gemini result for "$word": $isFood');
+
         return isFood;
       } else if (response.statusCode == 429) {
-        print('⚠️ Gemini rate limit reached');
+
         return null;
       } else {
-        print('⚠️ Gemini error: ${response.statusCode}');
+
         return null;
       }
     } catch (e) {
-      print('⚠️ Gemini exception: $e');
+
       return null;
     }
   }
@@ -208,8 +206,7 @@ class FoodClassifierService {
   // ============================================
   static Future<bool?> _tryOllama(String word) async {
     try {
-      print('🟣 Trying Ollama for: $word');
-      
+
       final response = await http.post(
         Uri.parse('$_ollamaEndpoint/v1/chat/completions'),
         headers: {'Content-Type': 'application/json'},
@@ -236,14 +233,14 @@ class FoodClassifierService {
             .toLowerCase()
             .trim();
         final isFood = answer.contains('yes');
-        print('✅ Ollama result for "$word": $isFood');
+
         return isFood;
       } else {
-        print('⚠️ Ollama error: ${response.statusCode}');
+
         return null;
       }
     } catch (e) {
-      print('⚠️ Ollama exception: $e');
+
       return null;
     }
   }
@@ -270,11 +267,10 @@ class FoodClassifierService {
       if (DateTime.now().isAfter(expiryDate)) {
         return null; // Cache expired
       }
-      
-      print('💾 Cache hit for: $word');
+
       return entry['isFood'] as bool;
     } catch (e) {
-      print('⚠️ Cache read error: $e');
+
       return null;
     }
   }
@@ -295,9 +291,10 @@ class FoodClassifierService {
       };
       
       await prefs.setString(_cacheKey, jsonEncode(cache));
-      print('💾 Cached result for: $word = $isFood');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Cache write error: $e');
+
     }
   }
 
@@ -305,7 +302,7 @@ class FoodClassifierService {
   static Future<void> clearCache() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_cacheKey);
-    print('🗑️ Cache cleared');
+
   }
 
   /// Get cache statistics

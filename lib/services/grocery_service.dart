@@ -1,30 +1,103 @@
 // lib/services/grocery_service.dart
-// ✅ FIXED: Delete calls now include user_id filter so the Cloudflare
-//           Worker can execute them without returning an error.
+// ✅ Adds category/checked persistence.
+// ✅ saveGroceryList now takes List<GroceryItem> instead of List<String>
+//    so category/checked can be saved along with each item.
+// ✅ Delete calls include user_id filter so the Cloudflare Worker can
+//    execute them without returning an error.
 
 import '../models/grocery_item.dart';
 import 'auth_service.dart';
 import 'database_service_core.dart';
+import 'package:flutter/foundation.dart';
 
 class GroceryService {
+  // ==================================================
+  // CATEGORY SYSTEM (shared source of truth — used by
+  // this service AND the grocery list page)
+  // ==================================================
+  static const List<String> categories = [
+    'Produce',
+    'Dairy & Eggs',
+    'Meat & Seafood',
+    'Bakery',
+    'Pantry',
+    'Frozen',
+    'Beverages',
+    'Snacks',
+    'Household',
+    'Other',
+  ];
+
+  static const Map<String, List<String>> _categoryKeywords = {
+    'Produce': [
+      'apple', 'banana', 'orange', 'lettuce', 'tomato', 'onion', 'carrot',
+      'potato', 'spinach', 'broccoli', 'pepper', 'cucumber', 'avocado',
+      'garlic', 'lemon', 'lime', 'berry', 'berries', 'fruit', 'vegetable',
+      'celery', 'kale', 'mushroom', 'grape',
+    ],
+    'Dairy & Eggs': [
+      'milk', 'cheese', 'yogurt', 'egg', 'butter', 'cream', 'sour cream',
+      'cottage cheese',
+    ],
+    'Meat & Seafood': [
+      'chicken', 'beef', 'pork', 'turkey', 'fish', 'shrimp', 'salmon',
+      'bacon', 'sausage', 'steak', 'tuna', 'tilapia', 'ground beef',
+      'ground turkey',
+    ],
+    'Bakery': [
+      'bread', 'bagel', 'tortilla', 'bun', 'roll', 'muffin', 'croissant',
+      'baguette',
+    ],
+    'Pantry': [
+      'rice', 'pasta', 'flour', 'sugar', 'oil', 'cereal', 'beans',
+      'canned', 'sauce', 'spice', 'salt', 'honey', 'peanut butter', 'oats',
+      'broth', 'stock',
+    ],
+    'Frozen': ['frozen', 'ice cream', 'popsicle'],
+    'Beverages': [
+      'water', 'juice', 'soda', 'coffee', 'tea', 'wine', 'beer',
+      'sparkling',
+    ],
+    'Snacks': [
+      'chips', 'crackers', 'cookie', 'candy', 'nuts', 'popcorn', 'pretzel',
+      'granola bar',
+    ],
+    'Household': [
+      'paper towel', 'toilet paper', 'detergent', 'soap', 'trash bag',
+      'cleaner', 'dish soap', 'sponge', 'foil', 'plastic wrap',
+    ],
+  };
+
+  /// Auto-assigns a category by keyword match. Falls back to 'Other'.
+  /// Shared by the grocery page (manual entry / scanned items) and by
+  /// addRecipeToShoppingList, so there is one place that owns this logic.
+  static String autoAssignCategory(String itemName) {
+    final lower = itemName.toLowerCase();
+    for (final entry in _categoryKeywords.entries) {
+      for (final keyword in entry.value) {
+        if (lower.contains(keyword)) {
+          return entry.key;
+        }
+      }
+    }
+    return 'Other';
+  }
+
   // ==================================================
   // GET GROCERY LIST
   // ==================================================
   static Future<List<GroceryItem>> getGroceryList() async {
-    print('📋 GroceryService.getGroceryList() called');
+debugPrint('📋 GroceryService.getGroceryList() called');
 
     final userId = AuthService.currentUserId;
-    print('👤 Current userId: $userId');
 
     if (userId == null || userId.isEmpty) {
-      print('❌ No userId available - returning empty list');
+
       return [];
     }
 
     try {
-      print('🔍 Querying grocery_items table...');
 
-      // RLS policies will filter by user automatically
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'grocery_items',
@@ -33,16 +106,13 @@ class GroceryService {
         ascending: true,
       );
 
-      print('✅ Worker query response type: ${response.runtimeType}');
-      print('📦 Response data: $response');
-
       if (response == null) {
-        print('⚠️ Worker returned null - returning empty list');
+
         return [];
       }
 
       if (response is! List) {
-        print('⚠️ Worker returned non-list: ${response.runtimeType}');
+
         return [];
       }
 
@@ -51,28 +121,24 @@ class GroceryService {
         try {
           final json = response[i];
           if (json is Map<String, dynamic>) {
-            print('Parsing item $i: $json');
+
             final item = GroceryItem.fromJson(json);
             if (item.isValid()) {
               items.add(item);
             } else {
-              print('⚠️ Skipping invalid item at index $i: $json');
+
             }
           } else {
-            print('⚠️ Item at index $i is not a Map: ${json.runtimeType}');
+
           }
-        } catch (e, stackTrace) {
-          print('⚠️ Error parsing item at index $i: $e');
-          print('Stack trace: $stackTrace');
-          // Continue processing other items
+        // ignore: empty_catches
+        } catch (e) {
+
         }
       }
 
-      print('✅ Successfully loaded ${items.length} grocery items');
       return items;
-    } catch (e, stackTrace) {
-      print('❌ Error in getGroceryList: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
 
       final errorMsg = e.toString();
       if (errorMsg.contains('table') || errorMsg.contains('column')) {
@@ -90,75 +156,63 @@ class GroceryService {
 
   // ==================================================
   // SAVE LIST (Clear + Insert all)
-  // ✅ FIX: Delete now passes user_id filter so the Worker
-  //         knows which rows to remove.
+  // ✅ Now takes List<GroceryItem> so category/checked persist.
   // ==================================================
-  static Future<void> saveGroceryList(List<String> items) async {
-    print('\n========================================');
-    print('💾 GroceryService.saveGroceryList() START');
-    print('========================================');
-    print('📊 Items to save: ${items.length}');
+  static Future<void> saveGroceryList(List<GroceryItem> items) async {
+
+debugPrint('💾 GroceryService.saveGroceryList() START');
 
     final userId = AuthService.currentUserId;
-    print('👤 Current userId: $userId');
 
     if (userId == null || userId.isEmpty) {
-      print('❌ No userId - cannot save');
+
       throw Exception('Please sign in to continue');
     }
 
-    print('📋 Items list: $items');
+debugPrint('📋 Items list: ${items.map((e) => e.item).toList()}');
 
     try {
       // STEP 1: Delete existing items for this user
-      print('\n--- STEP 1: DELETE EXISTING ITEMS ---');
-      print('🗑️ Calling delete query...');
+
       try {
         final deleteResult = await DatabaseServiceCore.workerQuery(
           action: 'delete',
           table: 'grocery_items',
-          // ✅ FIX: explicit user_id filter so the Worker executes the delete
           filters: {'user_id': userId},
         );
-        print('✅ Delete successful');
-        print('📦 Delete result: $deleteResult');
-      } catch (deleteError, deleteStack) {
-        print('❌ DELETE FAILED!');
-        print('❌ Error: $deleteError');
-        print('❌ Stack: $deleteStack');
+
+      } catch (deleteError) {
+
         throw Exception('Failed to clear existing items: $deleteError');
       }
 
       // STEP 2: Insert new items
       if (items.isEmpty) {
-        print('\nℹ️ No items to insert (list is empty)');
-        print('========================================\n');
+debugPrint('\nℹ️ No items to insert (list is empty)');
+
         return;
       }
 
-      print('\n--- STEP 2: INSERT NEW ITEMS ---');
-      print('📝 Inserting ${items.length} items...');
-
       for (var i = 0; i < items.length; i++) {
-        final item = items[i];
+        final entry = items[i];
+        final name = entry.item.trim();
 
-        print('\n➡️ Processing item $i of ${items.length}');
-        print('   Raw value: "$item"');
+debugPrint('   Raw value: "$name" (category: ${entry.category}, checked: ${entry.checked})');
 
-        if (item.trim().isEmpty) {
-          print('   ⚠️ Empty - skipping');
+        if (name.isEmpty) {
+
           continue;
         }
 
         try {
           final data = {
             'user_id': userId,
-            'item_name': item.trim(),
+            'item_name': name,
             'order_index': i,
             'created_at': DateTime.now().toIso8601String(),
+            'category': entry.category.trim().isEmpty ? 'Other' : entry.category.trim(),
+            'checked': entry.checked,
           };
-
-          print('   📤 Data to insert: $data');
 
           final insertResult = await DatabaseServiceCore.workerQuery(
             action: 'insert',
@@ -166,26 +220,13 @@ class GroceryService {
             data: data,
           );
 
-          print('   ✅ Insert successful');
-          print('   📦 Result: $insertResult');
-        } catch (itemError, itemStack) {
-          print('   ❌ INSERT FAILED for item $i!');
-          print('   ❌ Item: "$item"');
-          print('   ❌ Error: $itemError');
-          print('   ❌ Stack: $itemStack');
+        } catch (itemError) {
 
-          // Stop on first error to diagnose
-          throw Exception('Failed to insert item "$item": $itemError');
+          throw Exception('Failed to insert item "$name": $itemError');
         }
       }
 
-      print('\n✅ ALL ITEMS INSERTED SUCCESSFULLY');
-      print('========================================\n');
-    } catch (e, stackTrace) {
-      print('\n❌❌❌ FINAL ERROR IN saveGroceryList ❌❌❌');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
-      print('========================================\n');
+    } catch (e) {
 
       final errorStr = e.toString().toLowerCase();
 
@@ -202,9 +243,11 @@ class GroceryService {
         throw Exception(
             'Permission denied. Check RLS policies in Supabase.');
       } else if (errorStr.contains('column') &&
-          errorStr.contains('item_name')) {
+          (errorStr.contains('item_name') ||
+              errorStr.contains('category') ||
+              errorStr.contains('checked'))) {
         throw Exception(
-            'Database schema error: item_name column issue: $e');
+            'Database schema error: check item_name/category/checked columns exist: $e');
       } else if (errorStr.contains('column')) {
         throw Exception('Database schema error: $e');
       } else if (errorStr.contains('null value') &&
@@ -218,30 +261,25 @@ class GroceryService {
 
   // ==================================================
   // CLEAR LIST
-  // ✅ FIX: Delete now passes user_id filter so the Worker
-  //         knows which rows to remove.
   // ==================================================
   static Future<void> clearGroceryList() async {
-    print('🗑️ GroceryService.clearGroceryList() called');
+debugPrint('🗑️ GroceryService.clearGroceryList() called');
 
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
 
     final userId = AuthService.currentUserId!;
-    print('👤 Clearing for user: $userId');
 
     try {
-      // ✅ FIX: explicit user_id filter so the Worker executes the delete
       await DatabaseServiceCore.workerQuery(
         action: 'delete',
         table: 'grocery_items',
         filters: {'user_id': userId},
       );
-      print('✅ Successfully cleared grocery list');
-    } catch (e, stackTrace) {
-      print('❌ Error in clearGroceryList: $e');
-      print('Stack trace: $stackTrace');
+
+    } catch (e) {
+
       throw Exception('Failed to clear grocery list: $e');
     }
   }
@@ -251,7 +289,7 @@ class GroceryService {
   // ==================================================
   static Future<void> addToGroceryList(String item,
       {String? quantity}) async {
-    print(
+    debugPrint(
         '➕ GroceryService.addToGroceryList() called: "$item" (qty: $quantity)');
 
     if (AuthService.currentUserId == null) {
@@ -259,18 +297,14 @@ class GroceryService {
     }
 
     final userId = AuthService.currentUserId!;
-    print('👤 Adding for user: $userId');
 
     try {
-      // Get current items to determine order index
       final currentItems = await getGroceryList();
       final newOrderIndex = currentItems.length;
 
       final formatted = quantity != null && quantity.isNotEmpty
           ? '$quantity x $item'
           : item;
-
-      print('📤 Adding item: "$formatted" at index $newOrderIndex');
 
       await DatabaseServiceCore.workerQuery(
         action: 'insert',
@@ -280,13 +314,13 @@ class GroceryService {
           'item_name': formatted.trim(),
           'order_index': newOrderIndex,
           'created_at': DateTime.now().toIso8601String(),
+          'category': autoAssignCategory(formatted),
+          'checked': false,
         },
       );
 
-      print('✅ Successfully added item to grocery list');
-    } catch (e, stackTrace) {
-      print('❌ Error in addToGroceryList: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
+
       throw Exception('Failed to add item: $e');
     }
   }
@@ -346,10 +380,8 @@ class GroceryService {
   }
 
   static bool _similar(String a, String b) {
-    final ca =
-        a.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
-    final cb =
-        b.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    final ca = a.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
+    final cb = b.toLowerCase().replaceAll(RegExp(r'[^a-z\s]'), '').trim();
     if (ca == cb) return true;
     if (ca.contains(cb) || cb.contains(ca)) return true;
     return false;
@@ -357,16 +389,17 @@ class GroceryService {
 
   // ==================================================
   // ADD RECIPE INGREDIENTS → SHOPPING LIST
+  // ✅ Updated for List<GroceryItem> saveGroceryList signature.
   // ==================================================
   static Future<Map<String, dynamic>> addRecipeToShoppingList(
     String recipeName,
     String ingredients,
   ) async {
-    print('📝 Adding recipe "$recipeName" ingredients to shopping list');
 
     if (AuthService.currentUserId == null) {
       throw Exception('Please sign in to continue');
     }
+    final userId = AuthService.currentUserId!;
 
     try {
       final current = await getGroceryList();
@@ -375,7 +408,6 @@ class GroceryService {
           .toList();
 
       final newItems = _parseIngredients(ingredients);
-      print('🔍 Parsed ${newItems.length} ingredients from recipe');
 
       final added = <String>[];
       final skipped = <String>[];
@@ -407,15 +439,20 @@ class GroceryService {
         }
       }
 
-      final updatedList = [
-        ...current.map((i) => i.item),
-        ...added,
-      ];
+      final addedItems = added
+          .map((name) => GroceryItem(
+                userId: userId,
+                item: name,
+                orderIndex: 0,
+                createdAt: DateTime.now(),
+                category: autoAssignCategory(name),
+                checked: false,
+              ))
+          .toList();
+
+      final updatedList = <GroceryItem>[...current, ...addedItems];
 
       await saveGroceryList(updatedList);
-
-      print(
-          '✅ Added ${added.length} items, skipped ${skipped.length} duplicates');
 
       return {
         'added': added.length,
@@ -424,9 +461,8 @@ class GroceryService {
         'skippedItems': skipped,
         'recipeName': recipeName,
       };
-    } catch (e, stackTrace) {
-      print('❌ Error in addRecipeToShoppingList: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
+
       throw Exception('Failed to add recipe ingredients: $e');
     }
   }
@@ -439,7 +475,7 @@ class GroceryService {
       final items = await getGroceryList();
       return items.length;
     } catch (e) {
-      print('⚠️ Error getting shopping list count: $e');
+
       return 0;
     }
   }
@@ -449,11 +485,10 @@ class GroceryService {
   // ==================================================
   static Future<bool> testDatabaseConnection() async {
     try {
-      print('🧪 Testing database connection...');
 
       final userId = AuthService.currentUserId;
       if (userId == null) {
-        print('❌ No user ID - cannot test connection');
+
         return false;
       }
 
@@ -464,11 +499,9 @@ class GroceryService {
         limit: 1,
       );
 
-      print('✅ Database connection test successful');
-      print('Response type: ${response.runtimeType}');
       return true;
     } catch (e) {
-      print('❌ Database connection test failed: $e');
+
       return false;
     }
   }

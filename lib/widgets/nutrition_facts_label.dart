@@ -133,7 +133,7 @@ class NutritionFactsLabel extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              '${servings} serving${servings! > 1 ? 's' : ''} per container',
+              '$servings serving${servings! > 1 ? 's' : ''} per container',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -167,7 +167,7 @@ class NutritionFactsLabel extends StatelessWidget {
           ),
         ),
         Text(
-          '${nutrition.calories.toStringAsFixed(0)}',
+          nutrition.calories.toStringAsFixed(0),
           style: TextStyle(
             fontSize: 32,
             fontWeight: FontWeight.w900,
@@ -195,10 +195,8 @@ class NutritionFactsLabel extends StatelessWidget {
         // Saturated Fat (indented)
         _buildIndentedNutrient(
           'Saturated Fat',
-          '${nutrition.saturatedFat?.toStringAsFixed(1) ?? '0'}g',
-          nutrition.saturatedFat != null 
-            ? _calculateDV(nutrition.saturatedFat!, 20) 
-            : null,
+          '${nutrition.saturatedFat.toStringAsFixed(1)}g',
+          _calculateDV(nutrition.saturatedFat, 20),
           'MACRO',
         ),
         
@@ -337,12 +335,12 @@ class NutritionFactsLabel extends StatelessWidget {
           'MICRO',
         ),
 
-        // OTHER NUTRIENTS (if present)
+        // other NUTRIENTS (if present)
         if (_hasOtherNutrients()) ...[
           const SizedBox(height: 12),
           const Divider(thickness: 2, color: Colors.grey, height: 12),
           const SizedBox(height: 8),
-          _buildSectionHeader('OTHER NUTRIENTS'),
+          _buildSectionHeader('other NUTRIENTS'),
           const SizedBox(height: 8),
           
           if (nutrition.vitaminA != null) ...[

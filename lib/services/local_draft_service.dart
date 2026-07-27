@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class LocalDraftService {
   static const String _draftKey = "local_recipe_drafts";
@@ -36,7 +37,7 @@ class LocalDraftService {
       try {
         drafts = jsonDecode(existing);
       } catch (e) {
-        print('⚠️ Error decoding existing drafts: $e');
+
         drafts = {};
       }
     }
@@ -53,7 +54,7 @@ class LocalDraftService {
     };
 
     await prefs.setString(_draftKey, jsonEncode(drafts));
-    print('✅ Draft saved: $capitalizedName');
+
   }
 
   /// Get all drafts as a Map (key = recipe name, value = draft data)
@@ -66,7 +67,7 @@ class LocalDraftService {
     try {
       return jsonDecode(data);
     } catch (e) {
-      print('⚠️ Error decoding drafts: $e');
+
       return {};
     }
   }
@@ -110,8 +111,7 @@ class LocalDraftService {
     if (drafts.containsKey(capitalizedName)) {
       return drafts[capitalizedName];
     }
-    
-    print('⚠️ Draft not found: $name');
+
     return null;
   }
 
@@ -131,7 +131,7 @@ class LocalDraftService {
       try {
         drafts = jsonDecode(existing);
       } catch (e) {
-        print('⚠️ Error decoding existing drafts: $e');
+
         drafts = {};
       }
     }
@@ -146,7 +146,7 @@ class LocalDraftService {
     if (id != name) {
       drafts.remove(id);
       drafts.remove(_capitalizeTitle(id));
-      print('🔄 Draft renamed from "$id" to "$name"');
+
     }
     
     // ✅ Capitalize the recipe name before saving
@@ -161,7 +161,7 @@ class LocalDraftService {
     };
     
     await prefs.setString(_draftKey, jsonEncode(drafts));
-    print('✅ Draft updated: $capitalizedName');
+
   }
 
   /// ✅ Check if a draft exists by name
@@ -186,7 +186,7 @@ class LocalDraftService {
     final drafts = await getDrafts();
     
     if (drafts.isEmpty) {
-      print('⚠️ No drafts to delete');
+
       return;
     }
     
@@ -196,9 +196,9 @@ class LocalDraftService {
     
     if (removed || removedCap) {
       await prefs.setString(_draftKey, jsonEncode(drafts));
-      print('✅ Draft deleted: $name');
+
     } else {
-      print('⚠️ Draft not found for deletion: $name');
+
     }
   }
 
@@ -206,7 +206,7 @@ class LocalDraftService {
   static Future<void> clearDrafts() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_draftKey);
-    print('🗑️ All drafts cleared');
+
   }
 
   /// ✅ Get draft names only (for quick lookups)
@@ -231,8 +231,7 @@ class LocalDraftService {
       ingredients: draft['ingredients'] ?? '',
       directions: draft['directions'] ?? '',
     );
-    
-    print('✅ Draft duplicated: $originalName → $newName');
+
   }
 
   /// ✅ Rename a draft (preserves creation date)
@@ -258,8 +257,7 @@ class LocalDraftService {
       ingredients: draft['ingredients'] ?? '',
       directions: draft['directions'] ?? '',
     );
-    
-    print('✅ Draft renamed: $oldName → $newName');
+
   }
 
   /// ✅ Export all drafts as JSON string (for backup)
@@ -278,16 +276,16 @@ class LocalDraftService {
       if (overwrite) {
         // Replace all existing drafts
         await prefs.setString(_draftKey, jsonString);
-        print('✅ Drafts imported (overwrite): ${importedDrafts.length} drafts');
+debugPrint('✅ Drafts imported (overwrite): ${importedDrafts.length} drafts');
       } else {
         // Merge with existing drafts
         final existingDrafts = await getDrafts();
         existingDrafts.addAll(importedDrafts);
         await prefs.setString(_draftKey, jsonEncode(existingDrafts));
-        print('✅ Drafts imported (merged): ${importedDrafts.length} new drafts');
+debugPrint('✅ Drafts imported (merged): ${importedDrafts.length} new drafts');
       }
     } catch (e) {
-      print('❌ Error importing drafts: $e');
+
       throw Exception('Invalid draft data format');
     }
   }

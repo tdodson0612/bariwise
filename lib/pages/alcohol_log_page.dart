@@ -59,10 +59,12 @@ class _AlcoholLogPageState extends State<AlcoholLogPage>
   Future<void> _loadToday() async {
     try {
       final entries = await AlcoholService.getTodayLog();
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _todayEntries = entries;
         _loadingToday = false;
       });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingToday = false);
       AppConfig.debugPrint('Alcohol today load error: $e');
@@ -76,12 +78,14 @@ class _AlcoholLogPageState extends State<AlcoholLogPage>
         AlcoholService.getWeeklyStandardDrinks(),
         AlcoholService.getWeeklyTotalOz(),
       ]);
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _weeklyData = data as Map<String, double>;
         _weeklyStdDrinks = stdDrinks as double;
         _weeklyPureOz = pureOz as double;
         _loadingWeekly = false;
       });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingWeekly = false);
     }

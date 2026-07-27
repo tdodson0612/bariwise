@@ -73,7 +73,7 @@ class _BariNotificationSettingsCardState
               subtitle: Text(
                   _hydrEnabled ? 'Every $_hydrInterval hours (8am–9pm)' : 'Off'),
               value: _hydrEnabled,
-              activeColor: Colors.blue.shade600,
+              activeThumbColor: Colors.blue.shade600,
               contentPadding: EdgeInsets.zero,
               onChanged: (val) async {
                 setState(() => _hydrEnabled = val);
@@ -112,7 +112,7 @@ class _BariNotificationSettingsCardState
               title: const Text('Daily Check-in (8pm)'),
               subtitle: const Text('Reminder to log symptoms & supplements'),
               value: _checkinEnabled,
-              activeColor: Colors.orange.shade700,
+              activeThumbColor: Colors.orange.shade700,
               contentPadding: EdgeInsets.zero,
               onChanged: (val) async {
                 setState(() => _checkinEnabled = val);

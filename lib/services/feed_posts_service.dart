@@ -299,7 +299,7 @@ class FeedPostsService {
         return [];
       }
 
-      return List<Map<String, dynamic>>.from(result as List);
+      return List<Map<String, dynamic>>.from(result);
     } catch (e) {
       AppConfig.debugPrint('❌ Error fetching public posts: $e');
       return [];
@@ -327,7 +327,7 @@ class FeedPostsService {
         );
 
         if (result != null && (result as List).isNotEmpty) {
-          friendsPosts.addAll(List<Map<String, dynamic>>.from(result as List));
+          friendsPosts.addAll(List<Map<String, dynamic>>.from(result));
         }
       }
     } catch (e) {
@@ -388,7 +388,7 @@ class FeedPostsService {
         return [];
       }
 
-      final allPosts = List<Map<String, dynamic>>.from(result as List);
+      final allPosts = List<Map<String, dynamic>>.from(result);
       return _applyPagination(allPosts, limit: limit, offset: offset);
     } catch (e) {
       AppConfig.debugPrint('❌ Error loading public posts: $e');
@@ -466,7 +466,7 @@ class FeedPostsService {
         throw Exception('Post not found');
       }
 
-      final post = (postCheck as List).first;
+      final post = (postCheck).first;
       final postOwnerId = post['user_id']?.toString();
       
       if (postOwnerId != userId) {
@@ -521,7 +521,7 @@ class FeedPostsService {
         );
         
         if (postResult != null && (postResult as List).isNotEmpty) {
-          final post = (postResult as List).first;
+          final post = (postResult).first;
           final postOwnerId = post['user_id']?.toString();
           
           if (postOwnerId != null && username != null) {
@@ -609,7 +609,7 @@ class FeedPostsService {
         return 0;
       }
 
-      return (result as List).length;
+      return (result).length;
     } catch (e) {
       AppConfig.debugPrint('❌ Error getting like count: $e');
       return 0;
@@ -635,7 +635,7 @@ class FeedPostsService {
         return [];
       }
 
-      final comments = List<Map<String, dynamic>>.from(result as List);
+      final comments = List<Map<String, dynamic>>.from(result);
 
       // 🔥 NEW: Load replies for each comment
       for (var comment in comments) {
@@ -669,7 +669,7 @@ class FeedPostsService {
         return [];
       }
 
-      final replies = List<Map<String, dynamic>>.from(result as List);
+      final replies = List<Map<String, dynamic>>.from(result);
 
       // Load like data for replies
       for (var reply in replies) {
@@ -747,7 +747,7 @@ class FeedPostsService {
           );
 
           if (parentResult != null && (parentResult as List).isNotEmpty) {
-            final parentComment = (parentResult as List).first;
+            final parentComment = (parentResult).first;
             final parentOwnerId = parentComment['user_id']?.toString();
 
             if (parentOwnerId != null && parentOwnerId != userId) {
@@ -771,7 +771,7 @@ class FeedPostsService {
           );
           
           if (postResult != null && (postResult as List).isNotEmpty) {
-            final post = (postResult as List).first;
+            final post = (postResult).first;
             final postOwnerId = post['user_id']?.toString();
             
             if (postOwnerId != null) {
@@ -852,7 +852,7 @@ class FeedPostsService {
         );
         
         if (commentResult != null && (commentResult as List).isNotEmpty) {
-          final comment = (commentResult as List).first;
+          final comment = (commentResult).first;
           final commentOwnerId = comment['user_id']?.toString();
           final postId = comment['post_id']?.toString();
           
@@ -945,7 +945,7 @@ class FeedPostsService {
         return 0;
       }
 
-      return (result as List).length;
+      return (result).length;
     } catch (e) {
       AppConfig.debugPrint('❌ Error getting comment like count: $e');
       return 0;
@@ -983,7 +983,7 @@ class FeedPostsService {
         );
         
         if (postResult != null && (postResult as List).isNotEmpty) {
-          final post = (postResult as List).first;
+          final post = (postResult).first;
           final postOwnerId = post['user_id']?.toString();
           
           if (postOwnerId != null && username != null) {
@@ -1082,7 +1082,7 @@ class FeedPostsService {
         return [];
       }
 
-      final savedPostIds = (savedResult as List)
+      final savedPostIds = (savedResult)
           .map((save) => save['post_id']?.toString())
           .where((id) => id != null)
           .toSet();
@@ -1102,7 +1102,7 @@ class FeedPostsService {
         );
 
         if (postResult != null && (postResult as List).isNotEmpty) {
-          posts.add((postResult as List).first);
+          posts.add((postResult).first);
         }
       }
 
@@ -1142,7 +1142,7 @@ class FeedPostsService {
         return [];
       }
 
-      final allPosts = List<Map<String, dynamic>>.from(result as List);
+      final allPosts = List<Map<String, dynamic>>.from(result);
       
       return _applyPagination(allPosts, limit: limit, offset: offset);
     } catch (e) {

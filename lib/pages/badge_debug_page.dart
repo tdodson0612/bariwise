@@ -96,18 +96,15 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
 
   Future<void> _forceClearAllCaches() async {
     try {
-      print('🧹 FORCE CLEARING ALL CACHES...');
-      
+
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys().toList();
       
       for (final key in allKeys) {
         await prefs.remove(key);
-        print('🗑️ Removed: $key');
+
       }
-      
-      print('✅ ALL CACHES CLEARED');
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('All caches cleared! Refreshing...'),
@@ -137,8 +134,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
 
   Future<void> _forceRefreshBadges() async {
     try {
-      print('🔄 FORCE REFRESHING BADGES...');
-      
+
       await MessagingService.refreshUnreadBadge();
       
       ScaffoldMessenger.of(context).showSnackBar(

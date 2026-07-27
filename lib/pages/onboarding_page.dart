@@ -1,7 +1,8 @@
 // lib/pages/onboarding_page.dart
-// Extended with full bariatric intake flow (Section 7 — User Intake Workspace).
+// Extended with full bariatric intake flow (Section 6 — User Intake Workspace).
 // Slides 1–4: existing marketing intro (unchanged).
-// Slides 5–9: intake — surgery type, surgery date, height, weight, restrictions + supplements.
+// Slides 5–10: intake — surgery type, surgery date, height, weight, restrictions +
+// supplements, and a final Review Selections slide.
 // All intake data saved to Supabase profiles table via ProfileService / workerQuery,
 // except dietary restrictions + supplement baseline which are UI/UX-only phase and saved
 // to SharedPreferences only.
@@ -9,7 +10,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/profile_service.dart';
 import '../services/auth_service.dart';
 import '../services/database_service_core.dart';
@@ -18,8 +18,6 @@ import '../config/app_config.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA MODELS
 // ─────────────────────────────────────────────────────────────────────────────
-
-enum _SlideType { marketing, intake }
 
 class _MarketingSlide {
   final IconData icon;
@@ -107,8 +105,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
     ),
   ];
 
-  // Total slides = 4 marketing + 5 intake
-  int get _totalSlides => _marketing.length + 5;
+  // Total slides = 4 marketing + 6 intake (5 data-entry + 1 review)
+  int get _totalSlides => _marketing.length + 6;
   bool get _isIntakeSlide => _currentPage >= _marketing.length;
   int get _intakeIndex => _currentPage - _marketing.length;
 
@@ -254,6 +252,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
         }
         return null;
       case 4: // Restrictions + supplements — both optional
+        return null;
+      case 5: // Review — nothing to validate, just confirm
         return null;
       default:
         return null;
@@ -441,7 +441,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             Expanded(
               child: Center(
                 child: Text(
-                  'Step ${_intakeIndex + 1} of 5',
+                  'Step ${_intakeIndex + 1} of 6',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -610,6 +610,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       case 2: return _buildHeightSlide();
       case 3: return _buildWeightSlide();
       case 4: return _buildRestrictionsSlide();
+      case 5: return _buildReviewSlide();
       default: return const SizedBox.shrink();
     }
   }
@@ -911,7 +912,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Common range: 4\'10\" – 6\'6\"',
+              'Common range: 4\'10" – 6\'6"',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
           ] else ...[
@@ -1212,6 +1213,162 @@ class _OnboardingPageState extends State<OnboardingPage> {
     );
   }
 
+  // ── Intake Slide 6: Review Selections ─────────────────────────────────────
+
+  Widget _buildReviewSlide() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _intakeHeader(
+            icon: Icons.fact_check_rounded,
+            iconColor: Colors.orange.shade700,
+            title: 'Review Your Info',
+            subtitle:
+                'Double-check everything looks right before we get started.',
+          ),
+          const SizedBox(height: 20),
+          _reviewRow(
+            label: 'Surgery Type',
+            value: _surgeryType ?? 'Not set',
+            onEdit: () => _jumpToIntakeSlide(0),
+          ),
+          _reviewRow(
+            label: 'Surgery Date',
+            value: _surgeryDate != null
+                ? '${_surgeryDate!.month}/${_surgeryDate!.day}/${_surgeryDate!.year}'
+                : 'Not set',
+            onEdit: () => _jumpToIntakeSlide(1),
+          ),
+          _reviewRow(
+            label: 'Height',
+            value: _heightSummary(),
+            onEdit: () => _jumpToIntakeSlide(2),
+          ),
+          _reviewRow(
+            label: 'Weight',
+            value: _weightSummary(),
+            onEdit: () => _jumpToIntakeSlide(3),
+          ),
+          _reviewRow(
+            label: 'Dietary Restrictions',
+            value: _dietaryRestrictions.isEmpty
+                ? 'None selected'
+                : _dietaryRestrictions.join(', '),
+            onEdit: () => _jumpToIntakeSlide(4),
+          ),
+          _reviewRow(
+            label: 'Supplements',
+            value: _supplements.isEmpty
+                ? 'None selected'
+                : _supplements.join(', '),
+            onEdit: () => _jumpToIntakeSlide(4),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline,
+                    size: 16, color: Colors.grey.shade600),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tap any section to make changes. Everything here can also be updated later in Settings.',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reviewRow({
+    required String label,
+    required String value,
+    required VoidCallback onEdit,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600)),
+                const SizedBox(height: 4),
+                Text(value,
+                    style: const TextStyle(
+                        fontSize: 14, color: Colors.black87)),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onEdit,
+            style: TextButton.styleFrom(
+                padding: EdgeInsets.zero, minimumSize: const Size(40, 32)),
+            child: Text('Edit',
+                style: TextStyle(
+                    color: Colors.orange.shade700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _heightSummary() {
+    if (_heightUnit == 'imperial') {
+      final feet = _feetCtrl.text.trim();
+      final inches = _inchesCtrl.text.trim();
+      if (feet.isEmpty && inches.isEmpty) return 'Not set';
+      return '$feet\' $inches"';
+    } else {
+      final cm = _cmCtrl.text.trim();
+      return cm.isEmpty ? 'Not set' : '$cm cm';
+    }
+  }
+
+  String _weightSummary() {
+    final current = _currentWeightCtrl.text.trim();
+    final start = _startWeightCtrl.text.trim();
+    if (current.isEmpty && start.isEmpty) return 'Not set';
+    final parts = <String>[];
+    if (start.isNotEmpty) parts.add('Starting: $start $_weightUnit');
+    if (current.isNotEmpty) parts.add('Current: $current $_weightUnit');
+    return parts.join(' · ');
+  }
+
+  void _jumpToIntakeSlide(int index) {
+    _pageController.animateToPage(
+      _marketing.length + index,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+    );
+  }
+
   // ── Shared intake widgets ─────────────────────────────────────────────────
 
   Widget _intakeHeader({
@@ -1228,7 +1385,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.1),
+                color: iconColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: iconColor, size: 28),

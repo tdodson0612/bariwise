@@ -36,9 +36,10 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
   Future<void> _clearIOSBadge() async {
     try {
       await platform.invokeMethod('clearBadge');
-      print('✅ iOS badge cleared from messages page');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error clearing iOS badge: $e');
+
     }
   }
 
@@ -555,16 +556,6 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
     }
   }
 
-  /// Invalidate chats cache when returning from chat (new message sent)
-  static Future<void> invalidateChatsCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('user_chats');
-    } catch (e) {
-      print('Error invalidating chats cache: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     // 🔥 Calculate unread notification count
@@ -761,7 +752,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
         leading: Stack(
           children: [
             CircleAvatar(
-              backgroundColor: iconColor.withOpacity(0.2),
+              backgroundColor: iconColor.withValues(alpha: 0.2),
               child: Icon(icon, color: iconColor, size: 20),
             ),
             if (!isRead)

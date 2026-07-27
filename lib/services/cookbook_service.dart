@@ -6,7 +6,7 @@ import 'database_service_core.dart';
 import 'auth_service.dart';
 
 class CookbookService {
-  static const String _CACHE_KEY = 'cache_cookbook_recipes';
+  static const String _cacheKey = 'cache_cookbook_recipes';
 
   // Get all cookbook recipes for current user
   static Future<List<CookbookRecipe>> getCookbookRecipes() async {
@@ -15,7 +15,7 @@ class CookbookService {
 
     try {
       // Try cache first
-      final cached = await DatabaseServiceCore.getCachedData(_CACHE_KEY);
+      final cached = await DatabaseServiceCore.getCachedData(_cacheKey);
       if (cached != null) {
         final list = jsonDecode(cached) as List;
         return list.map((e) => CookbookRecipe.fromJson(e)).toList();
@@ -36,7 +36,7 @@ class CookbookService {
           .toList();
 
       // Cache for next time
-      await DatabaseServiceCore.cacheData(_CACHE_KEY, jsonEncode(response));
+      await DatabaseServiceCore.cacheData(_cacheKey, jsonEncode(response));
 
       return recipes;
     } catch (e) {
@@ -149,7 +149,7 @@ class CookbookService {
       final row = (response as List).first;
 
       // Clear cache
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
 
       return CookbookRecipe.fromJson(row);
       
@@ -183,7 +183,7 @@ class CookbookService {
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
       
     } catch (e) {
       AppConfig.debugPrint('❌ Error removing from cookbook: $e');
@@ -233,7 +233,7 @@ class CookbookService {
         },
       );
 
-      await DatabaseServiceCore.clearCache(_CACHE_KEY);
+      await DatabaseServiceCore.clearCache(_cacheKey);
       
     } catch (e) {
       AppConfig.debugPrint('❌ Error updating notes: $e');

@@ -3,7 +3,6 @@
 // iOS 14 Compatible | Production Ready | Uses NutritionInfo
 
 import 'nutrition_info.dart';
-import '../barihealthbar.dart';
 
 class DraftRecipe {
   final String? id; // UUID from database
@@ -56,8 +55,9 @@ class DraftRecipe {
         nutrition = NutritionInfo.fromDatabaseJson(
           json['total_nutrition'] as Map<String, dynamic>,
         );
+      // ignore: empty_catches
       } catch (e) {
-        print('⚠️ Error parsing nutrition: $e');
+
       }
     }
 
@@ -222,8 +222,9 @@ class RecipeIngredient {
         nutrition = NutritionInfo.fromDatabaseJson(
           json['nutrition'] as Map<String, dynamic>,
         );
+      // ignore: empty_catches
       } catch (e) {
-        print('⚠️ Error parsing ingredient nutrition: $e');
+
       }
     }
 

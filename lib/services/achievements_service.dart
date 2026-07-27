@@ -6,7 +6,6 @@ import '../config/app_config.dart';         // auth + user profile
 import 'database_service_core.dart';     // workerQuery + cache
 import 'xp_reward_service.dart';
 
-
 class AchievementsService {
 
   // ==================================================
@@ -132,7 +131,6 @@ class AchievementsService {
           badgeId,
         );
       }
-
 
       return true;
     } catch (e) {

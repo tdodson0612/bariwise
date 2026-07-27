@@ -179,7 +179,7 @@ class _AddToCookbookButtonState extends State<AddToCookbookButton> {
           : Icon(icon, color: Colors.white),
       style: IconButton.styleFrom(
         backgroundColor: color,
-        disabledBackgroundColor: color.withOpacity(0.6),
+        disabledBackgroundColor: color.withValues(alpha: 0.6),
         padding: const EdgeInsets.all(8),
       ),
       tooltip: onPressed == null ? 'In Cookbook' : 'Add to Cookbook',
@@ -210,7 +210,7 @@ class _AddToCookbookButtonState extends State<AddToCookbookButton> {
       ),
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
-        disabledBackgroundColor: color.withOpacity(0.6),
+        disabledBackgroundColor: color.withValues(alpha: 0.6),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),

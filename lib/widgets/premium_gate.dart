@@ -257,7 +257,7 @@ class PremiumGate extends StatelessWidget {
         ),
         // Overlay with upgrade prompt
         Container(
-          color: Colors.white.withOpacity(0.95),
+          color: Colors.white.withValues(alpha: 0.95),
           child: _buildUpgradePrompt(context),
         ),
       ],

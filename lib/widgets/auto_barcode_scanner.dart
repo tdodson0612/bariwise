@@ -282,7 +282,7 @@ class _AutoBarcodeScannerState extends State<AutoBarcodeScanner> {
             right: 0,
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.black.withValues(alpha: 0.6),
               child: Text(
                 _isCapturing 
                     ? 'Capturing photo...'
@@ -321,7 +321,7 @@ class _AutoBarcodeScannerState extends State<AutoBarcodeScanner> {
           // Processing indicator
           if (_isCapturing)
             Container(
-              color: Colors.black.withOpacity(0.7),
+              color: Colors.black.withValues(alpha: 0.7),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

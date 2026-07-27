@@ -45,8 +45,9 @@ class ScanButtonWithRestriction extends StatelessWidget {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_premiumCacheKey, isPremium);
       await prefs.setInt(_premiumCacheTimeKey, DateTime.now().millisecondsSinceEpoch);
+    // ignore: empty_catches
     } catch (e) {
-      print('Error caching premium status: $e');
+
     }
   }
 
@@ -91,7 +92,7 @@ class ScanButtonWithRestriction extends StatelessWidget {
       return scanCount < 3; // Free tier limit
       
     } catch (e) {
-      print('Error checking local scan count: $e');
+
       return false;
     }
   }
@@ -102,8 +103,9 @@ class ScanButtonWithRestriction extends StatelessWidget {
       final prefs = await SharedPreferences.getInstance();
       final scanCount = prefs.getInt(_scanCountKey) ?? 0;
       await prefs.setInt(_scanCountKey, scanCount + 1);
+    // ignore: empty_catches
     } catch (e) {
-      print('Error incrementing scan count: $e');
+
     }
   }
 

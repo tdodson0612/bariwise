@@ -77,9 +77,10 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _clearIOSBadge() async {
     try {
       await platform.invokeMethod('clearBadge');
-      print('✅ iOS badge cleared');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error clearing iOS badge: $e');
+
     }
   }
 
@@ -88,9 +89,10 @@ class _ChatPageState extends State<ChatPage> {
       await MenuIconWithBadge.invalidateCache();
       await AppDrawer.invalidateUnreadCache();
       MenuIconWithBadge.globalKey.currentState?.refresh();
-      print('✅ Badge refreshed after marking messages as read');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error refreshing badge: $e');
+
     }
   }
 
@@ -100,9 +102,10 @@ class _ChatPageState extends State<ChatPage> {
         await MenuIconWithBadge.invalidateCache();
         await AppDrawer.invalidateUnreadCache();
         MenuIconWithBadge.globalKey.currentState?.refresh();
-        print('✅ Final cleanup completed');
+
+      // ignore: empty_catches
       } catch (e) {
-        print('⚠️ Error in final cleanup: $e');
+
       }
     });
   }
@@ -110,9 +113,10 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _markMessagesAsRead() async {
     try {
       await MessagingService.markMessagesAsReadFrom(widget.friendId);
-      print('✅ Messages marked as read for friend: ${widget.friendId}');
+
+    // ignore: empty_catches
     } catch (e) {
-      print('⚠️ Error marking messages as read: $e');
+
     }
   }
 
@@ -182,7 +186,7 @@ class _ChatPageState extends State<ChatPage> {
             onRetry: _loadMessages,
           );
         } else {
-          print('Failed to refresh messages from server, using cache: $e');
+
         }
       }
     }
@@ -198,8 +202,9 @@ class _ChatPageState extends State<ChatPage> {
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
       }
+    // ignore: empty_catches
     } catch (e) {
-      print('Error loading messages from cache: $e');
+
     }
     return [];
   }
@@ -210,8 +215,9 @@ class _ChatPageState extends State<ChatPage> {
       final prefs = await SharedPreferences.getInstance();
       final jsonString = json.encode(messages);
       await prefs.setString(_cacheKey, jsonString);
+    // ignore: empty_catches
     } catch (e) {
-      print('Error saving messages to cache: $e');
+
     }
   }
 
@@ -313,7 +319,7 @@ class _ChatPageState extends State<ChatPage> {
         return DateFormat('MMM d, y').format(localDateTime);
       }
     } catch (e) {
-      print('Error formatting time: $e');
+
       return '';
     }
   }
@@ -444,15 +450,17 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        await _clearIOSBadge();
-        await MenuIconWithBadge.invalidateCache();
-        await AppDrawer.invalidateUnreadCache();
-        await Future.delayed(const Duration(milliseconds: 200));
-        MenuIconWithBadge.globalKey.currentState?.refresh();
-        print('✅ Leaving chat, badge refreshed and iOS badge cleared');
-        return true;
+    // ignore: deprecated_member_use
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) async {
+        if (didPop) {
+          await _clearIOSBadge();
+          await MenuIconWithBadge.invalidateCache();
+          await AppDrawer.invalidateUnreadCache();
+          await Future.delayed(const Duration(milliseconds: 200));
+          MenuIconWithBadge.globalKey.currentState?.refresh();
+        }
       },
       child: Scaffold(
         appBar: AppBar(

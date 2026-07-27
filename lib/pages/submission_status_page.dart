@@ -113,7 +113,7 @@ class _SubmissionStatusPageState extends State<SubmissionStatusPage> {
 
       if (confirmed != true) return;
 
-      final newSubmissionId = await SubmittedRecipesService.resubmitRejectedRecipe(submissionId);
+      await SubmittedRecipesService.resubmitRejectedRecipe(submissionId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -350,7 +350,7 @@ class _SubmissionStatusPageState extends State<SubmissionStatusPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: _getScoreColor(report.healthScore!).withOpacity(0.1),
+              color: _getScoreColor(report.healthScore!).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
                 color: _getScoreColor(report.healthScore!),

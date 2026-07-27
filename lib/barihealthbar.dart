@@ -346,7 +346,7 @@ class BariHealthCalculator {
   }
 
   // ============================================
-  // SLEEVE GASTRECTOMY
+  // sleeve GASTRECTOMY
   // ============================================
   static int _calculateSleeveGastrectomyScore({
     required double fat,
@@ -654,7 +654,7 @@ class BariScanResultsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -667,10 +667,10 @@ class BariScanResultsCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _scoreColor.withOpacity(0.08),
+              color: _scoreColor.withValues(alpha: 0.08),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               border: Border(
-                bottom: BorderSide(color: _scoreColor.withOpacity(0.2), width: 1),
+                bottom: BorderSide(color: _scoreColor.withValues(alpha: 0.2), width: 1),
               ),
             ),
             child: Row(
@@ -685,7 +685,7 @@ class BariScanResultsCard extends StatelessWidget {
                     border: Border.all(color: _scoreColor, width: 3),
                     boxShadow: [
                       BoxShadow(
-                        color: _scoreColor.withOpacity(0.2),
+                        color: _scoreColor.withValues(alpha: 0.2),
                         blurRadius: 8,
                         spreadRadius: 1,
                       ),
@@ -706,7 +706,7 @@ class BariScanResultsCard extends StatelessWidget {
                         '/100',
                         style: TextStyle(
                           fontSize: 10,
-                          color: _scoreColor.withOpacity(0.7),
+                          color: _scoreColor.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -969,12 +969,12 @@ class _NutrientTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: tileColor.withOpacity(0.07),
+        color: tileColor.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isDanger
-              ? tileColor.withOpacity(0.5)
-              : tileColor.withOpacity(0.2),
+              ? tileColor.withValues(alpha: 0.5)
+              : tileColor.withValues(alpha: 0.2),
         ),
       ),
       child: Column(
@@ -1013,7 +1013,7 @@ class _NutrientTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: ratio,
-              backgroundColor: tileColor.withOpacity(0.15),
+              backgroundColor: tileColor.withValues(alpha: 0.15),
               valueColor: AlwaysStoppedAnimation<Color>(tileColor),
               minHeight: 5,
             ),
@@ -1039,9 +1039,9 @@ class _ProteinTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.07),
+        color: color.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -1094,7 +1094,7 @@ class _ProteinTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: ratio,
-                    backgroundColor: color.withOpacity(0.15),
+                    backgroundColor: color.withValues(alpha: 0.15),
                     valueColor: AlwaysStoppedAnimation<Color>(color),
                     minHeight: 5,
                   ),

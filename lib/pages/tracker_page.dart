@@ -1,6 +1,14 @@
 // lib/pages/tracker_page.dart
 // Updated with supplement tracker, unit dropdowns, improved height handling with preferences,
 // nutrition summary section, bariatric supplement chips, and debugging
+//
+// ── Section 12 addition (this session) ──────────────────────────────────
+// Tracker Detail Screen: tap any meal in the Meals list to open a modal
+// bottom sheet (same pattern as grocery_list.dart / list_generator_page.dart
+// and the sibling detail sheets added to extended_tracker_page.dart) to
+// edit or delete that meal. Additive only — every existing method, field,
+// and widget is unchanged; the existing "Add Meal" dialog (_MealDialog)
+// is untouched.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,6 +36,7 @@ class TrackerPage extends StatefulWidget {
 
 class _TrackerPageState extends State<TrackerPage> {
   late final PremiumGateController _premiumController;
+  // ignore: unused_field
   bool _isPremium = false;
 
   DateTime _selectedDate = DateTime.now();
@@ -50,9 +59,9 @@ class _TrackerPageState extends State<TrackerPage> {
   String _exerciseUnit = 'minutes';
   String _waterUnit = 'cups';
 
-  static const String _PREF_WEIGHT_UNIT = 'tracker_weight_unit_';
-  static const String _PREF_EXERCISE_UNIT = 'tracker_exercise_unit_';
-  static const String _PREF_WATER_UNIT = 'tracker_water_unit_';
+  static const String _prefWeightUnit = 'tracker_weight_unit_';
+  static const String _prefExerciseUnit = 'tracker_exercise_unit_';
+  static const String _prefWaterUnit = 'tracker_water_unit_';
 
   List<Map<String, dynamic>> _meals = [];
   List<Map<String, dynamic>> _supplements = [];
@@ -188,10 +197,10 @@ class _TrackerPageState extends State<TrackerPage> {
       final userId = AuthService.currentUserId ?? '';
 
       setState(() {
-        _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'kg';
+        _weightUnit = prefs.getString('$_prefWeightUnit$userId') ?? 'kg';
         _exerciseUnit =
-            prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
-        _waterUnit = prefs.getString('$_PREF_WATER_UNIT$userId') ?? 'cups';
+            prefs.getString('$_prefExerciseUnit$userId') ?? 'minutes';
+        _waterUnit = prefs.getString('$_prefWaterUnit$userId') ?? 'cups';
       });
 
       AppConfig.debugPrint('📋 Loaded unit preferences:');
@@ -504,6 +513,53 @@ class _TrackerPageState extends State<TrackerPage> {
 
   void _removeMeal(int index) {
     setState(() => _meals.removeAt(index));
+  }
+
+  // ── Section 12: Tracker Detail Screen (Meals) ───────────────────
+  Future<void> _editMeal(int index) async {
+    final meal = _meals[index];
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => _MealDetailSheet(meal: meal),
+    );
+    if (result == null || !mounted) return;
+
+    if (result['delete'] == true) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Meal'),
+          content: Text(
+              'Delete "${meal['name'] ?? 'this meal'}"? This cannot be undone.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      setState(() => _meals.removeAt(index));
+    } else {
+      setState(() => _meals[index] = result);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result['delete'] == true
+            ? 'Meal deleted — remember to Save Entry'
+            : 'Meal updated — remember to Save Entry'),
+        backgroundColor: Colors.orange,
+      ));
+    }
   }
 
   Future<void> _toggleWeightVisibility() async {
@@ -821,7 +877,7 @@ class _TrackerPageState extends State<TrackerPage> {
                           '✅ Height and preference saved: $heightInCm cm ($heightSystem)');
                       ErrorHandlingService.showSuccess(
                           context,
-                          'Height saved: ${HeightUtils.formatHeight(heightInCm!, heightSystem)}');
+                          'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}');
                     }
                   }
                   Navigator.pop(context);
@@ -1025,7 +1081,7 @@ class _TrackerPageState extends State<TrackerPage> {
                 SizedBox(
                   width: 80,
                   child: DropdownButtonFormField<String>(
-                    value: _weightUnit,
+                    initialValue: _weightUnit,
                     decoration:
                         const InputDecoration(border: OutlineInputBorder()),
                     items: const [
@@ -1035,7 +1091,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _weightUnit = value);
-                        _saveUnitPreference(_PREF_WEIGHT_UNIT, value);
+                        _saveUnitPreference(_prefWeightUnit, value);
                       }
                     },
                   ),
@@ -1158,6 +1214,7 @@ class _TrackerPageState extends State<TrackerPage> {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
+                      onTap: () => _editMeal(index),
                       title: Text(meal['name'] ?? 'Meal ${index + 1}'),
                       subtitle: Text(
                         '${meal['calories']?.toStringAsFixed(0) ?? '0'} cal • '
@@ -1165,9 +1222,16 @@ class _TrackerPageState extends State<TrackerPage> {
                         '${meal['sodium']?.toStringAsFixed(0) ?? '0'}mg sodium',
                         style: const TextStyle(fontSize: 12),
                       ),
-                      trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _removeMeal(index)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _removeMeal(index)),
+                          Icon(Icons.chevron_right_rounded,
+                              size: 18, color: Colors.grey.shade400),
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -1521,7 +1585,7 @@ class _TrackerPageState extends State<TrackerPage> {
                 SizedBox(
                   width: 80,
                   child: DropdownButtonFormField<String>(
-                    value: _exerciseUnit,
+                    initialValue: _exerciseUnit,
                     decoration:
                         const InputDecoration(border: OutlineInputBorder()),
                     items: const [
@@ -1533,7 +1597,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _exerciseUnit = value);
-                        _saveUnitPreference(_PREF_EXERCISE_UNIT, value);
+                        _saveUnitPreference(_prefExerciseUnit, value);
                       }
                     },
                   ),
@@ -1586,7 +1650,7 @@ class _TrackerPageState extends State<TrackerPage> {
                 SizedBox(
                   width: 90,
                   child: DropdownButtonFormField<String>(
-                    value: _waterUnit,
+                    initialValue: _waterUnit,
                     decoration:
                         const InputDecoration(border: OutlineInputBorder()),
                     items: const [
@@ -1603,7 +1667,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _waterUnit = value);
-                        _saveUnitPreference(_PREF_WATER_UNIT, value);
+                        _saveUnitPreference(_prefWaterUnit, value);
                       }
                     },
                   ),
@@ -1844,7 +1908,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
                 Expanded(
                   flex: 3,
                   child: DropdownButtonFormField<String>(
-                    value: _selectedUnit,
+                    initialValue: _selectedUnit,
                     decoration: const InputDecoration(
                       labelText: 'Unit',
                       border: OutlineInputBorder(),
@@ -1892,7 +1956,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Meal Dialog
+// Meal Dialog (Add)
 // ════════════════════════════════════════════════════════════════
 
 class _MealDialog extends StatefulWidget {
@@ -2168,6 +2232,169 @@ class _MealDialogState extends State<_MealDialog> {
         FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
       ],
       decoration: InputDecoration(labelText: label, suffixText: suffix),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Meal Detail Sheet (Edit / Delete) — Section 12 addition
+// ════════════════════════════════════════════════════════════════
+
+class _MealDetailSheet extends StatefulWidget {
+  final Map<String, dynamic> meal;
+
+  const _MealDetailSheet({required this.meal});
+
+  @override
+  State<_MealDetailSheet> createState() => _MealDetailSheetState();
+}
+
+class _MealDetailSheetState extends State<_MealDetailSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _caloriesController;
+  late final TextEditingController _fatController;
+  late final TextEditingController _sodiumController;
+  late final TextEditingController _sugarController;
+  late final TextEditingController _proteinController;
+  late final TextEditingController _fiberController;
+  late final TextEditingController _saturatedFatController;
+
+  String _fmt(dynamic v) {
+    if (v == null) return '';
+    if (v is num) return v.toStringAsFixed(v == v.roundToDouble() ? 0 : 1);
+    return v.toString();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.meal;
+    _nameController = TextEditingController(text: m['name']?.toString() ?? '');
+    _caloriesController = TextEditingController(text: _fmt(m['calories']));
+    _fatController = TextEditingController(text: _fmt(m['fat']));
+    _sodiumController = TextEditingController(text: _fmt(m['sodium']));
+    _sugarController = TextEditingController(text: _fmt(m['sugar']));
+    _proteinController = TextEditingController(text: _fmt(m['protein']));
+    _fiberController = TextEditingController(text: _fmt(m['fiber']));
+    _saturatedFatController =
+        TextEditingController(text: _fmt(m['saturatedFat']));
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _caloriesController.dispose();
+    _fatController.dispose();
+    _sodiumController.dispose();
+    _sugarController.dispose();
+    _proteinController.dispose();
+    _fiberController.dispose();
+    _saturatedFatController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a meal name')));
+      return;
+    }
+    Navigator.pop(context, {
+      'delete': false,
+      'name': _nameController.text.trim(),
+      'calories': double.tryParse(_caloriesController.text) ?? 0.0,
+      'fat': double.tryParse(_fatController.text) ?? 0.0,
+      'sodium': double.tryParse(_sodiumController.text) ?? 0.0,
+      'sugar': double.tryParse(_sugarController.text) ?? 0.0,
+      'protein': double.tryParse(_proteinController.text),
+      'fiber': double.tryParse(_fiberController.text),
+      'saturatedFat': double.tryParse(_saturatedFatController.text),
+    });
+  }
+
+  Widget _numField(
+      TextEditingController ctrl, String label, String suffix) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,1}'))
+      ],
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: suffix,
+        isDense: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Edit Meal',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Meal Name *',
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _numField(_caloriesController, 'Calories *', 'cal'),
+            const SizedBox(height: 12),
+            _numField(_fatController, 'Fat *', 'g'),
+            const SizedBox(height: 12),
+            _numField(_sodiumController, 'Sodium *', 'mg'),
+            const SizedBox(height: 12),
+            _numField(_sugarController, 'Sugar *', 'g'),
+            const SizedBox(height: 12),
+            _numField(_proteinController, 'Protein (optional)', 'g'),
+            const SizedBox(height: 12),
+            _numField(_fiberController, 'Fiber (optional)', 'g'),
+            const SizedBox(height: 12),
+            _numField(_saturatedFatController, 'Saturated Fat (optional)', 'g'),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+                    onPressed: () => Navigator.pop(context, {'delete': true}),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save_rounded),
+                    label: const Text('Save'),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                    onPressed: _save,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

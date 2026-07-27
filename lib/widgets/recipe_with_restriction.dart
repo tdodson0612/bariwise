@@ -70,8 +70,7 @@ class _RecipeWithRestrictionState extends State<RecipeWithRestriction> {
         });
       }
     } catch (e) {
-      print('Error checking premium status: $e');
-      
+
       // On error, try to use cached value even if stale
       try {
         final prefs = await SharedPreferences.getInstance();

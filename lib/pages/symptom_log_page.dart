@@ -41,10 +41,12 @@ class _SymptomLogPageState extends State<SymptomLogPage> {
       final entries = await BariFeaturesService.getSymptomLog(
         from: DateTime.now().subtract(const Duration(days: 14)),
       );
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _recentEntries = entries;
         _loadingHistory = false;
       });
+      }
     } catch (e) {
       if (mounted) setState(() => _loadingHistory = false);
       AppConfig.debugPrint('Error loading symptom history: $e');

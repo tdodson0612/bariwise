@@ -18,7 +18,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/auth_service.dart';
 import 'services/error_handling_service.dart';
 import 'config/app_config.dart';
@@ -503,7 +502,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.1),
+              Colors.black.withValues(alpha: 0.1),
               BlendMode.darken,
             ),
           ),
@@ -521,7 +520,7 @@ class _LoginPageState extends State<LoginPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  color: Colors.white.withOpacity(0.95),
+                  color: Colors.white.withValues(alpha: 0.95),
                   child: Padding(
                     padding: EdgeInsets.all(
                       ScreenUtils.getResponsivePadding(context),

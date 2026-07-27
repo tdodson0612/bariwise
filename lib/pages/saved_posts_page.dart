@@ -21,10 +21,10 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
   bool _isLoadingSaved = false;
   bool _isLoadingMy = false;
   
-  Map<String, bool> _expandedComments = {};
-  Map<String, List<Map<String, dynamic>>> _postComments = {};
+  final Map<String, bool> _expandedComments = {};
+  final Map<String, List<Map<String, dynamic>>> _postComments = {};
   final Map<String, TextEditingController> _commentControllers = {};
-  Map<String, Map<String, int>> _postStats = {}; // postId -> {likes, comments, saves}
+  final Map<String, Map<String, int>> _postStats = {}; // postId -> {likes, comments, saves}
 
   @override
   void initState() {
@@ -379,7 +379,7 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),

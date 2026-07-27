@@ -3,41 +3,41 @@
 
 class SurgeryNutritionProfile {
   // 6 Bariatric Surgery Types
-  static const String GASTRIC_BYPASS = 'Gastric Bypass (Roux-en-Y)';
-  static const String SLEEVE = 'Sleeve Gastrectomy';
-  static const String GASTRIC_BAND = 'Adjustable Gastric Band';
-  static const String BPD_DS = 'Biliopancreatic Diversion (BPD/DS)';
-  static const String MINI_BYPASS = 'Mini Gastric Bypass';
-  static const String NOT_SPECIFIED = 'Not specified (general bariatric)';
-  static const String OTHER = 'Not specified (general bariatric)'; // Alias for NOT_SPECIFIED
+  static const String gastricBypass = 'Gastric Bypass (Roux-en-Y)';
+  static const String sleeve = 'Sleeve Gastrectomy';
+  static const String gastricBand = 'Adjustable Gastric Band';
+  static const String bpdDs = 'Biliopancreatic Diversion (BPD/DS)';
+  static const String miniBypass = 'Mini Gastric Bypass';
+  static const String notSpecified = 'Not specified (general bariatric)';
+  static const String other = 'Not specified (general bariatric)'; // Alias for notSpecified
 
   static List<String> getAllSurgeryTypes() {
     return [
-      GASTRIC_BYPASS,
-      SLEEVE,
-      GASTRIC_BAND,
-      BPD_DS,
-      MINI_BYPASS,
-      NOT_SPECIFIED,
+      gastricBypass,
+      sleeve,
+      gastricBand,
+      bpdDs,
+      miniBypass,
+      notSpecified,
     ];
   }
 
   /// Get user-friendly description of surgery-specific nutrition focus
   static String getSurgeryGuidance(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         return 'Focus on: Protein 60-80g/day, avoid sugar >10g (dumping syndrome), limit fat >15g. Take B12, Iron, Calcium, Folate daily.';
       
-      case SLEEVE:
+      case sleeve:
         return 'Focus on: Protein 60-80g/day, avoid sugar >15g, no carbonated beverages. Take B12, Vitamin D, Calcium daily.';
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return 'Focus on: Protein 50-60g/day, avoid sugar >15g and tough/fibrous foods, limit fat >20g. Take multivitamins and Calcium daily.';
       
-      case BPD_DS:
+      case bpdDs:
         return 'Focus on: HIGH protein 80-120g/day (most critical), avoid sugar >15g and fat >15g (malabsorption). Take Vitamins A/D/E/K, Calcium, Iron, B12 daily.';
       
-      case MINI_BYPASS:
+      case miniBypass:
         return 'Focus on: Protein 60-80g/day, avoid sugar >15g, fat >15g, and alcohol. Take B12, Iron, Calcium, Vitamin D daily.';
       
       default:
@@ -48,19 +48,19 @@ class SurgeryNutritionProfile {
   /// Get critical warnings for specific surgery type
   static String getSurgeryWarning(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         return '⚠️ CRITICAL: Avoid sugar >10g to prevent dumping syndrome. Protein is essential for healing.';
       
-      case SLEEVE:
+      case sleeve:
         return '⚠️ CRITICAL: Prioritize protein. Avoid carbonated drinks - they can stretch your sleeve.';
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return '⚠️ CRITICAL: Chew thoroughly. Avoid tough meats, bread, and fibrous vegetables that can cause blockage.';
       
-      case BPD_DS:
+      case bpdDs:
         return '⚠️ CRITICAL: Highest protein needs (80-120g/day). Severe malabsorption - lifelong vitamins required.';
       
-      case MINI_BYPASS:
+      case miniBypass:
         return '⚠️ CRITICAL: Avoid sugar >15g (dumping risk) and all alcohol (increased absorption).';
       
       default:
@@ -71,15 +71,15 @@ class SurgeryNutritionProfile {
   /// Get protein target range for surgery type
   static String getProteinTarget(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
-      case SLEEVE:
-      case MINI_BYPASS:
+      case gastricBypass:
+      case sleeve:
+      case miniBypass:
         return '60-80g per day';
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return '50-60g per day';
       
-      case BPD_DS:
+      case bpdDs:
         return '80-120g per day (highest needs)';
       
       default:
@@ -90,13 +90,13 @@ class SurgeryNutritionProfile {
   /// Get sugar limit for surgery type (grams)
   static int getSugarLimit(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         return 10; // Strictest due to dumping syndrome risk
       
-      case SLEEVE:
-      case GASTRIC_BAND:
-      case BPD_DS:
-      case MINI_BYPASS:
+      case sleeve:
+      case gastricBand:
+      case bpdDs:
+      case miniBypass:
         return 15;
       
       default:
@@ -107,15 +107,15 @@ class SurgeryNutritionProfile {
   /// Get fat limit for surgery type (grams)
   static int getFatLimit(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
-      case BPD_DS:
-      case MINI_BYPASS:
+      case gastricBypass:
+      case bpdDs:
+      case miniBypass:
         return 15; // Stricter for bypass procedures
       
-      case SLEEVE:
+      case sleeve:
         return 20; // Moderate
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return 20; // Most tolerant
       
       default:
@@ -126,19 +126,19 @@ class SurgeryNutritionProfile {
   /// Get essential vitamin/supplement list for surgery type
   static List<String> getRequiredSupplements(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         return ['B12', 'Iron', 'Calcium', 'Folate', 'Vitamin D', 'Multivitamin'];
       
-      case SLEEVE:
+      case sleeve:
         return ['B12', 'Vitamin D', 'Calcium', 'Multivitamin'];
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return ['Multivitamin', 'Calcium', 'Vitamin D'];
       
-      case BPD_DS:
+      case bpdDs:
         return ['Vitamins A/D/E/K (fat-soluble)', 'Calcium', 'Iron', 'B12', 'Zinc', 'Multivitamin'];
       
-      case MINI_BYPASS:
+      case miniBypass:
         return ['B12', 'Iron', 'Calcium', 'Vitamin D', 'Multivitamin'];
       
       default:
@@ -160,28 +160,28 @@ class SurgeryNutritionProfile {
 
     // Add surgery-specific guidelines
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         commonGuidelines.addAll([
           'Avoid sugar to prevent dumping syndrome',
           'Limit high-fat foods',
         ]);
         break;
       
-      case SLEEVE:
+      case sleeve:
         commonGuidelines.addAll([
           'Avoid carbonated beverages',
           'Focus on nutrient-dense foods',
         ]);
         break;
       
-      case GASTRIC_BAND:
+      case gastricBand:
         commonGuidelines.addAll([
           'Avoid tough, dry, or fibrous foods',
           'Chew extra thoroughly to prevent blockage',
         ]);
         break;
       
-      case BPD_DS:
+      case bpdDs:
         commonGuidelines.addAll([
           'Prioritize HIGH protein (80-120g/day)',
           'Take fat-soluble vitamins (A/D/E/K)',
@@ -189,7 +189,7 @@ class SurgeryNutritionProfile {
         ]);
         break;
       
-      case MINI_BYPASS:
+      case miniBypass:
         commonGuidelines.addAll([
           'Absolutely avoid alcohol',
           'Monitor for dumping syndrome',
@@ -203,7 +203,7 @@ class SurgeryNutritionProfile {
   /// Get detailed nutritional recommendations for surgery type
   static Map<String, dynamic> getNutritionRecommendations(String surgeryType) {
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         return {
           'proteinMin': 60,
           'proteinMax': 80,
@@ -218,7 +218,7 @@ class SurgeryNutritionProfile {
           'avoidFoods': ['High sugar items', 'High fat foods', 'Alcohol'],
         };
       
-      case SLEEVE:
+      case sleeve:
         return {
           'proteinMin': 60,
           'proteinMax': 80,
@@ -233,7 +233,7 @@ class SurgeryNutritionProfile {
           'avoidFoods': ['Carbonated drinks', 'High sugar items', 'Tough meats'],
         };
       
-      case GASTRIC_BAND:
+      case gastricBand:
         return {
           'proteinMin': 50,
           'proteinMax': 60,
@@ -248,7 +248,7 @@ class SurgeryNutritionProfile {
           'avoidFoods': ['Tough meats', 'Bread', 'Pasta', 'Fibrous vegetables', 'Nuts'],
         };
       
-      case BPD_DS:
+      case bpdDs:
         return {
           'proteinMin': 80,
           'proteinMax': 120,
@@ -263,7 +263,7 @@ class SurgeryNutritionProfile {
           'avoidFoods': ['High sugar items', 'Very high fat foods', 'Alcohol'],
         };
       
-      case MINI_BYPASS:
+      case miniBypass:
         return {
           'proteinMin': 60,
           'proteinMax': 80,
@@ -346,7 +346,7 @@ class SurgeryNutritionProfile {
     }
 
     // Check protein (varies by surgery)
-    double proteinTarget = surgeryType == BPD_DS ? 25.0 : 20.0;
+    double proteinTarget = surgeryType == bpdDs ? 25.0 : 20.0;
     if (protein >= proteinTarget) {
       positives.add('✅ Excellent protein content!');
     } else if (protein >= 15) {
@@ -367,31 +367,31 @@ class SurgeryNutritionProfile {
 
     // Surgery-specific tips
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
+      case gastricBypass:
         if (sugar > 10) {
           tips.add('Gastric bypass patients are especially prone to dumping syndrome with sugar >10g');
         }
         tips.add('Remember to take your B12, Iron, Calcium, and Folate supplements');
         break;
       
-      case SLEEVE:
+      case sleeve:
         tips.add('Avoid carbonated beverages - they can stretch your sleeve over time');
         tips.add('Remember to take your B12, Vitamin D, and Calcium supplements');
         break;
       
-      case GASTRIC_BAND:
+      case gastricBand:
         tips.add('Make sure to chew this food thoroughly to avoid band blockage');
         tips.add('Take small bites and eat slowly');
         break;
       
-      case BPD_DS:
+      case bpdDs:
         if (protein < 25) {
           tips.add('BPD/DS patients need higher protein (aim for 80-120g/day)');
         }
         tips.add('Don\'t forget your fat-soluble vitamins (A/D/E/K) - crucial for BPD/DS');
         break;
       
-      case MINI_BYPASS:
+      case miniBypass:
         tips.add('Absolutely avoid alcohol - absorption is greatly increased after mini bypass');
         tips.add('Remember your B12, Iron, Calcium, and Vitamin D supplements');
         break;
@@ -424,7 +424,7 @@ class SurgeryNutritionProfile {
   /// Get hydration guidelines
   static Map<String, dynamic> getHydrationGuidelines(String surgeryType) {
     return {
-      'dailyGoal': surgeryType == BPD_DS ? '64-80 oz' : '64 oz',
+      'dailyGoal': surgeryType == bpdDs ? '64-80 oz' : '64 oz',
       'tips': [
         'Sip water throughout the day',
         'Avoid drinking 30 minutes before and after meals',
@@ -446,18 +446,18 @@ class SurgeryNutritionProfile {
     };
 
     switch (surgeryType) {
-      case GASTRIC_BYPASS:
-      case MINI_BYPASS:
+      case gastricBypass:
+      case miniBypass:
         schedule['Morning with Multivitamin'] = 'B12 sublingual (1000mcg)';
         schedule['With meals'] = 'Iron (if prescribed) - separate from calcium';
         break;
       
-      case SLEEVE:
+      case sleeve:
         schedule['Morning'] = 'B12 sublingual (1000mcg), Multivitamin';
         schedule['Bedtime'] = 'Vitamin D (2000-3000 IU)';
         break;
       
-      case BPD_DS:
+      case bpdDs:
         schedule = {
           'Morning': 'Fat-soluble vitamins (A/D/E/K), Multivitamin, B12',
           'Mid-morning': 'Calcium citrate (500mg)',

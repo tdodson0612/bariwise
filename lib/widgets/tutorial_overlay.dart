@@ -2,13 +2,13 @@
 import 'package:flutter/material.dart';
 
 enum TutorialStep {
-  TUTORIAL_INTRO,
-  TUTORIAL_ALL_BUTTONS,
-  TUTORIAL_SCAN,
-  TUTORIAL_MANUAL,
-  TUTORIAL_LOOKUP,
-  TUTORIAL_UNIFIED_RESULT,
-  TUTORIAL_CLOSE,
+  tutorialIntro,
+  tutorialAllButtons,
+  tutorialScan,
+  tutorialManual,
+  tutorialLookup,
+  tutorialUnifiedResult,
+  tutorialClose,
 }
 
 class TutorialOverlay extends StatefulWidget {
@@ -18,12 +18,12 @@ class TutorialOverlay extends StatefulWidget {
   final GlobalKey lookupButtonKey;
 
   const TutorialOverlay({
-    Key? key,
+    super.key,
     required this.onComplete,
     required this.scanButtonKey,
     required this.manualButtonKey,
     required this.lookupButtonKey,
-  }) : super(key: key);
+  });
 
   @override
   State<TutorialOverlay> createState() => _TutorialOverlayState();
@@ -31,7 +31,7 @@ class TutorialOverlay extends StatefulWidget {
 
 class _TutorialOverlayState extends State<TutorialOverlay>
     with SingleTickerProviderStateMixin {
-  TutorialStep _currentStep = TutorialStep.TUTORIAL_INTRO;
+  TutorialStep _currentStep = TutorialStep.tutorialIntro;
   late AnimationController _barryController;
   late Animation<Offset> _barrySlideAnimation;
   
@@ -68,44 +68,44 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   }
   
   void _nextStep() {
-    print('🎓 _nextStep called - current: $_currentStep');
+
     _playBarryHop();
     setState(() {
       switch (_currentStep) {
-        case TutorialStep.TUTORIAL_INTRO:
-          print('🎓 Moving to ALL_BUTTONS step');
-          _currentStep = TutorialStep.TUTORIAL_ALL_BUTTONS;
+        case TutorialStep.tutorialIntro:
+
+          _currentStep = TutorialStep.tutorialAllButtons;
           _highlightAllButtons = true;
           _showHighlight = false;
           _currentHighlightKey = null;
           break;
-        case TutorialStep.TUTORIAL_ALL_BUTTONS:
-          print('🎓 Moving to SCAN step');
-          _currentStep = TutorialStep.TUTORIAL_SCAN;
+        case TutorialStep.tutorialAllButtons:
+
+          _currentStep = TutorialStep.tutorialScan;
           _highlightAllButtons = false;
           _updateHighlight(widget.scanButtonKey);
           break;
-        case TutorialStep.TUTORIAL_SCAN:
-          print('🎓 Moving to MANUAL step');
-          _currentStep = TutorialStep.TUTORIAL_MANUAL;
+        case TutorialStep.tutorialScan:
+
+          _currentStep = TutorialStep.tutorialManual;
           _updateHighlight(widget.manualButtonKey);
           break;
-        case TutorialStep.TUTORIAL_MANUAL:
-          print('🎓 Moving to LOOKUP step');
-          _currentStep = TutorialStep.TUTORIAL_LOOKUP;
+        case TutorialStep.tutorialManual:
+
+          _currentStep = TutorialStep.tutorialLookup;
           _updateHighlight(widget.lookupButtonKey);
           break;
-        case TutorialStep.TUTORIAL_LOOKUP:
-          print('🎓 Moving to UNIFIED_RESULT step');
-          _currentStep = TutorialStep.TUTORIAL_UNIFIED_RESULT;
+        case TutorialStep.tutorialLookup:
+
+          _currentStep = TutorialStep.tutorialUnifiedResult;
           _removeHighlight();
           break;
-        case TutorialStep.TUTORIAL_UNIFIED_RESULT:
-          print('🎓 Moving to CLOSE step');
-          _currentStep = TutorialStep.TUTORIAL_CLOSE;
+        case TutorialStep.tutorialUnifiedResult:
+
+          _currentStep = TutorialStep.tutorialClose;
           break;
-        case TutorialStep.TUTORIAL_CLOSE:
-          print('🎓 Tutorial complete, calling onComplete');
+        case TutorialStep.tutorialClose:
+
           widget.onComplete();
           break;
       }
@@ -124,8 +124,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   }
   
   void _updateHighlight(GlobalKey newKey) async {
-    print('🎯 Updating highlight to new key');
-    
+
     setState(() {
       _showHighlight = false;
       _highlightAllButtons = false;
@@ -142,11 +141,11 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       
       final context = newKey.currentContext;
       if (context == null) {
-        print('⚠️ WARNING: New highlight key has no context yet');
+
       } else {
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
-          print('✅ Highlight updated - size: ${renderBox.size}');
+
         }
       }
     }
@@ -163,19 +162,19 @@ class _TutorialOverlayState extends State<TutorialOverlay>
   
   String _getTalkBubbleText() {
     switch (_currentStep) {
-      case TutorialStep.TUTORIAL_INTRO:
+      case TutorialStep.tutorialIntro:
         return "Hi there, friend. I am Barry, the belly. Let me walk you through this app and the way we use it to enrich our health and our lives.";
-      case TutorialStep.TUTORIAL_ALL_BUTTONS:
+      case TutorialStep.tutorialAllButtons:
         return "These buttons are the 3 different ways you can see the nutrition facts and suggested bariatric friendly recipes for any food you like! Let's walk through them together!";
-      case TutorialStep.TUTORIAL_SCAN:
+      case TutorialStep.tutorialScan:
         return "Let's start with Scan. Tap this when you want to scan a barcode yourself. You'll take a picture, tap Analyze, and we'll show you the nutrition facts and helpful recipe ideas.";
-      case TutorialStep.TUTORIAL_MANUAL:
+      case TutorialStep.tutorialManual:
         return "Use Code when a barcode won't scan or is damaged. You can type in the numbers from the bottom of the barcode instead.";
-      case TutorialStep.TUTORIAL_LOOKUP:
+      case TutorialStep.tutorialLookup:
         return "And this is Search. Tap here to search by name if you don't have a barcode at all.";
-      case TutorialStep.TUTORIAL_UNIFIED_RESULT:
+      case TutorialStep.tutorialUnifiedResult:
         return "No matter which option you choose, you'll see nutrition facts and recipe suggestions for that item. Pick what works best for you.";
-      case TutorialStep.TUTORIAL_CLOSE:
+      case TutorialStep.tutorialClose:
         return "That's it! I'll be here if you need help. Let's take care of your health together.";
     }
   }
@@ -229,7 +228,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.yellow.withOpacity(0.35),
+                  color: Colors.yellow.withValues(alpha: 0.35),
                   blurRadius: 12,
                   spreadRadius: 2,
                 ),
@@ -274,7 +273,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.yellow.withOpacity(0.35),
+                  color: Colors.yellow.withValues(alpha: 0.35),
                   blurRadius: 12,
                   spreadRadius: 2,
                 ),
@@ -289,17 +288,16 @@ class _TutorialOverlayState extends State<TutorialOverlay>
     
   @override
   Widget build(BuildContext context) {
-    print('🎓 TutorialOverlay building - step: $_currentStep');
-    
+
     return Material(
       type: MaterialType.transparency,
       child: Container(
         width: double.infinity,
         height: double.infinity,
-        color: Colors.black.withOpacity(0.7),
+        color: Colors.black.withValues(alpha: 0.7),
         child: GestureDetector(
           onTap: () {
-            print('🎓 Tutorial tapped - current step: $_currentStep');
+
             _nextStep();
           },
           behavior: HitTestBehavior.opaque,
@@ -325,7 +323,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -339,7 +337,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                         height: 120,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) {
-                          print('❌ Error loading baribelly.png: $error');
+
                           // Fallback to heart emoji
                           return Container(
                             width: 120,
@@ -375,7 +373,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withValues(alpha: 0.2),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -401,7 +399,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
@@ -422,7 +420,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                 right: 16,
                 child: GestureDetector(
                   onTap: () {
-                    print('🎓 X button tapped - closing tutorial');
+
                     widget.onComplete();
                   },
                   child: Container(
@@ -433,7 +431,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),

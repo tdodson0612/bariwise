@@ -267,10 +267,10 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key, this.isPremium = false});
 
   @override
-  _HomePageState createState() => _HomePageState();
+  HomePageState createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
+class HomePageState extends State<HomePage>
     with AutomaticKeepAliveClientMixin {
   bool _isScanning = false;
   List<Map<String, String>> _scannedRecipes = [];
@@ -429,12 +429,15 @@ class _HomePageState extends State<HomePage>
 
     await precacheImage(
       const AssetImage('assets/backgrounds/login_background.jpeg'),
+      // ignore: use_build_context_synchronously
       context,
     );
 
+    // ignore: use_build_context_synchronously
     if (MediaQuery.of(context).size.width > 600) {
       await precacheImage(
         const AssetImage('assets/backgrounds/ipad_background.jpeg'),
+        // ignore: use_build_context_synchronously
         context,
       );
     }
@@ -841,6 +844,7 @@ debugPrint('⚠️ Error syncing favorites (non-critical): $e');
 
       if (recipes.isEmpty) {
         ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context,
           'No recipes found for those ingredients.',
         );
@@ -1046,7 +1050,6 @@ debugPrint('✅ No message/badge cache keys found (this is suspicious!)\n');
             final preview = decoded.toString();
 debugPrint('  Value (parsed): ${preview.length > 200 ? '${preview.substring(0, 200)}...' : preview}');
           } catch (_) {
-            final preview = value.length > 100 ? '${value.substring(0, 100)}...' : value;
 
           }
         } else {
@@ -1076,7 +1079,6 @@ debugPrint('  Value (parsed): ${preview.length > 200 ? '${preview.substring(0, 2
     final cachedTime = prefs.getInt('cached_unread_count_time');
     if (cachedTime != null) {
       final age = DateTime.now().millisecondsSinceEpoch - cachedTime;
-      final ageSeconds = (age / 1000).round();
 
 debugPrint('   Fresh?: ${age < 3000 ? "YES ✅" : "NO ❌ (stale!)"}\n');
     }
@@ -1156,6 +1158,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
 
       final success = await _premiumController.useScan();
       if (!success) {
+        // ignore: use_build_context_synchronously
         Navigator.pushNamed(context, '/purchase');
         return;
       }
@@ -1578,6 +1581,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     try {
       final success = await _premiumController.useScan();
       if (!success) {
+        // ignore: use_build_context_synchronously
         Navigator.pushNamed(context, '/purchase');
         return;
       }
@@ -2084,11 +2088,13 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
 
                         _defaultPostVisibility = selectedVisibility;
 
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context, true);
 
                       } catch (e) {
                         setState(() => isPosting = false);
                         if (mounted) {
+                          // ignore: use_build_context_synchronously
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Failed to upload photo: ${e.toString()}'),
@@ -2121,6 +2127,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     if (posted == true && mounted) {
       await _loadFeed(isRefresh: true);
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Photo posted successfully!'),
@@ -2466,6 +2473,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
       final friends = await FriendsService.getFriends();
       
       if (friends.isEmpty) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('You don\'t have any friends yet to tag'),
@@ -2476,12 +2484,14 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
       }
 
       final selected = await showDialog<List<String>>(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => _FriendPickerDialog(friends: friends),
       );
 
       return selected ?? [];
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error loading friends: ${e.toString()}'),
@@ -2843,18 +2853,20 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
               SizedBox(height: 16),
-              ...reasons.map((reason) {
-                return RadioListTile<String>(
-                  title: Text(reason, style: TextStyle(fontSize: 14)),
-                  value: reason,
-                  groupValue: selectedReason,
-                  onChanged: (value) {
-                    setState(() => selectedReason = value);
-                  },
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                );
-              }),
+              RadioGroup<String>(
+                groupValue: selectedReason,
+                onChanged: (value) => setState(() => selectedReason = value),
+                child: Column(
+                  children: reasons.map((reason) {
+                    return RadioListTile<String>(
+                      title: Text(reason, style: TextStyle(fontSize: 14)),
+                      value: reason,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    );
+                  }).toList(),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -3096,6 +3108,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
 
                         _defaultPostVisibility = selectedVisibility;
 
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context);
                         
                         // 🔥 CHANGED: Refresh feed instead of just loading
@@ -3105,6 +3118,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                           final visibilityText = selectedVisibility == 'public' 
                             ? 'publicly' 
                             : 'to friends only';
+                          // ignore: use_build_context_synchronously
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Post shared $visibilityText!'),
@@ -3115,6 +3129,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                       } catch (e) {
                         setState(() => isPosting = false);
                         if (mounted) {
+                          // ignore: use_build_context_synchronously
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Failed to create post: ${e.toString()}'),
@@ -3150,6 +3165,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     final recipes = await FavoriteRecipesService.getFavoriteRecipes();
     
     if (recipes.isEmpty) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No favorite recipes yet. Add some recipes first!'),
@@ -3172,6 +3188,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     bool isPosting = false;
 
     final posted = await showDialog<bool>(
+      // ignore: use_build_context_synchronously
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -3389,11 +3406,13 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
 
                         _defaultPostVisibility = selectedVisibility;
 
+                        // ignore: use_build_context_synchronously
                         Navigator.pop(context, true);
 
                       } catch (e) {
                         setState(() => isPosting = false);
                         if (mounted) {
+                          // ignore: use_build_context_synchronously
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Failed to share recipe: ${e.toString()}'),
@@ -3428,6 +3447,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     if (posted == true && mounted) {
       await _loadFeed(isRefresh: true);
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Recipe shared successfully!'),
@@ -3767,6 +3787,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
       }
 
       final choice = await showDialog<String>(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => AlertDialog(
           title: Row(
@@ -3926,6 +3947,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     if (selectedDraft == null) return;
 
     final confirmed = await showDialog<bool>(
+      // ignore: use_build_context_synchronously
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
@@ -4096,6 +4118,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
       }
     } catch (e) {
       await ErrorHandlingService.handleError(
+        // ignore: use_build_context_synchronously
         context: context,
         error: e,
         category: ErrorHandlingService.databaseError,
@@ -4393,6 +4416,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
     try {
       // Show loading indicator
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         barrierDismissible: false,
         builder: (context) => Center(

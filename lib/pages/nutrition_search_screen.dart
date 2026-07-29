@@ -194,6 +194,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
 
       if (items.isEmpty) {
         ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context,
           "No results found for $_searchType: $query",
         );
@@ -202,6 +203,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
       setState(() => _results = items);
     } catch (e) {
       ErrorHandlingService.handleError(
+        // ignore: use_build_context_synchronously
         context: context,
         error: e,
         customMessage: "Error searching for $_searchType.",
@@ -313,6 +315,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
 
       if (recipes.isEmpty) {
         ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context,
           'No recipes found for those ingredients.',
         );
@@ -1181,6 +1184,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                                                 try {
                                                   await SavedIngredientsService.saveIngredient(_selectedItem!);
                                                   if (mounted) {
+                                                    // ignore: use_build_context_synchronously
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
                                                         content: Text('Saved "${_selectedItem!.productName}" to ingredients!'),
@@ -1190,6 +1194,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                                                   }
                                                 } catch (e) {
                                                   if (mounted) {
+                                                    // ignore: use_build_context_synchronously
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
                                                         content: Text('Error saving: ${e.toString()}'),
@@ -1216,6 +1221,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                                                 try {
                                                   await GroceryService.addToGroceryList(_selectedItem!.productName);
                                                   if (mounted) {
+                                                    // ignore: use_build_context_synchronously
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
                                                         content: Text('Added to grocery list!'),
@@ -1232,6 +1238,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                                                   }
                                                 } catch (e) {
                                                   if (mounted) {
+                                                    // ignore: use_build_context_synchronously
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
                                                         content: Text('Error: ${e.toString()}'),

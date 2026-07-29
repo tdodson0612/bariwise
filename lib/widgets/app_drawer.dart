@@ -18,13 +18,13 @@ class AppDrawer extends StatefulWidget {
   });
 
   @override
-  State<AppDrawer> createState() => _AppDrawerState();
+  State<AppDrawer> createState() => AppDrawerState();
 
   static const String _cacheKey = 'cached_unread_count';
   static const String _cacheTimeKey = 'cached_unread_count_time';
 
-  static final GlobalKey<_AppDrawerState> globalKey =
-      GlobalKey<_AppDrawerState>();
+  static final GlobalKey<AppDrawerState> globalKey =
+      GlobalKey<AppDrawerState>();
 
   static Future<void> invalidateUnreadCache() async {
     try {
@@ -39,7 +39,7 @@ class AppDrawer extends StatefulWidget {
   }
 }
 
-class _AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
+class AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
   late final PremiumGateController _controller;
   int _unreadCount = 0;
   Timer? _autoRefreshTimer;

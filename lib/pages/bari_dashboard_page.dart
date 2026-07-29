@@ -375,8 +375,8 @@ class _BariDashboardPageState extends State<BariDashboardPage>
                         label: Text('$d days',
                             style: const TextStyle(fontSize: 12)),
                         selected: sel,
-                        selectedColor: _kDGold.withValues(alpha: 0.25),
-                        backgroundColor: Colors.white.withValues(alpha: 0.08),
+                        selectedColor: _kDGold.withOpacity(0.25),
+                        backgroundColor: Colors.white.withOpacity(0.08),
                         labelStyle: TextStyle(
                             color: sel ? _kDGold : Colors.white70),
                         side: BorderSide(
@@ -744,7 +744,7 @@ class _TrackerSummaryCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFDDE3EE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Colors.black.withOpacity(0.04),
               blurRadius: 6,
               offset: const Offset(0, 2)),
         ],
@@ -986,7 +986,7 @@ class _NutrientTabState extends State<_NutrientTab> {
                   child: ChoiceChip(
                     label: Text(entry.value.label),
                     selected: sel,
-                    selectedColor: entry.value.color.withValues(alpha: 0.2),
+                    selectedColor: entry.value.color.withOpacity(0.2),
                     side: BorderSide(
                         color: sel
                             ? entry.value.color
@@ -1052,10 +1052,10 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
+        color: Colors.white.withOpacity(0.85),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFDDE3EE)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
@@ -1140,7 +1140,7 @@ class _SimpleBarChart extends StatelessWidget {
                           ? Colors.grey.shade200
                           : isOver
                               ? Colors.red.shade300
-                              : color.withValues(alpha: 0.8),
+                              : color.withOpacity(0.8),
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
                     ),
@@ -1224,7 +1224,7 @@ class _SymptomTab extends StatelessWidget {
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: _severityColor(avgSeverity.round())
-                                .withValues(alpha: 0.15),
+                                .withOpacity(0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -1369,7 +1369,7 @@ class _GoalsTab extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: const LinearGradient(colors: [_kDNavy, _kDNavyLight],
                   begin: Alignment.topLeft, end: Alignment.bottomRight),
-              border: Border.all(color: _kDGold.withValues(alpha: 0.3)),
+              border: Border.all(color: _kDGold.withOpacity(0.3)),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Padding(
@@ -1409,7 +1409,7 @@ class _GoalsTab extends StatelessWidget {
               label: Text(saving ? 'Saving…' : 'Save Weekly Goals'),
               style: FilledButton.styleFrom(
                   backgroundColor: _kDNavy,
-                  side: BorderSide(color: _kDGold.withValues(alpha: 0.4))),
+                  side: BorderSide(color: _kDGold.withOpacity(0.4))),
               onPressed: saving ? null : onSave,
             ),
           ),

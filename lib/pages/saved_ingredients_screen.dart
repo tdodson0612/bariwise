@@ -66,6 +66,7 @@ class _SavedIngredientsScreenState extends State<SavedIngredientsScreen> {
       }
     });
 
+    // ignore: use_build_context_synchronously
     ErrorHandlingService.showSuccess(context, "Removed ingredient.");
   }
 

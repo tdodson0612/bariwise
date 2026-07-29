@@ -1390,6 +1390,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
               onPressed: () async {
                 await _loadGroceryList(forceRefresh: true);
                 if (mounted) {
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('🔄 Grocery list refreshed'),

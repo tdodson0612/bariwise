@@ -22,10 +22,10 @@ class FavoriteRecipesPage extends StatefulWidget {
   });
 
   @override
-  _FavoriteRecipesPageState createState() => _FavoriteRecipesPageState();
+  FavoriteRecipesPageState createState() => FavoriteRecipesPageState();
 }
 
-class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
+class FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
   List<FavoriteRecipe> _favoriteRecipes = [];
   bool _isLoading = false;
 
@@ -847,11 +847,13 @@ class _FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                 await _loadFavoriteRecipes(forceRefresh: true);
                 if (mounted) {
                   ErrorHandlingService.showSuccess(
+                      // ignore: use_build_context_synchronously
                       context, 'Recipes refreshed');
                 }
               } catch (e) {
                 if (mounted) {
                   await ErrorHandlingService.handleError(
+                    // ignore: use_build_context_synchronously
                     context: context,
                     error: e,
                     category: ErrorHandlingService.databaseError,

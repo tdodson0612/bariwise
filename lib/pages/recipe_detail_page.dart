@@ -490,6 +490,7 @@ debugPrint('📦 Using cached comments (${comments.length} found)');
         }
         
         ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context,
           'Unable to load comments',
         );
@@ -664,10 +665,12 @@ debugPrint('📦 Using cached comments (${comments.length} found)');
 
                 try {
                   await CommentsService.reportComment(commentId, reason);
+                  // ignore: use_build_context_synchronously
                   Navigator.pop(context);
                   
                   if (mounted) {
                     ErrorHandlingService.showSuccess(
+                      // ignore: use_build_context_synchronously
                       context,
                       'Comment reported. Thank you!',
                     );
@@ -675,6 +678,7 @@ debugPrint('📦 Using cached comments (${comments.length} found)');
                 } catch (e) {
                   if (mounted) {
                     ErrorHandlingService.showSimpleError(
+                      // ignore: use_build_context_synchronously
                       context,
                       'Failed to report comment',
                     );

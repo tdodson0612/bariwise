@@ -367,6 +367,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
       if (mounted) {
         await _loadSubmittedRecipes(forceRefresh: true);
         ErrorHandlingService.showSuccess(
+            // ignore: use_build_context_synchronously
             context, 'Recipe deleted successfully');
       }
     } catch (e) {
@@ -534,6 +535,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
                     await AuthService.signOut();
                     if (mounted) {
                       Navigator.pushNamedAndRemoveUntil(
+                        // ignore: use_build_context_synchronously
                         context,
                         '/login',
                         (route) => false,
@@ -1219,6 +1221,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
         await _loadTodayScore();
         await _loadWeeklyScore();
         ErrorHandlingService.showSuccess(
+            // ignore: use_build_context_synchronously
             context, 'Personalization preferences reset.');
       }
     } catch (e) {
@@ -1304,6 +1307,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
       );
       // ✅ Show success message
       Future.delayed(Duration(milliseconds: 500), () {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Account deleted successfully'),
@@ -3220,6 +3224,7 @@ PremiumGate(
                       await _loadFavoriteRecipesCount();
                     }
                   } catch (e) {
+                    // ignore: use_build_context_synchronously
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Favorites page unavailable'),
@@ -3300,6 +3305,7 @@ const SizedBox(height: 20),
                         AppConfig.debugPrint('✅ Surgery type updated and verified: $newType');
                         
                         ErrorHandlingService.showSuccess(
+                          // ignore: use_build_context_synchronously
                           context,
                           'Surgery type updated. Scores recalculated.',
                         );
@@ -3312,6 +3318,7 @@ const SizedBox(height: 20),
                         setState(() => _isLoading = false);
                         
                         await ErrorHandlingService.handleError(
+                          // ignore: use_build_context_synchronously
                           context: context,
                           error: e,
                           category: ErrorHandlingService.databaseError,

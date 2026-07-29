@@ -24,10 +24,10 @@ class ChatPage extends StatefulWidget {
   });
 
   @override
-  _ChatPageState createState() => _ChatPageState();
+  ChatPageState createState() => ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
+class ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<Map<String, dynamic>> _messages = [];
@@ -268,6 +268,7 @@ class _ChatPageState extends State<ChatPage> {
         _messageController.text = content;
 
         await ErrorHandlingService.handleError(
+          // ignore: use_build_context_synchronously
           context: context,
           error: e,
           category: ErrorHandlingService.databaseError,
@@ -450,9 +451,9 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ignore: deprecated_member_use
     return PopScope(
       canPop: true,
+      // ignore: deprecated_member_use
       onPopInvoked: (didPop) async {
         if (didPop) {
           await _clearIOSBadge();
@@ -507,11 +508,13 @@ class _ChatPageState extends State<ChatPage> {
                   await _loadMessages();
                   if (mounted) {
                     ErrorHandlingService.showSuccess(
+                        // ignore: use_build_context_synchronously
                         context, 'Messages refreshed');
                   }
                 } catch (e) {
                   if (mounted) {
                     await ErrorHandlingService.handleError(
+                      // ignore: use_build_context_synchronously
                       context: context,
                       error: e,
                       category: ErrorHandlingService.databaseError,

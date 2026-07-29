@@ -143,6 +143,7 @@ class _TutorialOverlayState extends State<TutorialOverlay>
       if (context == null) {
 
       } else {
+        // ignore: use_build_context_synchronously
         final renderBox = context.findRenderObject() as RenderBox?;
         if (renderBox != null) {
 

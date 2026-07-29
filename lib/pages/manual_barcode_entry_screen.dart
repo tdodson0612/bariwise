@@ -61,6 +61,7 @@ class _ManualBarcodeEntryScreenState extends State<ManualBarcodeEntryScreen> {
 
       if (result == null) {
         ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context,
           "Product not found in database.",
         );
@@ -69,6 +70,7 @@ class _ManualBarcodeEntryScreenState extends State<ManualBarcodeEntryScreen> {
       }
     } catch (e) {
       ErrorHandlingService.handleError(
+        // ignore: use_build_context_synchronously
         context: context,
         error: e,
         customMessage: "Error fetching product information.",

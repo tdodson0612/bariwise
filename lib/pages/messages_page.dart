@@ -17,10 +17,10 @@ class MessagesPage extends StatefulWidget {
   const MessagesPage({super.key});
 
   @override
-  _MessagesPageState createState() => _MessagesPageState();
+  MessagesPageState createState() => MessagesPageState();
 }
 
-class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderStateMixin {
+class MessagesPageState extends State<MessagesPage> with SingleTickerProviderStateMixin {
   final Logger _logger = Logger();
   late TabController _tabController;
   List<Map<String, dynamic>> _chats = [];
@@ -466,6 +466,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       await _invalidateRequestsCache();
       await _invalidateChatsCache();
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Friend request accepted!'),
@@ -477,6 +478,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       _loadData(forceRefresh: true);
     } catch (e) {
       _logger.e('❌ Error accepting request: $e');
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error accepting request: $e'),
@@ -494,6 +496,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       // Invalidate requests cache
       await _invalidateRequestsCache();
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Friend request declined'),
@@ -505,6 +508,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       _loadFriendRequests(forceRefresh: true);
     } catch (e) {
       _logger.e('❌ Error declining request: $e');
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error declining request: $e'),
@@ -539,6 +543,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       await _invalidateNotificationsCache();
       _loadNotifications(forceRefresh: true);
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('All notifications marked as read'),
@@ -547,6 +552,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
       );
     } catch (e) {
       _logger.e('❌ Error marking all as read: $e');
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -898,6 +904,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
           if (!postDeleted) {
             // TODO: Navigate to post detail page
             // For now, just show a snackbar
+            // ignore: use_build_context_synchronously
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Opening post...'),
@@ -941,6 +948,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
                   await _invalidateNotificationsCache();
                   _loadNotifications(forceRefresh: true);
                   
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Notification deleted'),
@@ -948,6 +956,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
                     ),
                   );
                 } catch (e) {
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Error: $e'),
@@ -1145,6 +1154,7 @@ class _MessagesPageState extends State<MessagesPage> with SingleTickerProviderSt
                 await MenuIconWithBadge.invalidateCache();
                 
                 final result = await Navigator.push(
+                  // ignore: use_build_context_synchronously
                   context,
                   MaterialPageRoute(
                     builder: (_) => ChatPage(

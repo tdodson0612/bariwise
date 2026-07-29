@@ -175,7 +175,7 @@ debugPrint('📋 Items list: ${items.map((e) => e.item).toList()}');
       // STEP 1: Delete existing items for this user
 
       try {
-        final deleteResult = await DatabaseServiceCore.workerQuery(
+        await DatabaseServiceCore.workerQuery(
           action: 'delete',
           table: 'grocery_items',
           filters: {'user_id': userId},
@@ -214,7 +214,7 @@ debugPrint('   Raw value: "$name" (category: ${entry.category}, checked: ${entry
             'checked': entry.checked,
           };
 
-          final insertResult = await DatabaseServiceCore.workerQuery(
+          await DatabaseServiceCore.workerQuery(
             action: 'insert',
             table: 'grocery_items',
             data: data,
@@ -492,7 +492,7 @@ debugPrint('🗑️ GroceryService.clearGroceryList() called');
         return false;
       }
 
-      final response = await DatabaseServiceCore.workerQuery(
+      await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'grocery_items',
         columns: ['id'],

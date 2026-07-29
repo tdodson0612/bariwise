@@ -10,6 +10,13 @@
 //   Hydration:  4000–4009
 //   Supplement: 4100–4119
 //   Check-in:   4200
+//
+// ── Section 14 addition (this session) ──────────────────────────────────
+// setDailyCheckinReminder previously persisted no enabled-flag at all, so
+// callers had no way to read current state back. Added _checkinNotifKey +
+// isDailyCheckinReminderEnabled() getter, matching the pattern already used
+// for hydration reminders. Additive only — every existing method, key, and
+// behavior is unchanged.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -29,6 +36,8 @@ class BariNotificationService {
   static const String _hydrNotifKey    = 'bari_hydration_notif_enabled';
   static const String _hydrIntervalKey = 'bari_hydration_interval_h';
   static const String _suppNotifKey    = 'bari_supplement_notif_enabled';
+  // ✅ Added this session — see file header note.
+  static const String _checkinNotifKey = 'bari_checkin_notif_enabled';
 
   // ── Notification channel IDs ────────────────────────────────────────────
   static const String _hydrChannelId    = 'bari_hydration';
@@ -210,6 +219,11 @@ class BariNotificationService {
     int hour = 20, // 8pm default
     int minute = 0,
   }) async {
+    // ✅ Added this session — persist the enabled flag so callers can read
+    // it back (previously this method never stored any state at all).
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_checkinNotifKey, enabled);
+
     await _plugin.cancel(_checkinId);
 
     if (!enabled) {
@@ -230,6 +244,13 @@ class BariNotificationService {
 
     AppConfig.debugPrint(
         '✅ Daily check-in scheduled at $hour:${minute.toString().padLeft(2, "0")}');
+  }
+
+  /// ✅ Added this session — getter to accompany the newly-persisted
+  /// _checkinNotifKey above.
+  static Future<bool> isDailyCheckinReminderEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_checkinNotifKey) ?? false;
   }
 
   // ================================================================

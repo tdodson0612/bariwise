@@ -10,12 +10,12 @@ class MenuIconWithBadge extends StatefulWidget {
   const MenuIconWithBadge({super.key});
 
   @override
-  State<MenuIconWithBadge> createState() => _MenuIconWithBadgeState();
+  State<MenuIconWithBadge> createState() => MenuIconWithBadgeState();
   
   static const String _cacheKey = 'cached_unread_count';
   static const String _cacheTimeKey = 'cached_unread_count_time';
   
-  static final GlobalKey<_MenuIconWithBadgeState> globalKey = GlobalKey<_MenuIconWithBadgeState>();
+  static final GlobalKey<MenuIconWithBadgeState> globalKey = GlobalKey<MenuIconWithBadgeState>();
   
   static Future<void> invalidateCache() async {
     try {
@@ -32,7 +32,7 @@ class MenuIconWithBadge extends StatefulWidget {
   }
 }
 
-class _MenuIconWithBadgeState extends State<MenuIconWithBadge> with WidgetsBindingObserver {
+class MenuIconWithBadgeState extends State<MenuIconWithBadge> with WidgetsBindingObserver {
   int _unreadCount = 0;
   bool _isLoading = false;
   Timer? _autoRefreshTimer;

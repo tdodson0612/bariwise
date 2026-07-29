@@ -15,10 +15,10 @@ class SubmissionStatusPage extends StatefulWidget {
   const SubmissionStatusPage({super.key});
 
   @override
-  _SubmissionStatusPageState createState() => _SubmissionStatusPageState();
+  SubmissionStatusPageState createState() => SubmissionStatusPageState();
 }
 
-class _SubmissionStatusPageState extends State<SubmissionStatusPage> {
+class SubmissionStatusPageState extends State<SubmissionStatusPage> {
   List<RecipeSubmission> _allSubmissions = [];
   List<RecipeSubmission> _filteredSubmissions = [];
   String _filterStatus = 'all'; // 'all', 'pending', 'approved', 'rejected'

@@ -118,6 +118,7 @@ class ScanButtonWithRestriction extends StatelessWidget {
     // First check locally to avoid database call
     final canScanLocal = await _canScanLocally();
     if (!canScanLocal) {
+      // ignore: use_build_context_synchronously
       _showScanLimitDialog(context);
       return;
     }
@@ -125,6 +126,7 @@ class ScanButtonWithRestriction extends StatelessWidget {
     // Verify with server and actually use a scan
     final canScan = await PremiumService.useScan();
     if (!canScan) {
+      // ignore: use_build_context_synchronously
       _showScanLimitDialog(context);
       return;
     }

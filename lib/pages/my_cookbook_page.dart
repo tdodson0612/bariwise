@@ -18,10 +18,10 @@ class MyCookbookPage extends StatefulWidget {
   const MyCookbookPage({super.key});
 
   @override
-  _MyCookbookPageState createState() => _MyCookbookPageState();
+  MyCookbookPageState createState() => MyCookbookPageState();
 }
 
-class _MyCookbookPageState extends State<MyCookbookPage> {
+class MyCookbookPageState extends State<MyCookbookPage> {
   List<DraftRecipe> _recipes = [];
   bool _isLoading = true;
   bool _isPremium = false;

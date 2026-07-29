@@ -884,13 +884,15 @@ class _PremiumPageState extends State<PremiumPage>
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    Radio<String>(
-                      value: 'premium',
-                      groupValue: _selectedPlan,
-                      onChanged: (value) =>
-                          setState(() => _selectedPlan = value),
-                      activeColor: Colors.amber.shade600,
-                    ),
+                     RadioGroup<String>(
+                       groupValue: _selectedPlan,
+                       onChanged: (value) =>
+                           setState(() => _selectedPlan = value),
+                       child: Radio<String>(
+                         value: 'premium',
+                         activeColor: Colors.amber.shade600,
+                       ),
+                     ),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

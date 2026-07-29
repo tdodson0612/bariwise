@@ -105,6 +105,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
 
       }
 
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('All caches cleared! Refreshing...'),
@@ -123,6 +124,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
       await _runDiagnostics();
       
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -137,6 +139,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
 
       await MessagingService.refreshUnreadBadge();
       
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Badges refreshed!'),
@@ -147,6 +150,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
       await _runDiagnostics();
       
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),

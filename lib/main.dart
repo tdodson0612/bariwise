@@ -7,6 +7,20 @@
 // ✅ FIXED: signedIn + recoverySentAt check catches recovery links that fire
 //           signedIn instead of passwordRecovery (common on iOS cold-start)
 // ✅ iOS/iPad-compatible Firebase initialization + Android 15 Edge-to-Edge
+//
+// ✅ NEW THIS SESSION: added a `signedOut` branch to onAuthStateChange.
+// Previously the listener only handled passwordRecovery and a signedIn-
+// with-recovery-token case — there was no handling at all for a normal
+// sign-out. Since `initialRoute` is computed once from the auth state at
+// launch and is NOT reactive, a mid-session sign-out (e.g. from Delete
+// Account in settings_page.dart) left the user stranded on whatever route
+// they were already on, with a dead/signed-out Supabase client. This
+// mirrors the existing passwordRecovery pattern (post-frame callback +
+// navigator-null retry) rather than inventing a new approach.
+//
+// settings_page.dart's Delete Account flow has been updated in the same
+// pass to remove its own redundant popUntil(isFirst) navigation, since
+// this listener now handles that redirect globally for any sign-out.
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -409,6 +423,19 @@ class _MyAppState extends State<MyApp> {
                 '⚠️ Could not parse recoverySentAt: $e');
           }
         }
+        return;
+      }
+
+      // ✅ NEW THIS SESSION — see file header note. Previously there was no
+      // handling at all for a normal sign-out event. initialRoute is only
+      // computed once at launch and is not reactive, so without this,
+      // signing out mid-session (e.g. via Delete Account in
+      // settings_page.dart) left the user stranded on their current route
+      // with a dead session instead of being routed back to /login.
+      if (event == AuthChangeEvent.signedOut) {
+        AppConfig.debugPrint('🔓 Signed out — routing to /login');
+        _handleSignedOut();
+        return;
       }
     });
 
@@ -417,6 +444,24 @@ class _MyAppState extends State<MyApp> {
     if (mounted) {
       setState(() => _isReady = true);
     }
+  }
+
+  // ✅ NEW THIS SESSION — mirrors the existing _navigateToReset pattern
+  // (post-frame callback + navigator-null retry) rather than a new approach.
+  void _handleSignedOut() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = _navigatorKey.currentState;
+      if (nav != null) {
+        nav.pushNamedAndRemoveUntil('/login', (route) => false);
+      } else {
+        AppConfig.debugPrint(
+            '⚠️ Navigator still null on sign-out — retrying in 300ms');
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _navigatorKey.currentState
+              ?.pushNamedAndRemoveUntil('/login', (route) => false);
+        });
+      }
+    });
   }
 
   void _handleRecoverySession(Session session) {

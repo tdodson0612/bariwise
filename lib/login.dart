@@ -337,11 +337,13 @@ class _LoginPageState extends State<LoginPage> {
     }
     if (resetEmail.isEmpty) {
       ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context, 'Please enter your email address');
       return;
     }
     if (!_isValidEmail(resetEmail)) {
       ErrorHandlingService.showSimpleError(
+          // ignore: use_build_context_synchronously
           context, 'Please enter a valid email address');
       return;
     }

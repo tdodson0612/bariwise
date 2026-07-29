@@ -1715,11 +1715,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
               try {
                 await _loadAllData(forceRefresh: true);
                 if (mounted) {
+                  // ignore: use_build_context_synchronously
                   ErrorHandlingService.showSuccess(context, 'Profile refreshed');
                 }
               } catch (e) {
                 if (mounted) {
                   await ErrorHandlingService.handleError(
+                    // ignore: use_build_context_synchronously
                     context: context,
                     error: e,
                     category: ErrorHandlingService.databaseError,

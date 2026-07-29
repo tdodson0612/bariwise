@@ -139,6 +139,7 @@ class _SupplementSchedulePageState extends State<SupplementSchedulePage> {
             await _load();
             await BariNotificationService.scheduleSupplementReminders(
                 _schedules);
+            // ignore: use_build_context_synchronously
             if (mounted) Navigator.pop(ctx);
           } catch (e) {
             if (mounted) {

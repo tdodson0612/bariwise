@@ -279,6 +279,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           duration: const Duration(seconds: 4),
         ));
         await OnboardingPage.markOnboardingComplete();
+        // ignore: use_build_context_synchronously
         Navigator.pushReplacementNamed(context, '/home');
       }
     } finally {

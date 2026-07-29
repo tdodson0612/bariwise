@@ -177,6 +177,7 @@ class _TrackerPageState extends State<TrackerPage> {
             onPressed: () async {
               await TrackerService.acceptDisclaimer();
               if (mounted) {
+                // ignore: use_build_context_synchronously
                 Navigator.pop(context);
               }
             },
@@ -640,6 +641,7 @@ class _TrackerPageState extends State<TrackerPage> {
     }
 
     return showDialog(
+      // ignore: use_build_context_synchronously
       context: context,
       barrierDismissible: existingHeight != null,
       builder: (context) => StatefulBuilder(
@@ -876,14 +878,17 @@ class _TrackerPageState extends State<TrackerPage> {
                       AppConfig.debugPrint(
                           '✅ Height and preference saved: $heightInCm cm ($heightSystem)');
                       ErrorHandlingService.showSuccess(
+                          // ignore: use_build_context_synchronously
                           context,
                           'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}');
                     }
                   }
+                  // ignore: use_build_context_synchronously
                   Navigator.pop(context);
                 } catch (e) {
                   AppConfig.debugPrint('❌ Error saving height: $e');
                   if (mounted) {
+                    // ignore: use_build_context_synchronously
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(
                           'Failed to save height: ${e.toString()}'),
@@ -928,6 +933,7 @@ class _TrackerPageState extends State<TrackerPage> {
                 final userId = AuthService.currentUserId;
                 if (userId != null) {
                   await TrackerService.debugStorageState(userId);
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content:
                           Text('Check debug logs for storage state')));

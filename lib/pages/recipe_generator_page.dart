@@ -447,6 +447,7 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
           recipeName: recipe.title);
       if (existing != null && existing.id != null) {
         await FavoriteRecipesService.removeFavoriteRecipe(existing.id!);
+        // ignore: use_build_context_synchronously
         ErrorHandlingService.showSuccess(context, 'Removed from favorites');
       } else {
         await FavoriteRecipesService.addFavoriteRecipe(
@@ -454,6 +455,7 @@ class _RecipeGeneratorPageState extends State<RecipeGeneratorPage> {
           recipe.ingredients.join(', '),
           recipe.instructions,
         );
+        // ignore: use_build_context_synchronously
         ErrorHandlingService.showSuccess(context, 'Added to favorites!');
       }
       await _loadFavorites();

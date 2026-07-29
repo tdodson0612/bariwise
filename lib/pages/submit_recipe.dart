@@ -64,10 +64,10 @@ class SubmitRecipePage extends StatefulWidget {
   });
 
   @override
-  _SubmitRecipePageState createState() => _SubmitRecipePageState();
+  SubmitRecipePageState createState() => SubmitRecipePageState();
 }
 
-class _SubmitRecipePageState extends State<SubmitRecipePage> {
+class SubmitRecipePageState extends State<SubmitRecipePage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _directionsController = TextEditingController();

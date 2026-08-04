@@ -8,19 +8,23 @@
 //           signedIn instead of passwordRecovery (common on iOS cold-start)
 // ✅ iOS/iPad-compatible Firebase initialization + Android 15 Edge-to-Edge
 //
-// ✅ NEW THIS SESSION: added a `signedOut` branch to onAuthStateChange.
-// Previously the listener only handled passwordRecovery and a signedIn-
-// with-recovery-token case — there was no handling at all for a normal
-// sign-out. Since `initialRoute` is computed once from the auth state at
-// launch and is NOT reactive, a mid-session sign-out (e.g. from Delete
-// Account in settings_page.dart) left the user stranded on whatever route
-// they were already on, with a dead/signed-out Supabase client. This
-// mirrors the existing passwordRecovery pattern (post-frame callback +
-// navigator-null retry) rather than inventing a new approach.
+// ✅ signedOut branch added to onAuthStateChange (previous session): closes
+// the gap where a mid-session sign-out (e.g. Delete Account) left the user
+// stranded on their current route with a dead session.
 //
-// settings_page.dart's Delete Account flow has been updated in the same
-// pass to remove its own redundant popUntil(isFirst) navigation, since
-// this listener now handles that redirect globally for any sign-out.
+// ✅ NEW THIS SESSION: /badge-debug route wrapped in AdminGuard. Previously
+// unprotected at the route level — violated the project's own Rule 17.6
+// ("admin pages must use route-level protection") and was inconsistent
+// with /lora-dataset right next to it, which was already correctly
+// wrapped. Purely additive: mirrors the existing AdminGuard(child: ...)
+// pattern, no new logic introduced.
+//
+// ⚠️ Flagged, not resolved here: the manual's Section 17 claims a
+// "/admin-recipe-review" route protected by AdminGuard, but no such route
+// exists in this routes map. Either it's wired some other way (e.g. a
+// direct MaterialPageRoute push, as tracker_landing_page.dart already does
+// elsewhere in this project) or the manual's claim is stale. Not resolved
+// since admin_recipe_review_page.dart hasn't been inspected this session.
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -426,8 +430,7 @@ class _MyAppState extends State<MyApp> {
         return;
       }
 
-      // ✅ NEW THIS SESSION — see file header note. Previously there was no
-      // handling at all for a normal sign-out event. initialRoute is only
+      // signedOut branch (added previous session): initialRoute is only
       // computed once at launch and is not reactive, so without this,
       // signing out mid-session (e.g. via Delete Account in
       // settings_page.dart) left the user stranded on their current route
@@ -446,8 +449,8 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
-  // ✅ NEW THIS SESSION — mirrors the existing _navigateToReset pattern
-  // (post-frame callback + navigator-null retry) rather than a new approach.
+  // Mirrors the existing _navigateToReset pattern (post-frame callback +
+  // navigator-null retry) rather than a new approach.
   void _handleSignedOut() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final nav = _navigatorKey.currentState;
@@ -622,7 +625,11 @@ class _MyAppState extends State<MyApp> {
         '/manual-barcode-entry': (context) => const ManualBarcodeEntryScreen(),
         '/nutrition-search':     (context) => const NutritionSearchScreen(),
         '/saved-ingredients':    (context) => const SavedIngredientsScreen(),
-        '/badge-debug':          (context) => BadgeDebugPage(),
+        // ✅ NEW THIS SESSION: was previously unprotected at the route
+        // level — now wrapped in AdminGuard, mirroring the /lora-dataset
+        // pattern below. Not made const since BadgeDebugPage() was not
+        // const in the original registration either.
+        '/badge-debug':          (context) => AdminGuard(child: BadgeDebugPage()),
         '/submission-status':    (context) => const SubmissionStatusPage(),
         '/tracker':              (context) => const TrackerPage(),
         '/my-cookbook':          (context) => const MyCookbookPage(),

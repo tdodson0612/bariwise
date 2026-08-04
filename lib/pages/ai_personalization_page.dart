@@ -9,7 +9,20 @@
 //
 // All data is mocked / rule-based in this shell.
 // Backend ML integration is deferred to Phase 2/3 (see ai_personalization_plan.md).
-// BBRS design language: navy hero, glass cards, gold accents.
+//
+// ✅ FIXED THIS SESSION: previously used "BBRS design language: navy hero,
+// glass cards, gold accents" — a leftover from the LiverWise/BBRS source
+// template, violating Rule 1.3 (BariWise = Colors.orange). Long-flagged
+// Technical Debt, now resolved. All BBRS navy/gold tokens (_kNavy, _kNavyL,
+// _kGold) renamed and re-valued to a BariWise orange palette (_kPrimary,
+// _kPrimaryLight) rather than just re-valued under the old names, since a
+// variable called "_kNavy" holding an orange value would be more confusing
+// than the mismatch it replaces. No layout, spacing, or component
+// structure changed — colors only, per Rule 13.
+//
+// Also verified this session: the previously-flagged unused
+// grocery_service.dart import is not present in this file — that item is
+// resolved (or was already inaccurate) as of the current file state.
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,11 +31,16 @@ import '../services/profile_service.dart';
 import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
 
-// ─── BBRS Tokens ──────────────────────────────────────────────────────────────
-const _kNavy  = Color(0xFF0A1628);
-const _kNavyL = Color(0xFF1A2E4A);
+// ─── BariWise Tokens ──────────────────────────────────────────────────────────
+// _kPrimary/_kPrimaryLight replace the former BBRS _kNavy/_kNavyL/_kGold.
+// _kPrimary: deep, rich orange (deepOrange.shade900-equivalent) — used
+//   wherever the hero/dark surface previously used navy.
+// _kPrimaryLight: bright BariWise orange (orange.shade500-equivalent) —
+//   used wherever the former gold accent (or the lighter navy gradient
+//   partner) previously appeared.
+const _kPrimary      = Color(0xFFBF360C);
+const _kPrimaryLight = Color(0xFFFF9800);
 const _kBg    = Color(0xFFEEF2F7);
-const _kGold  = Color(0xFFC9A84C);
 const _kBody  = Color(0xFF1A2332);
 const _kMuted = Color(0xFF6B7A94);
 const _kBorder = Color(0xFFDDE3EE);
@@ -99,12 +117,12 @@ class _AiPersonalizationPageState extends State<AiPersonalizationPage>
           SliverAppBar(
             expandedHeight: 160,
             pinned: true,
-            backgroundColor: _kNavy,
+            backgroundColor: _kPrimary,
             foregroundColor: Colors.white,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [_kNavy, _kNavyL],
+                    gradient: LinearGradient(colors: [_kPrimary, _kPrimaryLight],
                         begin: Alignment.topLeft, end: Alignment.bottomRight)),
                 child: SafeArea(child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 48, 20, 0),
@@ -112,11 +130,11 @@ class _AiPersonalizationPageState extends State<AiPersonalizationPage>
                       mainAxisAlignment: MainAxisAlignment.end, children: [
                     Row(children: [
                       Container(padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: _kGold.withValues(alpha: 0.2),
+                          decoration: BoxDecoration(color: _kPrimaryLight.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: _kGold.withValues(alpha: 0.4))),
+                              border: Border.all(color: _kPrimaryLight.withValues(alpha: 0.4))),
                           child: const Icon(Icons.auto_awesome_rounded,
-                              color: _kGold, size: 22)),
+                              color: _kPrimaryLight, size: 22)),
                       const SizedBox(width: 12),
                       const Column(crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -137,9 +155,9 @@ class _AiPersonalizationPageState extends State<AiPersonalizationPage>
             ),
             bottom: TabBar(
               controller: _tabs,
-              indicatorColor: _kGold,
+              indicatorColor: _kPrimaryLight,
               indicatorWeight: 3,
-              labelColor: _kGold,
+              labelColor: _kPrimaryLight,
               unselectedLabelColor: Colors.white54,
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
               tabs: const [
@@ -151,7 +169,7 @@ class _AiPersonalizationPageState extends State<AiPersonalizationPage>
           ),
         ],
         body: _loading
-            ? const Center(child: CircularProgressIndicator(color: _kGold))
+            ? const Center(child: CircularProgressIndicator(color: _kPrimaryLight))
             : TabBarView(
                 controller: _tabs,
                 children: [
@@ -282,9 +300,9 @@ class _RecipeCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: _kGold.withValues(alpha: 0.12),
+              decoration: BoxDecoration(color: _kPrimaryLight.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.restaurant_rounded, color: _kGold, size: 18)),
+              child: const Icon(Icons.restaurant_rounded, color: _kPrimaryLight, size: 18)),
           const SizedBox(width: 10),
           Expanded(child: Text(suggestion.name,
               style: const TextStyle(fontWeight: FontWeight.bold,
@@ -429,7 +447,7 @@ class _SupplementTab extends StatelessWidget {
             decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(14), border: Border.all(color: _kBorder)),
             child: const Row(children: [
-              Icon(Icons.celebration_rounded, color: _kGold, size: 24),
+              Icon(Icons.celebration_rounded, color: _kPrimaryLight, size: 24),
               SizedBox(width: 12),
               Expanded(child: Text('You\'re already taking all the key bariatric supplements!',
                   style: TextStyle(fontSize: 14, color: _kBody))),
@@ -624,10 +642,10 @@ class _MealPlanTabState extends State<_MealPlanTab> {
             ),
             child: Column(children: [
               Container(padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: _kGold.withValues(alpha: 0.1),
+                  decoration: BoxDecoration(color: _kPrimaryLight.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
-                      border: Border.all(color: _kGold.withValues(alpha: 0.3))),
-                  child: const Icon(Icons.auto_awesome_rounded, color: _kGold, size: 40)),
+                      border: Border.all(color: _kPrimaryLight.withValues(alpha: 0.3))),
+                  child: const Icon(Icons.auto_awesome_rounded, color: _kPrimaryLight, size: 40)),
               const SizedBox(height: 16),
               const Text('Generate Your Week', style: TextStyle(fontSize: 18,
                   fontWeight: FontWeight.bold, color: _kBody)),
@@ -647,10 +665,10 @@ class _MealPlanTabState extends State<_MealPlanTab> {
                     : const Icon(Icons.auto_awesome_rounded),
                 label: Text(_generating ? 'Generating…' : 'Generate 7-Day Plan'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: _kNavy,
+                  backgroundColor: _kPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: _kGold.withValues(alpha: 0.4))),
+                      side: BorderSide(color: _kPrimaryLight.withValues(alpha: 0.4))),
                 ),
               )),
             ]),
@@ -662,8 +680,8 @@ class _MealPlanTabState extends State<_MealPlanTab> {
               onPressed: _generatePlan,
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('Regenerate'),
-              style: FilledButton.styleFrom(backgroundColor: _kNavy,
-                  side: BorderSide(color: _kGold.withValues(alpha: 0.4))),
+              style: FilledButton.styleFrom(backgroundColor: _kPrimary,
+                  side: BorderSide(color: _kPrimaryLight.withValues(alpha: 0.4))),
             )),
             const SizedBox(width: 10),
             Expanded(child: FilledButton.icon(
@@ -750,12 +768,12 @@ class _ContextBanner extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: _kGold.withValues(alpha: 0.08),
+      color: _kPrimaryLight.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _kGold.withValues(alpha: 0.3)),
+      border: Border.all(color: _kPrimaryLight.withValues(alpha: 0.3)),
     ),
     child: Row(children: [
-      Icon(icon, color: _kGold, size: 16),
+      Icon(icon, color: _kPrimaryLight, size: 16),
       const SizedBox(width: 8),
       Expanded(child: Text(text,
           style: const TextStyle(fontSize: 12, color: _kBody, height: 1.4))),
@@ -771,8 +789,8 @@ class _PhaseLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(children: [
     Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: _kNavy, borderRadius: BorderRadius.circular(6)),
-        child: Text(phase, style: const TextStyle(color: _kGold,
+        decoration: BoxDecoration(color: _kPrimary, borderRadius: BorderRadius.circular(6)),
+        child: Text(phase, style: const TextStyle(color: _kPrimaryLight,
             fontSize: 10, fontWeight: FontWeight.bold))),
     const SizedBox(width: 8),
     Expanded(child: Text(description,
@@ -791,23 +809,23 @@ class _ComingSoonCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
-      gradient: LinearGradient(colors: [_kNavy.withValues(alpha: 0.05), _kNavyL.withValues(alpha: 0.05)]),
+      gradient: LinearGradient(colors: [_kPrimary.withValues(alpha: 0.05), _kPrimaryLight.withValues(alpha: 0.05)]),
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: _kNavy.withValues(alpha: 0.12)),
+      border: Border.all(color: _kPrimary.withValues(alpha: 0.12)),
     ),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Icon(icon, color: _kNavy.withValues(alpha: 0.4), size: 20),
+      Icon(icon, color: _kPrimary.withValues(alpha: 0.4), size: 20),
       const SizedBox(width: 10),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
-              color: _kNavy.withValues(alpha: 0.6))),
+              color: _kPrimary.withValues(alpha: 0.6))),
           const SizedBox(width: 8),
           Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: _kNavy.withValues(alpha: 0.08),
+              decoration: BoxDecoration(color: _kPrimary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(6)),
               child: Text('Phase 2', style: TextStyle(fontSize: 9,
-                  fontWeight: FontWeight.bold, color: _kNavy.withValues(alpha: 0.5)))),
+                  fontWeight: FontWeight.bold, color: _kPrimary.withValues(alpha: 0.5)))),
         ]),
         const SizedBox(height: 4),
         Text(description, style: TextStyle(fontSize: 11,

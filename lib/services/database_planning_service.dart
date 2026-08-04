@@ -2,9 +2,37 @@
 // Section 21 – Data & Future Backend Planning
 // Comprehensive planning for BariWise data architecture, migration, and scaling
 //
-// This file serves as both documentation and a planning reference.
-// It defines the target data architecture, migration strategies,
-// offline support patterns, and analytics infrastructure.
+// ✅ RECONCILED THIS SESSION: this file's Section 2 (schema reference) and
+// Section 16 (RLS plan) were written as aspirational/planned state but had
+// been implicitly treated elsewhere as if they described *current* state.
+// They didn't. Direct verification this session (information_schema.
+// columns, a full FK/cascade map, and pg_policies) found:
+//   - None of the 7 bari_* tables existed at all, despite complete,
+//     correct Dart code in bari_features_service.dart and
+//     alcohol_service.dart already targeting them. Every hydration/
+//     supplement/symptom/alcohol log attempt was throwing a visible red
+//     error snackbar. This file's own schema section is almost certainly
+//     the original spec these were built against — designed, documented
+//     here, but never actually migrated into Supabase.
+//   - This file's schema section also never mentioned bari_alcohol_log
+//     at all, so it was itself an incomplete spec even before the
+//     migration gap.
+//   - account_deletion_service.dart (referenced below as DB-006) had 5
+//     separate wrong table/column names (user_profiles, user_achievements,
+//     comment_likes, and sender/receiver instead of sender_id/receiver_id)
+//     that were silently failing, on top of the missing bari_* tables.
+//   - "Current: No RLS policies documented" (old Section 16) was wrong —
+//     RLS is live and enforced, verified directly via pg_policies, on
+//     grocery_items, nutrition_tracker, and profiles, all following a
+//     consistent auth.uid() = user_id ownership pattern.
+//
+// All of the above has been fixed or created this session (see updated
+// Section 2, Section 15, and Section 16 below). One open item found
+// during this reconciliation and NOT yet resolved: profiles appears to
+// have no DELETE policy at all in pg_policies, which could mean
+// account_deletion_service.dart's final profiles delete silently fails
+// if the Worker executes it under the user's own token rather than a
+// service-role key. See DB-009 below.
 //
 // Architecture: UI → Providers → Controllers → Services → Repositories → Storage/APIs
 // Current:     UI → Services → DatabaseServiceCore (Worker) → Supabase/R2
@@ -43,81 +71,110 @@
 // │            └──────────────┘             │   AI/ML    │ └───────┘    │
 // │                                         └────────────┘              │
 // └──────────────────────────────────────────────────────────────────────┘
+//
+// ⚠️ Note on _workerQuery: verified this session (database_service_core.dart)
+// that the `filters` map is a pure client-side passthrough to the Worker —
+// no key validation or whitelisting happens in the Flutter code. Whether
+// the Worker itself handles arbitrary filter column names (e.g.
+// tagged_user_id, sender_id) equivalently to user_id is not verified —
+// the Worker's own source is not part of this Flutter repo.
 
 // ============================================================================
 // 2. SUPABASE TABLE SCHEMA REFERENCE
 // ============================================================================
 //
+// ✅ CORRECTED THIS SESSION. Below reflects the REAL, directly-queried
+// schema as of this session — not the original spec. Differences from
+// the original version of this file are called out explicitly rather
+// than silently changed.
+//
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ PROFILES                                                           │
+// │ PROFILES  (real table — directly verified)                          │
 // ├──────────────────────────────────────────────────────────────────────┤
 // │ id                  UUID (PK, references auth.users)                │
 // │ email               TEXT                                            │
-// │ username            TEXT (UNIQUE)                                   │
+// │ username            TEXT                                            │
 // │ first_name          TEXT                                            │
 // │ last_name           TEXT                                            │
-// │ avatar_url          TEXT                                            │
-// │ profile_picture_url TEXT                                            │
+// │ profile_picture     TEXT                                            │
 // │ profile_background  TEXT                                            │
+// │ avatar_url          TEXT                                            │
+// │ bariatric_surgery_type TEXT                                         │
+// │ friends_list_visible BOOLEAN                                        │
+// │ weight_loss_visible BOOLEAN                                         │
+// │ weight_visible      BOOLEAN                                         │
 // │ is_premium          BOOLEAN                                         │
+// │ premium_expires_at  TIMESTAMPTZ                                     │
+// │ total_scans_used    INTEGER                                         │
 // │ daily_scans_used    INTEGER                                         │
 // │ last_scan_date      DATE                                            │
-// │ xp                  INTEGER                                         │
-// │ level               INTEGER                                         │
-// │ friends_list_visible BOOLEAN                                        │
+// │ height_cm           DOUBLE PRECISION                                │
+// │ height_unit_preference VARCHAR                                      │
+// │ pictures            ARRAY (gallery URLs)                            │
 // │ created_at          TIMESTAMPTZ                                     │
 // │ updated_at          TIMESTAMPTZ                                     │
+// │                                                                       │
+// │ ⚠️ Old version of this doc listed xp/level columns — not confirmed   │
+// │ present. Not removed from any code on this basis, just not asserted │
+// │ as real schema here until directly checked.                         │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_NUTRIENT_SNAPSHOTS (daily nutrition summary for dashboard)     │
+// │ BARI_NUTRIENT_SNAPSHOTS  (real as of this session — created,        │
+// │ RLS-secured, and wired into account_deletion_service.dart)          │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
+// │ id                  BIGINT (PK, identity) ⚠️ was UUID in the        │
+// │                      original spec — BIGINT matches the dominant    │
+// │                      convention across the real schema (most tables │
+// │                      use integer/bigint; only feed_* and a couple   │
+// │                      others use uuid). Confirmed harmless: every    │
+// │                      bari_models.dart fromMap() calls .toString()   │
+// │                      on id, so either type deserializes fine.       │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
 // │ snapshot_date       DATE                                            │
-// │ calories            DOUBLE PRECISION                                │
-// │ protein_g           DOUBLE PRECISION                                │
-// │ fat_g               DOUBLE PRECISION                                │
-// │ saturated_fat_g     DOUBLE PRECISION                                │
-// │ sugar_g             DOUBLE PRECISION                                │
-// │ sodium_mg           DOUBLE PRECISION                                │
-// │ fiber_g             DOUBLE PRECISION                                │
-// │ water_cups          DOUBLE PRECISION                                │
+// │ calories            NUMERIC                                        │
+// │ protein_g           NUMERIC                                        │
+// │ fat_g               NUMERIC                                        │
+// │ saturated_fat_g     NUMERIC                                        │
+// │ sugar_g             NUMERIC                                        │
+// │ sodium_mg           NUMERIC                                        │
+// │ fiber_g             NUMERIC                                        │
+// │ water_cups          NUMERIC                                        │
 // │ daily_score         INTEGER                                         │
-// │ weight_kg           DOUBLE PRECISION                                │
+// │ weight_kg           NUMERIC                                        │
 // │ supplement_count    INTEGER                                         │
 // │ UNIQUE(user_id, snapshot_date)                                      │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_WEEKLY_GOALS                                                   │
+// │ BARI_WEEKLY_GOALS  (real as of this session)                        │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
+// │ id                  BIGINT (PK, identity) — see note above          │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
 // │ week_start_date     DATE                                            │
-// │ goal_protein_g      DOUBLE PRECISION                                │
-// │ goal_sodium_mg      DOUBLE PRECISION                                │
-// │ goal_sugar_g        DOUBLE PRECISION                                │
-// │ goal_fat_g          DOUBLE PRECISION                                │
-// │ goal_fiber_g        DOUBLE PRECISION                                │
-// │ goal_water_cups     DOUBLE PRECISION                                │
+// │ goal_protein_g      NUMERIC                                        │
+// │ goal_sodium_mg      NUMERIC                                        │
+// │ goal_sugar_g        NUMERIC                                        │
+// │ goal_fat_g          NUMERIC                                        │
+// │ goal_fiber_g        NUMERIC                                        │
+// │ goal_water_cups     NUMERIC                                        │
 // │ UNIQUE(user_id, week_start_date)                                    │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_HYDRATION_LOG                                                  │
+// │ BARI_HYDRATION_LOG  (real as of this session)                       │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
-// │ cups                DOUBLE PRECISION                                │
+// │ id                  BIGINT (PK, identity) — see note above          │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
+// │ cups                NUMERIC                                        │
 // │ logged_at           TIMESTAMPTZ                                     │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_SUPPLEMENT_SCHEDULES                                           │
+// │ BARI_SUPPLEMENT_SCHEDULES  (real as of this session)                 │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
+// │ id                  BIGINT (PK, identity) — see note above          │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
 // │ name                TEXT                                            │
 // │ dose                TEXT                                            │
 // │ time_of_day         TEXT                                            │
@@ -125,21 +182,22 @@
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_SUPPLEMENT_TAKEN_LOG                                           │
+// │ BARI_SUPPLEMENT_TAKEN_LOG  (real as of this session)                 │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
+// │ id                  BIGINT (PK, identity) — see note above          │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
 // │ name                TEXT                                            │
 // │ dose                TEXT                                            │
-// │ schedule_id         UUID (FK → bari_supplement_schedules.id)        │
+// │ schedule_id         BIGINT (FK → bari_supplement_schedules.id,      │
+// │                      ON DELETE SET NULL)                            │
 // │ taken_at            TIMESTAMPTZ                                     │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BARI_SYMPTOM_LOG                                                    │
+// │ BARI_SYMPTOM_LOG  (real as of this session)                         │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  UUID (PK)                                       │
-// │ user_id             UUID (FK → profiles.id)                         │
+// │ id                  BIGINT (PK, identity) — see note above          │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
 // │ symptom_type        TEXT (enum: fatigue, nausea, etc.)              │
 // │ severity            INTEGER (1-5)                                   │
 // │ notes               TEXT                                            │
@@ -147,25 +205,67 @@
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ SUBMITTED_RECIPES                                                   │
+// │ BARI_ALCOHOL_LOG  (real as of this session — NOT documented in the  │
+// │ original version of this file at all; discovered via                │
+// │ alcohol_service.dart, which was never mentioned in this doc)        │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  SERIAL (PK)                                     │
-// │ user_id             UUID (FK → profiles.id)                         │
-// │ recipe_name         TEXT                                            │
-// │ ingredients         TEXT                                            │
-// │ directions          TEXT                                            │
-// │ created_at          TIMESTAMPTZ                                     │
-// │ updated_at          TIMESTAMPTZ                                     │
+// │ id                  BIGINT (PK, identity)                           │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
+// │ drink_name          TEXT                                            │
+// │ total_volume_oz     NUMERIC                                        │
+// │ abv_percent         NUMERIC                                        │
+// │ pure_alcohol_oz     NUMERIC                                        │
+// │ standard_drinks     NUMERIC                                        │
+// │ logged_at           TIMESTAMPTZ                                     │
+// │ notes               TEXT                                            │
 // └──────────────────────────────────────────────────────────────────────┘
 //
 // ┌──────────────────────────────────────────────────────────────────────┐
-// │ BADGES / USER_ACHIEVEMENTS                                          │
+// │ SUBMITTED_RECIPES  (real table — directly verified; several columns │
+// │ differ from the original version of this doc)                       │
 // ├──────────────────────────────────────────────────────────────────────┤
-// │ id                  SERIAL (PK)                                     │
-// │ user_id             UUID (FK → profiles.id)                         │
-// │ badge_id            TEXT                                            │
-// │ earned_at           TIMESTAMPTZ                                     │
+// │ id                  INTEGER (PK)                                    │
+// │ user_id             UUID (FK → profiles.id, ON DELETE CASCADE)      │
+// │ title               TEXT       ⚠️ was "recipe_name" in old doc      │
+// │ description         TEXT                                            │
+// │ ingredients          ARRAY      ⚠️ was TEXT in old doc               │
+// │ instructions         ARRAY      ⚠️ was "directions" TEXT in old doc  │
+// │ servings, prep_time_minutes, cook_time_minutes  INTEGER              │
+// │ calories, protein, carbohydrates, fat, sugar, fiber, sodium,        │
+// │   saturated_fat     NUMERIC                                        │
+// │ bari_score          INTEGER                                         │
+// │ is_verified, is_public  BOOLEAN                                     │
+// │ average_rating      NUMERIC                                        │
+// │ rating_count        INTEGER                                         │
+// │ image_url           TEXT                                            │
+// │ submitted_at, updated_at  TIMESTAMPTZ                                │
 // └──────────────────────────────────────────────────────────────────────┘
+//
+// ┌──────────────────────────────────────────────────────────────────────┐
+// │ "BADGES / USER_ACHIEVEMENTS" — REMOVED FROM THIS DOC.                │
+// │ Directly verified this session: no table by this or any similar     │
+// │ name exists anywhere in the public schema. account_deletion_        │
+// │ service.dart referenced 'user_achievements' and silently failed on  │
+// │ every deletion attempt; that call has been removed there. If an     │
+// │ achievements/gamification feature is real (xp_service.dart,         │
+// │ achievements_service.dart, xp_reward_service.dart all exist in the  │
+// │ codebase per a full `find lib -type f` this session), its actual    │
+// │ backing table has not yet been identified and should be checked     │
+// │ directly rather than assumed from this doc's old claim.             │
+// └──────────────────────────────────────────────────────────────────────┘
+//
+// ✅ ALSO DISCOVERED THIS SESSION, NOT PREVIOUSLY IN THIS DOC AT ALL: a
+// real social feed system (feed_posts, feed_post_comments,
+// feed_post_likes, feed_post_saves, feed_tags, feed_notifications,
+// post_reports), friendships (distinct from friend_requests), cookbooks/
+// cookbook_recipes, user_pantry, user_scanned_ingredients,
+// custom_ingredients, suggested_recipes, draft_recipes, grocery_list_items,
+// user_pictures, user_preferences, contact_messages,
+// profile_creation_logs. None of these are documented anywhere in this
+// file's schema reference. Confirmed real and populated with real
+// columns (not empty/dead tables) via direct information_schema query.
+// Whether all of these are actually wired up in the running app is
+// unconfirmed and out of scope for this reconciliation pass.
 
 // ============================================================================
 // 3. TARGET ARCHITECTURE (Repository Pattern)
@@ -173,7 +273,8 @@
 //
 // The following defines the future repository pattern that will separate
 // data access concerns from business logic. Each repository implements a
-// common interface with offline-first strategies.
+// common interface with offline-first strategies. Unchanged this session —
+// this is forward-looking design, not a claim about current state.
 //
 // ┌────────────────────────────────────────────────────────────────────────┐
 // │ FUTURE DATA LAYER                                                     │
@@ -221,6 +322,11 @@
 // │ Messages         │ Supabase             │ Online-only (real-time)     │
 // │ Configuration    │ SharedPreferences    │ Local-only                  │
 // └────────────────────────────────────────────────────────────────────────┘
+//
+// ⚠️ Note: whether Hydration/Supplement/Symptom/Alcohol logging is
+// genuinely "online-only" in practice is worth re-checking now that
+// their tables actually exist — until this session they were, in effect,
+// completely non-functional rather than "online" in any real sense.
 //
 // TARGET OFFLINE-FIRST APPROACH:
 // ┌────────────────────────────────────────────────────────────────────────┐
@@ -273,7 +379,8 @@
 // ============================================================================
 //
 // These interfaces define the contract for each repository.
-// They should be implemented during Phase 2 migration.
+// They should be implemented during Phase 2 migration. Unchanged this
+// session — forward-looking design, not a current-state claim.
 
 /// Base repository with common CRUD operations.
 /// Every repository follows this pattern.
@@ -371,6 +478,7 @@ abstract class SocialRepository {
 //
 // These are the domain entities that will replace raw Maps throughout the app.
 // They are defined here for planning only — actual implementation during Phase 2.
+// Unchanged this session.
 
 class ProfileEntity {
   final String id;
@@ -653,7 +761,7 @@ class MessageEntity {
 // 8. PACKAGE ROADMAP
 // ============================================================================
 //
-// Packages to add for Phase 2-4 migrations:
+// Packages to add for Phase 2-4 migrations. Unchanged this session.
 //
 // Phase 2:
 //   sqflite: ^2.3.0          # Local SQLite database
@@ -675,7 +783,7 @@ class MessageEntity {
 // ============================================================================
 //
 // Current: Single endpoint /query with action-based routing
-// Target: Versioned endpoints
+// Target: Versioned endpoints. Unchanged this session.
 //
 //   /api/v1/query          → Current functionality
 //   /api/v1/storage        → File operations
@@ -696,6 +804,14 @@ class MessageEntity {
 // Current: ErrorHandlingService (basic try/catch logging)
 // Target: Structured error handling with retry policies
 //
+// ⚠️ Worth flagging given this session's findings: the CURRENT error
+// handling pattern (try/catch that logs to debug console and swallows
+// the error) is precisely what let the missing bari_* tables, the wrong
+// account_deletion_service.dart table/column names, and (potentially)
+// the profiles DELETE RLS gap go unnoticed. "Basic try/catch logging" is
+// not just an architectural nicety to defer to Phase 2+ — it's an active
+// risk of the exact failure mode found repeatedly this session.
+//
 // Error categories:
 //   NetworkError       → Retry with exponential backoff (3 attempts)
 //   AuthError          → Force re-login
@@ -714,7 +830,7 @@ class MessageEntity {
 // 11. DATA ANALYTICS PLAN
 // ============================================================================
 //
-// Event categories to track:
+// Event categories to track. Unchanged this session.
 //
 // User Engagement:
 //   - app_open
@@ -763,6 +879,10 @@ class MessageEntity {
 //   - Use composite indexes for range queries
 //   - Implement pagination for list endpoints
 //
+// ⚠️ Note: the bari_* tables referenced above now genuinely exist as of
+// this session — these index recommendations are newly actionable, not
+// purely theoretical.
+//
 // Worker optimization:
 //   - Add connection pooling to Supabase
 //   - Implement response caching for read-heavy endpoints
@@ -802,6 +922,14 @@ class MessageEntity {
 //   - Consent management UI
 //   - Cookie/data collection disclosure
 //
+// ⚠️ Account deletion status update: as of this session,
+// account_deletion_service.dart has been rewritten against the real
+// schema and now covers 30+ tables correctly, including all 7 bari_*
+// tables. See DB-006 and DB-009 below for current/remaining status —
+// this is much closer to a real "data purge" than the stub this doc
+// previously described, but the profiles DELETE RLS question (DB-009)
+// should be resolved before this bullet is treated as fully done.
+//
 // Encryption:
 //   - In transit: TLS (already enforced by Supabase/Worker)
 //   - At rest: Supabase encryption (default)
@@ -813,8 +941,9 @@ class MessageEntity {
 // ============================================================================
 //
 // Priority 1 (Current sprint):
-//   □ Document existing schema and architecture ✓
-//   □ Identify technical debt (duplicate weight/supplement/grocery systems)
+//   ✅ Document existing schema and architecture — corrected this session
+//      against directly-verified reality, not just re-confirmed
+//   ✅ Identify technical debt (duplicate weight/supplement/grocery systems)
 //
 // Priority 2 (Next sprint):
 //   □ Create LocalDatabaseService with sqflite
@@ -834,77 +963,135 @@ class MessageEntity {
 //   □ Analytics event batching
 //   □ GDPR data export
 //   □ Data migration tools
-//   □ Delete Account implementation
+//   ✅ Delete Account implementation — DONE this session (see DB-006).
+//      Was listed here as a future Priority-4 item; turned out to
+//      already be attempted (as a broken stub) and was fixed, not built
+//      from scratch.
 
 // ============================================================================
 // 15. TECHNICAL DEBT REGISTER
 // ============================================================================
 //
-// Known issues to address during migration:
+// ✅ Statuses updated this session against verified reality. Register
+// stays append-only — DB-001 through DB-008 numbering preserved exactly,
+// new items appended as DB-009+.
 //
 // DB-001: Duplicate weight tracking
 //   - tracker_page.dart has local weight entry
 //   - extended_tracker_page.dart has separate weight tracking
 //   - Plan: Consolidate into TrackerRepository
+//   Status: Unresolved. Explicit user decision this session's broader
+//   history: "connect, don't unify" — intentionally left as-is for now.
 //
 // DB-002: Duplicate supplement tracking
 //   - tracker_page.dart supplements (local)
 //   - BariFeaturesService supplement log (Supabase)
 //   - Plan: Queue local entries, sync to Supabase
+//   Status: Unresolved. ⚠️ Newly relevant nuance: until this session, the
+//   Supabase side of this "duplication" was completely non-functional
+//   (table didn't exist, every call threw). The duplication has only
+//   been *actually* live on both sides since this session's fix — worth
+//   knowing when reasoning about how much real-world drift between the
+//   two systems has actually accumulated.
 //
 // DB-003: Duplicate grocery list systems
 //   - grocery_list.dart (local SharedPreferences)
 //   - list_generator_page.dart (separate implementation)
 //   - Plan: Merge into single GroceryRepository
+//   Status: Unresolved — architecture decision requiring explicit
+//   direction, unchanged.
 //
 // DB-004: Tracker Landing not connected
 //   - tracker_landing_page.dart exists but navigation not wired
 //   - Plan: Route to landing, consolidate navigation
+//   Status: Unresolved — blocked on main_navigation.dart being back in
+//   scope, per prior session decision.
 //
 // DB-005: Notification toggles not wired
 //   - UI toggles exist but may not persist
 //   - Plan: Wire to SharedPreferences + settings repository
+//   Status: ✅ Resolved. Hydration and Symptom Reminders now call
+//   BariNotificationService for real. Weekly Progress, Recipe Updates,
+//   and Messages have no backing notification type at all (confirmed via
+//   direct inspection, not assumption) and are honestly labeled
+//   "Coming soon" rather than left silently non-functional.
 //
 // DB-006: Delete Account not implemented
 //   - account_deletion_service.dart exists as stub
 //   - Plan: Implement full deletion pipeline
+//   Status: ✅ Resolved, in two passes. First pass fixed 5 wrong table/
+//   column names that had been silently failing (user_profiles→profiles,
+//   user_achievements→removed, comment_likes→feed_comment_likes,
+//   sender/receiver→sender_id/receiver_id) and added ~20 real per-user
+//   tables that were never touched at all. Second pass added all 7 bari_*
+//   tables once they were confirmed to exist. See DB-009 for one
+//   remaining open question on this feature.
 //
 // DB-007: Some tracker data is local only
 //   - Hydration, supplements, symptoms → Supabase
 //   - Daily meals, weight, score → local only
 //   - Plan: Backup sync to bari_nutrient_snapshots
+//   Status: Partially resolved. The "→ Supabase" side of this line is
+//   only genuinely true as of this session — the 6 relevant tables (7
+//   counting alcohol) did not exist before now. The local-only side is
+//   unchanged.
 //
 // DB-008: Placeholder support email/version
 //   - Contact screen uses placeholder values
 //   - Plan: Migrate to AppConfig constants
+//   Status: Unresolved — placeholders are intentional-by-design pending
+//   real values, not a bug. Unchanged.
+//
+// ✅ NEW — DB-009: profiles Table May Have No DELETE Policy
+//   Location: RLS on the 'profiles' table (pg_policies, checked this
+//   session).
+//   Issue: SELECT (×2), INSERT (×2), and UPDATE policies were found for
+//   profiles — no DELETE policy was returned. If the Cloudflare Worker
+//   executes account_deletion_service.dart's final `_safeDelete('profiles',
+//   {'id': userId})` call using the user's own forwarded auth token
+//   (normal RLS-enforced access) rather than a service-role key that
+//   bypasses RLS, that delete could be silently failing right now — the
+//   exact same failure shape as every other bug found this session.
+//   Status: Unresolved — not verifiable from this Flutter repo alone,
+//   since the Worker's own source isn't part of it. Needs either (a) a
+//   real test deletion followed by directly checking whether the
+//   profiles row is actually gone, or (b) the Worker's source, to see
+//   whether it uses service_role for deletes.
 
 // ============================================================================
 // 16. SUPABASE ROW-LEVEL SECURITY (RLS) POLICY PLAN
 // ============================================================================
 //
-// Current: No RLS policies documented
-// Target: Implement RLS for all tables
+// ✅ CORRECTED THIS SESSION. The original version of this doc said
+// "Current: No RLS policies documented" — that was wrong. RLS is live
+// and enforced, directly verified via pg_policies this session.
 //
-// Profiles:
-//   SELECT: Authenticated users can read public profiles
-//   INSERT: Users can create their own profile only
-//   UPDATE: Users can update their own profile only
-//   DELETE: Users can delete their own profile (service role only)
+// Confirmed real pattern (grocery_items, nutrition_tracker — both
+// checked directly): strict per-user ownership, all four operations:
+//   SELECT/INSERT/UPDATE/DELETE: auth.uid() = user_id
 //
-// Bari health tables:
-//   SELECT: Users can read their own data only
-//   INSERT: Users can insert their own data only
-//   UPDATE: Users can update their own data only
-//   DELETE: Users can delete their own data only
+// profiles is intentionally different (social-facing, not private):
+//   SELECT: "Users can view other profiles" (qual: true — public) AND
+//           "Users can view own profile" (qual: auth.uid() = id)
+//   INSERT: "Users can insert own profile" (auth.uid() = id) AND a
+//           separate service_role INSERT policy
+//   UPDATE: auth.uid() = id
+//   DELETE: ⚠️ none found. See DB-009 above — this is the one open
+//           question left from this session's verification work.
 //
-// Social tables:
-//   SELECT: Friends can read each other's public posts
-//   INSERT: Users can create their own posts
-//   DELETE: Users can delete their own posts
+// The 7 bari_* tables created this session were given RLS matching the
+// grocery_items/nutrition_tracker pattern exactly (strict ownership, all
+// four operations) — NOT the profiles pattern, since health tracking
+// data has no reason to be publicly viewable.
+//
+// Social tables (feed_*, friendships, etc.): RLS policies not checked
+// this session — out of scope for this reconciliation pass, but worth
+// noting given the profiles DELETE gap that "a table exists" does not
+// imply "its RLS is complete."
 //
 // Admin functions:
 //   Service role key for admin operations
-//   Admin guard already implemented in app
+//   Admin guard already implemented in app (admin_guard.dart)
 
 // ============================================================================
 // 17. CAPACITY PLANNING
@@ -946,17 +1133,27 @@ class DatabasePlanningService {
   static String get nextPhase => 'Phase 2 – Repository layer + offline storage';
 
   /// Returns the count of known technical debt items.
-  static int get technicalDebtCount => 8;
+  /// ✅ Updated this session: was 8, now 9 (DB-009 added). Resolved items
+  /// (DB-005, DB-006) are still counted here — this tracks total known
+  /// items ever logged, not just open ones. See resolvedDebtCount below
+  /// for open-vs-resolved.
+  static int get technicalDebtCount => 9;
 
-  /// Returns the list of known technical debt items.
+  /// Returns the list of known technical debt items, with status.
+  /// ✅ Updated this session to reflect real current status per item.
   static List<String> get technicalDebtItems => [
-        'DB-001: Duplicate weight tracking',
-        'DB-002: Duplicate supplement tracking',
-        'DB-003: Duplicate grocery list systems',
-        'DB-004: Tracker Landing not connected',
-        'DB-005: Notification toggles not wired',
-        'DB-006: Delete Account not implemented',
-        'DB-007: Some tracker data is local only',
-        'DB-008: Placeholder support email/version',
+        'DB-001: Duplicate weight tracking (unresolved)',
+        'DB-002: Duplicate supplement tracking (unresolved)',
+        'DB-003: Duplicate grocery list systems (unresolved)',
+        'DB-004: Tracker Landing not connected (unresolved)',
+        'DB-005: Notification toggles not wired (RESOLVED)',
+        'DB-006: Delete Account not implemented (RESOLVED)',
+        'DB-007: Some tracker data is local only (partially resolved)',
+        'DB-008: Placeholder support email/version (unresolved, by design)',
+        'DB-009: profiles table may have no DELETE policy (unresolved, unverified)',
       ];
+
+  /// ✅ New this session — quick open-count for anyone consuming this
+  /// class without reading the full comment block above.
+  static int get openDebtCount => 7;
 }

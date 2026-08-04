@@ -1,0 +1,1 @@
+ /Users/terrydodson/BariWise/.dart_tool/flutter_build/1ef2e4705e377e57ae63a3c1cd2fd7f0/native_assets.json: 

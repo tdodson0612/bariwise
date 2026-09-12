@@ -159,7 +159,7 @@ class AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       trailing: trailing,
       onTap: onTap ?? () => _go(context, route),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
     );
   }
 
@@ -211,7 +211,7 @@ class AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
           ),
         ],
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       onTap: () {
         Navigator.pop(context);
         Navigator.pushNamed(context, '/purchase');
@@ -578,7 +578,7 @@ class AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
                           fontWeight: FontWeight.w500),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 2),
+                        horizontal: 16, vertical: 4),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                     onTap: () => _showSignOutDialog(context),

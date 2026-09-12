@@ -815,7 +815,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.blue.shade200),
               ),
               child: Column(
@@ -1934,7 +1934,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha((0.9 * 255).toInt()),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: child,
     );
@@ -2318,11 +2318,11 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
                   onLongPress: () => _showPictureOptionsDialog(pictureUrl),
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       child: Image.network(
                         pictureUrl,
                         fit: BoxFit.cover,
@@ -3004,7 +3004,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
                                           color: Colors.grey.shade300),
                                     ),
@@ -3152,7 +3152,7 @@ _sectionContainer(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.blue.shade50,
-          borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.blue.shade200),
         ),
         child: Row(
@@ -3371,7 +3371,7 @@ const SizedBox(height: 20),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.blue.shade200),
                   ),
                   child: Column(
@@ -3449,7 +3449,7 @@ const SizedBox(height: 20),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.orange.shade200),
                   ),
                   child: Column(
@@ -3550,7 +3550,7 @@ const SizedBox(height: 20),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.blue.shade200),
                     ),
                     child: Column(
@@ -3611,7 +3611,7 @@ const SizedBox(height: 20),
                         color: _weekOverWeekWeightLoss! > 0 
                             ? Colors.orange.shade50 
                             : Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: _weekOverWeekWeightLoss! > 0 
                               ? Colors.orange.shade200 

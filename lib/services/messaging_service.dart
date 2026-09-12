@@ -57,8 +57,8 @@ class MessagingService {
             final after = DateTime.parse(msg['created_at'])
                 .isAfter(DateTime.parse(timestamp));
 
-            final relevant = (msg['sender'] == uid && msg['receiver'] == friendId) ||
-                             (msg['sender'] == friendId && msg['receiver'] == uid);
+            final relevant = (msg['sender_id'] == uid && msg['receiver_id'] == friendId) ||
+                             (msg['sender_id'] == friendId && msg['receiver_id'] == uid);
 
             if (after && relevant) newMessages.add(msg);
           }
@@ -88,8 +88,8 @@ class MessagingService {
       final results = <Map<String, dynamic>>[];
 
       for (var msg in response as List) {
-        if ((msg['sender'] == uid && msg['receiver'] == friendId) ||
-            (msg['sender'] == friendId && msg['receiver'] == uid)) {
+        if ((msg['sender_id'] == uid && msg['receiver_id'] == friendId) ||
+            (msg['sender_id'] == friendId && msg['receiver_id'] == uid)) {
           results.add(msg);
         }
       }
@@ -119,9 +119,9 @@ class MessagingService {
         action: 'insert',
         table: 'messages',
         data: {
-          'sender': uid,
-          'receiver': receiverId,
-          'content': content,
+          'sender_id': uid,
+          'receiver_id': receiverId,
+          'message_text': content,
           'is_read': false, // ← CHANGED from 0 to false
           'created_at': DateTime.now().toUtc().toIso8601String(),
         },
@@ -156,8 +156,8 @@ class MessagingService {
         action: 'select',
         table: 'messages',
         columns: ['id'],
-        filters: {
-          'receiver': uid,
+               filters: {
+          'receiver_id': uid,
           'is_read': false, // ← CHANGED from 0 to false
         },
       );
@@ -224,8 +224,8 @@ debugPrint('📬 Sample unread messages: ${response.take(3).toList()}');
         table: 'messages',
         columns: ['id'],
         filters: {
-          'receiver': uid,
-          'sender': senderId,
+          'receiver_id': uid,
+          'sender_id': senderId,
           'is_read': false, // ← CHANGED from 0 to false
         },
       );
@@ -302,8 +302,8 @@ debugPrint('📬 Sample unread messages: ${response.take(3).toList()}');
         int unreadCount = 0;
 
         for (var msg in allMessages as List) {
-          final isRelevant = (msg['sender'] == uid && msg['receiver'] == fid) ||
-                            (msg['sender'] == fid && msg['receiver'] == uid);
+          final isRelevant = (msg['sender_id'] == uid && msg['receiver_id'] == fid) ||
+                            (msg['sender_id'] == fid && msg['receiver_id'] == uid);
           
           if (isRelevant) {
             // Get last message
@@ -353,17 +353,17 @@ debugPrint('📬 Sample unread messages: ${response.take(3).toList()}');
       final response = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'messages',
-        columns: ['sender'],
-        filters: {
-          'receiver': uid,
+        columns: ['sender_id'],
+         filters: {
+          'receiver_id': uid,
           'is_read': false, // ← CHANGED from 0 to false
         },
       );
 
       final counts = <String, int>{};
       for (var msg in response as List) {
-        final sender = msg['sender'] as String;
-        counts[sender] = (counts[sender] ?? 0) + 1;
+        final senderId = msg['sender_id'] as String;
+        counts[senderId] = (counts[senderId] ?? 0) + 1;
       }
 
       return counts;
@@ -477,8 +477,8 @@ debugPrint('🔄 refreshUnreadBadge() started');
 
       int count = 0;
       for (var msg in response as List) {
-        if ((msg['sender'] == uid && msg['receiver'] == friendId) ||
-            (msg['sender'] == friendId && msg['receiver'] == uid)) {
+        if ((msg['sender_id'] == uid && msg['receiver_id'] == friendId) ||
+            (msg['sender_id'] == friendId && msg['receiver_id'] == uid)) {
           count++;
         }
       }

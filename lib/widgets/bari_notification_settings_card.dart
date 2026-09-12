@@ -55,6 +55,7 @@ class _BariNotificationSettingsCardState
     }
 
     return Card(
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -87,7 +88,7 @@ class _BariNotificationSettingsCardState
             if (_hydrEnabled) ...[
               const Text('Reminder interval',
                   style:
-                      TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                      TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
               Slider(
                 value: _hydrInterval.toDouble(),
                 min: 1,
@@ -105,7 +106,7 @@ class _BariNotificationSettingsCardState
               ),
             ],
 
-            const Divider(height: 20),
+            const Divider(height: 24),
 
             // Daily check-in toggle
             SwitchListTile(

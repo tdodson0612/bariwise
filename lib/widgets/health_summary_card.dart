@@ -96,7 +96,7 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha((0.95 * 255).toInt()),
         borderRadius: BorderRadius.circular(14),
@@ -125,8 +125,9 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
                     iconColor: _scoreColor(_todayScore!),
                     label: 'Today\'s Score',
                     value: '$_todayScore',
-                    unit: '/100',
-                    valueColor: _scoreColor(_todayScore!),
+                     unit: '/100',
+                     valueColor: _scoreColor(_todayScore!),
+                     valueHeight: 1.3,
                     onTap: () => Navigator.pushNamed(context, '/tracker'),
                   ),
 
@@ -143,10 +144,11 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
                     value: _waterCups! % 1 == 0
                         ? _waterCups!.toInt().toString()
                         : _waterCups!.toStringAsFixed(1),
-                    unit: 'cups',
-                    valueColor: _waterCups! >= 8
+                     unit: 'cups',
+                     valueColor: _waterCups! >= 8
                         ? Colors.green.shade600
                         : Colors.blue.shade600,
+                     valueHeight: 1.3,
                     onTap: () =>
                         Navigator.pushNamed(context, '/hydration-log'),
                   ),
@@ -161,15 +163,16 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
                 if (_streak != null && _streak! > 0)
                   _buildMetric(
                     icon: Icons.local_fire_department_rounded,
-                    iconColor: _streak! >= 7
+     iconColor: _streak! >= 7
                         ? Colors.orange.shade700
                         : Colors.grey.shade600,
-                    label: 'Streak',
-                    value: '$_streak',
-                    unit: _streak == 1 ? 'day' : 'days',
-                    valueColor: _streak! >= 7
+                     label: 'Streak',
+                     value: '$_streak',
+                     unit: _streak == 1 ? 'day' : 'days',
+                     valueColor: _streak! >= 7
                         ? Colors.orange.shade700
                         : Colors.grey.shade700,
+                     valueHeight: 1.3,
                     onTap: () =>
                         Navigator.pushNamed(context, '/bari-dashboard'),
                   ),
@@ -185,6 +188,7 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
     required String value,
     required String unit,
     required Color valueColor,
+    double valueHeight = 1.0,
     required VoidCallback onTap,
   }) {
     return Expanded(
@@ -199,11 +203,12 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
               textAlign: TextAlign.center,
               text: TextSpan(
                 children: [
-                  TextSpan(
+                   TextSpan(
                     text: value,
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
+                      height: valueHeight,
                       color: valueColor,
                     ),
                   ),
@@ -218,15 +223,15 @@ class _HealthSummaryCardState extends State<HealthSummaryCard> {
               ),
             ),
             const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
+             Text(
+               label,
+               style: TextStyle(
+                 fontSize: 12,
+                 color: Colors.grey.shade600,
+                 fontWeight: FontWeight.w500,
+               ),
+               textAlign: TextAlign.center,
+             ),
           ],
         ),
       ),

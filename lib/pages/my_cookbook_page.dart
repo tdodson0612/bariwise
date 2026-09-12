@@ -141,7 +141,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.blue.shade200),
               ),
               child: Column(
@@ -257,10 +257,10 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                 margin: const EdgeInsets.only(top: 12, bottom: 8),
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
               ),
 
               // Header
@@ -384,9 +384,9 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.orange,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           ),
                         ),
                       ),
@@ -408,9 +408,9 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                           ),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: Colors.red),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                           ),
                         ),
                       ),
@@ -560,7 +560,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.blue.shade200),
           ),
           child: Column(
@@ -654,7 +654,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Column(
@@ -695,7 +695,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+         const SizedBox(height: 16),
         content,
       ],
     );
@@ -972,7 +972,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                         )
                       : null,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 16),

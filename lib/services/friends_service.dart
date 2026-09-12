@@ -39,8 +39,8 @@ class FriendsService {
       for (var row in all as List) {
         if (row['status'] != 'accepted') continue;
 
-        if (row['sender'] == userId || row['receiver'] == userId) {
-          final friendId = row['sender'] == userId ? row['receiver'] : row['sender'];
+        if (row['sender_id'] == userId || row['receiver_id'] == userId) {
+          final friendId = row['sender_id'] == userId ? row['receiver_id'] : row['sender_id'];
 
           final profile = await DatabaseServiceCore.workerQuery(
             action: 'select',
@@ -80,8 +80,8 @@ class FriendsService {
       for (var row in all as List) {
         if (row['status'] != 'accepted') continue;
 
-        if (row['sender'] == userId || row['receiver'] == userId) {
-          final friendId = row['sender'] == userId ? row['receiver'] : row['sender'];
+        if (row['sender_id'] == userId || row['receiver_id'] == userId) {
+          final friendId = row['sender_id'] == userId ? row['receiver_id'] : row['sender_id'];
 
           final profile = await DatabaseServiceCore.workerQuery(
             action: 'select',
@@ -124,8 +124,8 @@ class FriendsService {
       );
 
       for (var row in all as List) {
-        final sender = row['sender'];
-        final receiver = row['receiver'];
+        final sender = row['sender_id'];
+        final receiver = row['receiver_id'];
         final status = row['status'];
 
         final match = 
@@ -158,8 +158,8 @@ class FriendsService {
         action: 'insert',
         table: 'friend_requests',
         data: {
-          'sender': currentUser,
-          'receiver': receiverId,
+          'sender_id': currentUser,
+          'receiver_id': receiverId,
           'status': 'pending',
           'created_at': DateTime.now().toIso8601String(),
         },
@@ -196,7 +196,7 @@ class FriendsService {
       final req = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'friend_requests',
-        columns: ['receiver','status'],
+        columns: ['receiver_id','status'],
         filters: {'id': requestId},
         limit: 1,
       );
@@ -207,7 +207,7 @@ class FriendsService {
 
       final row = req[0];
 
-      if (row['receiver'] != userId) {
+      if (row['receiver_id'] != userId) {
         throw Exception('Not allowed to accept this request');
       }
 
@@ -266,8 +266,8 @@ class FriendsService {
         action: 'delete',
         table: 'friend_requests',
         filters: {
-          'sender': userId,
-          'receiver': receiverId,
+          'sender_id': userId,
+          'receiver_id': receiverId,
         },
       );
     } catch (e) {
@@ -289,15 +289,15 @@ class FriendsService {
       final all = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'friend_requests',
-        columns: ['id','sender','receiver','status'],
+        columns: ['id','sender_id','receiver_id','status'],
       );
 
       for (var row in all as List) {
         if (row['status'] != 'accepted') continue;
 
         final match =
-            (row['sender'] == me && row['receiver'] == friendId) ||
-            (row['sender'] == friendId && row['receiver'] == me);
+            (row['sender_id'] == me && row['receiver_id'] == friendId) ||
+            (row['sender_id'] == friendId && row['receiver_id'] == me);
 
         if (match) {
           await DatabaseServiceCore.workerQuery(
@@ -335,8 +335,8 @@ class FriendsService {
       final List<Map<String, dynamic>> requests = [];
 
       for (var row in all as List) {
-        if (row['receiver'] == me && row['status'] == 'pending') {
-          final senderId = row['sender'];
+        if (row['receiver_id'] == me && row['status'] == 'pending') {
+          final senderId = row['sender_id'];
 
           final profile = await DatabaseServiceCore.workerQuery(
             action: 'select',
@@ -382,8 +382,8 @@ class FriendsService {
       final List<Map<String, dynamic>> requests = [];
 
       for (var row in all as List) {
-        if (row['sender'] == me && row['status'] == 'pending') {
-          final receiverId = row['receiver'];
+        if (row['sender_id'] == me && row['status'] == 'pending') {
+          final receiverId = row['receiver_id'];
 
           final profile = await DatabaseServiceCore.workerQuery(
             action: 'select',
@@ -437,8 +437,8 @@ class FriendsService {
       );
 
       for (var row in all as List) {
-        final sender = row['sender'];
-        final receiver = row['receiver'];
+        final sender = row['sender_id'];
+        final receiver = row['receiver_id'];
         final status = row['status'];
 
         final match =

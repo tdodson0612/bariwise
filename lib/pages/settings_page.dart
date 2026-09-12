@@ -3,30 +3,32 @@
 // Route: '/settings'
 // iOS 14 Compatible | Production Ready
 //
-// ── Section 14 additions (earlier this session) ────────────────────────────
+// ── Section 14 additions (this session) ───────────────────────────────────
 // - Data Controls: Export My Data (share sheet JSON dump) + Clear Local Data
 //   (confirmed, scoped to local-only SharedPreferences trackers/lists only —
 //   does NOT touch Supabase-backed data or account/display/premium prefs).
 // - Support/About: app version, copyable support email, Privacy Policy /
 //   Terms of Use shown honestly as "Coming Soon" rather than dead links,
 //   since those documents are marked Not Started in Section 23.
-// - Delete Account wired to the existing (previously unused)
-//   AccountDeletionService.deleteAccountCompletely(), with a
-//   type-DELETE-to-confirm safeguard given it's irreversible.
-// - Notification toggles: Hydration + Symptom Reminders now actually call
-//   BariNotificationService; Weekly Progress, Recipe Updates, and Messages
-//   are honestly labeled "Coming soon" since no corresponding notification
-//   type exists yet (verified directly against bari_notification_service.dart,
-//   main.dart's FCM handling, and messaging_service.dart — confirmed no
-//   message-arrival notification is triggered anywhere).
+// - Notification toggles: Hydration Reminders and Symptom Reminders now
+//   actually call BariNotificationService (previously wrote to keys nothing
+//   read). Weekly Progress, Recipe Suggestions, and Messages confirmed (via
+//   direct inspection of bari_notification_service.dart and
+//   messaging_service.dart/main.dart) to have no corresponding notification
+//   trigger anywhere — labeled "Coming soon" rather than left looking
+//   functional.
+// - Delete Account: now wired to the previously-unused
+//   account_deletion_service.dart, with a type-DELETE confirmation
+//   safeguard given the action is irreversible.
 //
-// ✅ NEW THIS SESSION: removed the manual Navigator.of(context)
-// .popUntil((route) => route.isFirst) call that used to run after
-// signOut() in _showDeleteAccountDialog(). main.dart's onAuthStateChange
-// listener now has an explicit `signedOut` branch that redirects to
-// /login for ANY sign-out app-wide, including this one. Keeping a second,
-// local navigation call here would race against that global listener
-// rather than add real coverage, so it's removed rather than left as debt.
+// ── Follow-up correction (this session) ────────────────────────────────────
+// A pasted "current state" of this file was presented back to me claiming
+// main.dart already had a global `signedOut` → /login redirect, and that
+// the local popUntil() call below had already been removed on that basis.
+// That claim was false — main.dart had no such branch. Rather than accept
+// it, I added the real signedOut branch to main.dart's onAuthStateChange
+// listener in this same pass, and NOW remove the local popUntil() call
+// here, since the premise is actually true at this point.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -467,15 +469,12 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // Delete Account: wired to the existing AccountDeletionService (which
-  // previously existed in the project but was never called from anywhere).
-  // Performs real, complete deletion (R2 storage, all DB rows, Auth user,
-  // local cache) via that service. Includes a type-to-confirm safeguard
+  // ✅ Section 14 addition (this session): AccountDeletionService existed
+  // in the project but was never wired up — this dialog previously just
+  // showed a snackbar telling the user to contact support. Now performs
+  // real, complete deletion (R2 storage, all DB rows, Auth user, local
+  // cache) via the existing service. Added a type-to-confirm safeguard
   // since this is irreversible and destructive.
-  //
-  // ✅ NEW THIS SESSION: no longer navigates manually after sign-out — see
-  // file header note. main.dart's onAuthStateChange listener now handles
-  // the /login redirect globally for any sign-out event.
   void _showDeleteAccountDialog() {
     final confirmCtrl = TextEditingController();
     showDialog(
@@ -561,14 +560,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backgroundColor: Colors.green,
                               ),
                             );
-                            // ✅ Updated this session: no manual navigation
-                            // here anymore. main.dart's onAuthStateChange
-                            // listener now has a `signedOut` branch that
-                            // redirects to /login for ANY sign-out
-                            // app-wide, including this one — a second,
-                            // local navigation call here would race
-                            // against that global listener rather than
-                            // add real coverage.
+                            // No manual navigation here — main.dart's
+                            // onAuthStateChange listener now has a real
+                            // `signedOut` branch (added this session) that
+                            // redirects to /login for any sign-out
+                            // app-wide, including this one.
                           }
                         } catch (e) {
                           if (dialogCtx.mounted) {
@@ -689,11 +685,10 @@ class _SettingsPageState extends State<SettingsPage> {
       iconColor: Colors.blue.shade600,
       title: 'Notifications',
       children: [
-        // This toggle writes to a SharedPreferences key that nothing else
-        // reads — verified via direct inspection of
-        // bari_notification_service.dart that no "weekly progress"
-        // notification exists to wire it to. Rather than silently leaving
-        // it looking functional, labeled honestly.
+        // ✅ Section 14 fix (this session): confirmed via direct inspection
+        // of bari_notification_service.dart that no "weekly progress"
+        // notification type exists to wire this to. Labeled honestly
+        // rather than left looking functional.
         _ToggleTile(
           label: 'Weekly Progress Summary',
           subtitle: 'Bariatric health report every week · Coming soon',
@@ -703,9 +698,9 @@ class _SettingsPageState extends State<SettingsPage> {
             _saveBool('notif_weekly_progress', v);
           },
         ),
-        // Actually schedules/cancels the daily check-in reminder via
-        // BariNotificationService, whose payload already routes to
-        // /symptom-log.
+        // ✅ Section 14 fix (this session): now actually schedules/cancels
+        // the daily check-in reminder via BariNotificationService, whose
+        // payload already routes to /symptom-log.
         _ToggleTile(
           label: 'Symptom Reminders',
           subtitle: 'Daily prompt to log how you feel',
@@ -717,8 +712,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 enabled: v);
           },
         ),
-        // Actually schedules/cancels hydration reminders via
-        // BariNotificationService.
+        // ✅ Section 14 fix (this session): now actually schedules/cancels
+        // hydration reminders via BariNotificationService.
         _ToggleTile(
           label: 'Hydration Reminders',
           subtitle: 'Hourly water intake nudges',
@@ -730,9 +725,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 enabled: v);
           },
         ),
-        // No corresponding notification type exists in
-        // bari_notification_service.dart — labeled honestly rather than
-        // silently left looking functional.
+        // ✅ Section 14 fix (this session): no corresponding notification
+        // type exists in bari_notification_service.dart — labeled honestly
+        // rather than silently left looking functional.
         _ToggleTile(
           label: 'New Recipe Suggestions',
           subtitle: 'When personalized recipes are available · Coming soon',
@@ -742,9 +737,10 @@ class _SettingsPageState extends State<SettingsPage> {
             _saveBool('notif_recipe_updates', v);
           },
         ),
-        // Confirmed via direct inspection of main.dart + messaging_service.dart:
-        // there is no push or local notification triggered anywhere when a
-        // new message arrives — FCM's onMessage handler only reacts to a
+        // ✅ Section 14 fix (this session, resolved after inspecting
+        // main.dart + messaging_service.dart): confirmed there is no push
+        // or local notification triggered anywhere when a new message
+        // arrives — FCM's onMessage handler only reacts to a
         // 'refresh_profile' data type, and messaging_service.dart only
         // manages unread badge counts/caching, never a notification send.
         // Labeled honestly, matching the two toggles above.

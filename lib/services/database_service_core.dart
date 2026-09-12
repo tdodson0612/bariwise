@@ -1,5 +1,14 @@
 // lib/services/database_service_core.dart
 // CORE: Worker + Storage + Cache + Auth helpers only
+//
+// ✅ UPDATED THIS SESSION: deleteSubmittedRecipe() previously filtered
+// only by {'id': recipeId} — no owner column at all. Under the new
+// Worker's ownership enforcement (which requires update/delete on
+// per-user tables to filter by the owning user), this call would now be
+// rejected with a 403. ensureUserAuthenticated() is already called
+// first in this method, so currentUserId is guaranteed non-null by the
+// time it's used below — matching the pattern this class already uses
+// in removeBackgroundPicture().
 
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -490,10 +499,12 @@ class DatabaseServiceCore {
     ensureUserAuthenticated();
 
     try {
+      // ✅ user_id added this session — see file header note. Previously
+      // filtered only by {'id': recipeId}, no owner column at all.
       await _workerQuery(
         action: 'delete',
         table: 'submitted_recipes',
-        filters: {'id': recipeId},
+        filters: {'id': recipeId, 'user_id': currentUserId!},
       );
       
       await _clearCache(_cacheSubmittedRecipes);

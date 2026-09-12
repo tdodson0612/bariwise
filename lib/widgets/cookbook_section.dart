@@ -317,7 +317,9 @@ class _CookbookSectionState extends State<CookbookSection> {
                           icon: const Icon(Icons.delete, color: Colors.red),
                           label: const Text(
                             'Remove from Cookbook',
-                            style: TextStyle(color: Colors.red),
+                            style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 14),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: Colors.red),
@@ -575,8 +577,8 @@ class _CookbookSectionState extends State<CookbookSection> {
               ],
             ),
           )
-        else
-          Center(
+          else
+            Center(
             child: Padding(
               padding: const EdgeInsets.all(40),
               child: Column(
@@ -657,7 +659,7 @@ class _CookbookSectionState extends State<CookbookSection> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha((0.9 * 255).toInt()),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -773,6 +775,7 @@ class _CookbookSectionState extends State<CookbookSection> {
                     final recipe = _recipes[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
+                      elevation: 1,
                       child: ListTile(
                         onTap: () => _showRecipeDetails(recipe),
                         leading: const CircleAvatar(

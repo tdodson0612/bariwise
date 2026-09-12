@@ -8,23 +8,13 @@
 //           signedIn instead of passwordRecovery (common on iOS cold-start)
 // ✅ iOS/iPad-compatible Firebase initialization + Android 15 Edge-to-Edge
 //
-// ✅ signedOut branch added to onAuthStateChange (previous session): closes
-// the gap where a mid-session sign-out (e.g. Delete Account) left the user
-// stranded on their current route with a dead session.
-//
-// ✅ NEW THIS SESSION: /badge-debug route wrapped in AdminGuard. Previously
-// unprotected at the route level — violated the project's own Rule 17.6
-// ("admin pages must use route-level protection") and was inconsistent
-// with /lora-dataset right next to it, which was already correctly
-// wrapped. Purely additive: mirrors the existing AdminGuard(child: ...)
-// pattern, no new logic introduced.
-//
-// ⚠️ Flagged, not resolved here: the manual's Section 17 claims a
-// "/admin-recipe-review" route protected by AdminGuard, but no such route
-// exists in this routes map. Either it's wired some other way (e.g. a
-// direct MaterialPageRoute push, as tracker_landing_page.dart already does
-// elsewhere in this project) or the manual's claim is stale. Not resolved
-// since admin_recipe_review_page.dart hasn't been inspected this session.
+// ── Section 12 addition (this session) ────────────────────────────────────
+// Added a '/tracker-landing' route so tracker_landing_page.dart (built
+// earlier this session) is reachable via Navigator.pushNamed. This is
+// infrastructure only — no button/link anywhere in the app points to it
+// yet, since that would require editing home_screen.dart, bari_hub_page.dart,
+// or app_drawer.dart, none of which were provided this session. Flagged,
+// not silently claimed as "done."
 
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -78,6 +68,7 @@ import 'pages/recipe_generator_page.dart';
 import 'pages/meal_planner_page.dart';
 import 'pages/list_generator_page.dart';
 import 'pages/extended_tracker_page.dart';
+import 'pages/tracker_landing_page.dart';
 import 'services/bari_notification_service.dart';
 import 'pages/account_preferences_page.dart';
 
@@ -407,6 +398,22 @@ class _MyAppState extends State<MyApp> {
         return;
       }
 
+      // ✅ Section 14 addition (this session): global sign-out redirect.
+      // Added specifically so account deletion (settings_page.dart) and
+      // any other sign-out path can rely on ONE place handling navigation
+      // back to /login, instead of each caller needing its own manual
+      // Navigator call that could race or be forgotten.
+      if (event == AuthChangeEvent.signedOut) {
+        AppConfig.debugPrint('🔒 Signed out — redirecting to /login');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+            '/login',
+            (route) => false,
+          );
+        });
+        return;
+      }
+
       if (event == AuthChangeEvent.signedIn && session != null) {
         final recoverySentAtStr = session.user.recoverySentAt;
         if (recoverySentAtStr != null) {
@@ -427,18 +434,6 @@ class _MyAppState extends State<MyApp> {
                 '⚠️ Could not parse recoverySentAt: $e');
           }
         }
-        return;
-      }
-
-      // signedOut branch (added previous session): initialRoute is only
-      // computed once at launch and is not reactive, so without this,
-      // signing out mid-session (e.g. via Delete Account in
-      // settings_page.dart) left the user stranded on their current route
-      // with a dead session instead of being routed back to /login.
-      if (event == AuthChangeEvent.signedOut) {
-        AppConfig.debugPrint('🔓 Signed out — routing to /login');
-        _handleSignedOut();
-        return;
       }
     });
 
@@ -447,24 +442,6 @@ class _MyAppState extends State<MyApp> {
     if (mounted) {
       setState(() => _isReady = true);
     }
-  }
-
-  // Mirrors the existing _navigateToReset pattern (post-frame callback +
-  // navigator-null retry) rather than a new approach.
-  void _handleSignedOut() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final nav = _navigatorKey.currentState;
-      if (nav != null) {
-        nav.pushNamedAndRemoveUntil('/login', (route) => false);
-      } else {
-        AppConfig.debugPrint(
-            '⚠️ Navigator still null on sign-out — retrying in 300ms');
-        Future.delayed(const Duration(milliseconds: 300), () {
-          _navigatorKey.currentState
-              ?.pushNamedAndRemoveUntil('/login', (route) => false);
-        });
-      }
-    });
   }
 
   void _handleRecoverySession(Session session) {
@@ -625,11 +602,7 @@ class _MyAppState extends State<MyApp> {
         '/manual-barcode-entry': (context) => const ManualBarcodeEntryScreen(),
         '/nutrition-search':     (context) => const NutritionSearchScreen(),
         '/saved-ingredients':    (context) => const SavedIngredientsScreen(),
-        // ✅ NEW THIS SESSION: was previously unprotected at the route
-        // level — now wrapped in AdminGuard, mirroring the /lora-dataset
-        // pattern below. Not made const since BadgeDebugPage() was not
-        // const in the original registration either.
-        '/badge-debug':          (context) => AdminGuard(child: BadgeDebugPage()),
+        '/badge-debug':          (context) => BadgeDebugPage(),
         '/submission-status':    (context) => const SubmissionStatusPage(),
         '/tracker':              (context) => const TrackerPage(),
         '/my-cookbook':          (context) => const MyCookbookPage(),
@@ -646,6 +619,10 @@ class _MyAppState extends State<MyApp> {
         '/meal-planner':         (context) => const MealPlannerPage(),
         '/list-generator':       (context) => const ListGeneratorPage(),
         '/extended-tracker':     (context) => const ExtendedTrackerPage(),
+        // ✅ Section 12 addition (this session): registers the Tracker
+        // Landing hub built earlier so it's reachable via pushNamed.
+        // Not yet linked from any button/menu — see file header note.
+        '/tracker-landing':      (context) => const TrackerLandingPage(),
         '/lora-dataset':         (context) => const AdminGuard(child: LoraDatasetPage()),
         '/account-preferences':  (context) => const AccountPreferencesPage(),
         '/reset-password':       (context) {

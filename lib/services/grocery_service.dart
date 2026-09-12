@@ -4,6 +4,16 @@
 //    so category/checked can be saved along with each item.
 // ✅ Delete calls include user_id filter so the Cloudflare Worker can
 //    execute them without returning an error.
+//
+// ✅ UPDATED THIS SESSION: getGroceryList() and testDatabaseConnection()
+// previously sent a `select` on grocery_items with NO filters at all —
+// meaning, under the new Worker's ownership enforcement (which requires
+// every select on a per-user table to filter by the owning user, unless
+// explicitly marked public), these calls would now be rejected with a
+// 403. Both required alongside deploying the corrected worker.js, not
+// optional. Both now filter by user_id, matching the pattern already
+// used everywhere else in this file (saveGroceryList, clearGroceryList,
+// addToGroceryList).
 
 import '../models/grocery_item.dart';
 import 'auth_service.dart';
@@ -102,6 +112,7 @@ debugPrint('📋 GroceryService.getGroceryList() called');
         action: 'select',
         table: 'grocery_items',
         columns: ['*'],
+        filters: {'user_id': userId},
         orderBy: 'order_index',
         ascending: true,
       );
@@ -496,6 +507,7 @@ debugPrint('🗑️ GroceryService.clearGroceryList() called');
         action: 'select',
         table: 'grocery_items',
         columns: ['id'],
+        filters: {'user_id': userId},
         limit: 1,
       );
 

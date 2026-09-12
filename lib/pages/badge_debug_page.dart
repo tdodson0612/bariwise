@@ -45,9 +45,9 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
       final unreadMessages = await DatabaseServiceCore.workerQuery(
         action: 'select',
         table: 'messages',
-        columns: ['id', 'sender', 'receiver', 'is_read', 'created_at'],
+        columns: ['id', 'sender_id', 'receiver_id', 'is_read', 'created_at'],
         filters: {
-          'receiver': DatabaseServiceCore.currentUserId,
+          'receiver_id': DatabaseServiceCore.currentUserId,
           'is_read': false,
         },
       );
@@ -62,7 +62,7 @@ class _BadgeDebugPageState extends State<BadgeDebugPage> {
           table: 'messages',
           columns: ['id'],
           filters: {
-            'receiver': DatabaseServiceCore.currentUserId,
+            'receiver_id': DatabaseServiceCore.currentUserId,
             'is_read': 0,
           },
         );

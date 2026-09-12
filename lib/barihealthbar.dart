@@ -548,43 +548,55 @@ class BariHealthCalculator {
     double? fiber,
     double? saturatedFat,
   }) {
-    int score = 50;
+    // ✅ FIXED THIS SESSION — three real issues found via failing unit tests
+    // in test/recipe_generator_test.dart, confirmed by hand-calculating the
+    // old algorithm against the exact failing inputs before changing anything:
+    //
+    // 1. `calories` was a required parameter that was never actually used
+    //    anywhere in the scoring math — dead weight on every call.
+    // 2. Sodium was only penalized above 600mg, so a chip-level 500mg/100g
+    //    food got zero sodium penalty at all.
+    // 3. The old model started at 50 and freely added/subtracted per-nutrient
+    //    deltas with no per-category cap, so a single strong bonus (e.g. low
+    //    sugar) could fully offset serious problems elsewhere. Potato chips
+    //    (35g fat, 500mg sodium, 536 cal, 1g sugar per 100g) scored 55/100 —
+    //    solidly "middle" — because the low-sugar bonus outweighed the fat
+    //    penalty and sodium got no penalty at all.
+    //
+    // New model: start at 100, subtract a continuously-scaling, per-category
+    // capped penalty for each of fat/sodium/sugar/calories, so no single good
+    // metric can mask multiple bad ones. Protein/fiber bonuses and the
+    // saturated-fat penalty are preserved from the original design, just
+    // rebalanced against the new penalty-based baseline.
+    double score = 100;
 
-    if (protein != null) {
-      if (protein >= 20) {
-        score += 25;
-      } else if (protein >= 15) {
-        score += 15;
-      } else if (protein < 10) {
-        score -= 20;
-      }
-    }
+    final fatPenalty = (fat * 0.9).clamp(0, 30);
+    final sodiumPenalty = (sodium * 0.05).clamp(0, 30);
+    final sugarPenalty = (sugar * 1.5).clamp(0, 25);
+    final calPenalty = (calories * 0.04).clamp(0, 25);
 
-    if (sugar <= 5) {
-      score += 20;
-    } else if (sugar <= 10) {
-      score += 10;
-    } else if (sugar > 15) {
-      score -= 25;
-    }
+    score -= fatPenalty;
+    score -= sodiumPenalty;
+    score -= sugarPenalty;
+    score -= calPenalty;
 
-    if (fat <= 10) {
-      score += 15;
-    } else if (fat > 20) {
-      score -= 15;
-    }
-
-    if (fiber != null && fiber >= 5) score += 10;
-
-    if (sodium < 300) {
-      score += 5;
-    } else if (sodium > 600) {
+    if (saturatedFat != null && saturatedFat > 5) {
       score -= 10;
     }
 
-    if (saturatedFat != null && saturatedFat > 5) score -= 10;
+    if (protein != null) {
+      if (protein >= 20) {
+        score += 10;
+      } else if (protein >= 15) {
+        score += 5;
+      } else if (protein < 10) {
+        score -= 10;
+      }
+    }
 
-    return score.clamp(0, 100);
+    if (fiber != null && fiber >= 5) score += 5;
+
+    return score.clamp(0, 100).round();
   }
 }
 

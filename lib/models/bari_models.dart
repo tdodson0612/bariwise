@@ -3,6 +3,14 @@
 // Covers hydration, supplement scheduling, symptom tracking,
 // nutrient snapshots, and weekly goal management for post-bariatric patients.
 // Ported from liverwise liver_models.dart — all terminology updated to bariatric context.
+//
+// ── Section 12 backend build (this session) ───────────────────────────────
+// Added ToleranceEntry, AllergyEntry, Glp1Entry, and WellnessEntry —
+// mirroring the existing SymptomEntry pattern exactly (same fromMap/toMap
+// shape, same nullable-id convention) — to back the Supabase migration of
+// extended_tracker_page.dart's four remaining local-only tabs, per explicit
+// user decision this session ("yes, build it now"). Purely additive; every
+// existing class in this file is unchanged.
 
 // ============================================================
 // HYDRATION
@@ -237,6 +245,210 @@ class SymptomEntry {
         'user_id': userId,
         'symptom_type': symptomType.dbValue,
         'severity': severity,
+        if (notes != null) 'notes': notes,
+        'logged_at': loggedAt.toIso8601String(),
+      };
+}
+
+// ============================================================
+// ✅ NEW THIS SESSION — FOOD TOLERANCE TRACKING
+// ============================================================
+
+/// A single food-tolerance log entry — how well a specific food was
+/// tolerated post-op. Mirrors extended_tracker_page.dart's local
+/// _ToleranceEntry shape (foodName, 1–5 score, optional symptoms/notes).
+class ToleranceEntry {
+  final String? id;
+  final String userId;
+  final String foodName;
+  final int toleranceScore; // 1–5
+  final String? symptoms;
+  final String? notes;
+  final DateTime loggedAt;
+
+  const ToleranceEntry({
+    this.id,
+    required this.userId,
+    required this.foodName,
+    required this.toleranceScore,
+    this.symptoms,
+    this.notes,
+    required this.loggedAt,
+  });
+
+  factory ToleranceEntry.fromMap(Map<String, dynamic> map) {
+    return ToleranceEntry(
+      id: map['id']?.toString(),
+      userId: map['user_id'] as String,
+      foodName: map['food_name'] as String,
+      toleranceScore: map['tolerance_score'] as int,
+      symptoms: map['symptoms'] as String?,
+      notes: map['notes'] as String?,
+      loggedAt: DateTime.parse(map['logged_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        if (id != null) 'id': id,
+        'user_id': userId,
+        'food_name': foodName,
+        'tolerance_score': toleranceScore,
+        if (symptoms != null) 'symptoms': symptoms,
+        if (notes != null) 'notes': notes,
+        'logged_at': loggedAt.toIso8601String(),
+      };
+}
+
+// ============================================================
+// ✅ NEW THIS SESSION — ALLERGY TRACKING
+// ============================================================
+
+/// A single allergic-reaction log entry. Mirrors extended_tracker_page.dart's
+/// local _AllergyEntry shape (triggerFood, severity, symptom list, notes).
+class AllergyEntry {
+  final String? id;
+  final String userId;
+  final String triggerFood;
+  final String severity; // 'mild' | 'moderate' | 'severe'
+  final List<String> symptoms;
+  final String? notes;
+  final DateTime loggedAt;
+
+  const AllergyEntry({
+    this.id,
+    required this.userId,
+    required this.triggerFood,
+    required this.severity,
+    required this.symptoms,
+    this.notes,
+    required this.loggedAt,
+  });
+
+  factory AllergyEntry.fromMap(Map<String, dynamic> map) {
+    return AllergyEntry(
+      id: map['id']?.toString(),
+      userId: map['user_id'] as String,
+      triggerFood: map['trigger_food'] as String,
+      severity: map['severity'] as String? ?? 'mild',
+      symptoms: List<String>.from(map['symptoms'] as List? ?? []),
+      notes: map['notes'] as String?,
+      loggedAt: DateTime.parse(map['logged_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        if (id != null) 'id': id,
+        'user_id': userId,
+        'trigger_food': triggerFood,
+        'severity': severity,
+        'symptoms': symptoms,
+        if (notes != null) 'notes': notes,
+        'logged_at': loggedAt.toIso8601String(),
+      };
+}
+
+// ============================================================
+// ✅ NEW THIS SESSION — GLP-1 DOSE TRACKING
+// ============================================================
+
+/// A single GLP-1 medication dose log entry. Mirrors
+/// extended_tracker_page.dart's local _Glp1Entry shape (medication,
+/// doseMg, side-effect list, notes).
+class Glp1Entry {
+  final String? id;
+  final String userId;
+  final String medication;
+  final double doseMg;
+  final List<String> sideEffects;
+  final String? notes;
+  final DateTime loggedAt;
+
+  const Glp1Entry({
+    this.id,
+    required this.userId,
+    required this.medication,
+    required this.doseMg,
+    required this.sideEffects,
+    this.notes,
+    required this.loggedAt,
+  });
+
+  factory Glp1Entry.fromMap(Map<String, dynamic> map) {
+    return Glp1Entry(
+      id: map['id']?.toString(),
+      userId: map['user_id'] as String,
+      medication: map['medication'] as String,
+      doseMg: (map['dose_mg'] as num).toDouble(),
+      sideEffects: List<String>.from(map['side_effects'] as List? ?? []),
+      notes: map['notes'] as String?,
+      loggedAt: DateTime.parse(map['logged_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        if (id != null) 'id': id,
+        'user_id': userId,
+        'medication': medication,
+        'dose_mg': doseMg,
+        'side_effects': sideEffects,
+        if (notes != null) 'notes': notes,
+        'logged_at': loggedAt.toIso8601String(),
+      };
+}
+
+// ============================================================
+// ✅ NEW THIS SESSION — WELLNESS CHECK-IN TRACKING
+// ============================================================
+
+/// A single daily wellness check-in. Unlike the other three new entry
+/// types, this is one-per-day (upserted by date), mirroring
+/// extended_tracker_page.dart's local _WellnessEntry shape exactly
+/// (mood/energy/sleep/pain/note, keyed by date).
+class WellnessEntry {
+  final String? id;
+  final String userId;
+  final DateTime checkinDate;
+  final int mood;   // 1–5
+  final int energy; // 1–5
+  final int sleepHours;
+  final int pain;   // 0–5
+  final String? notes;
+  final DateTime loggedAt;
+
+  const WellnessEntry({
+    this.id,
+    required this.userId,
+    required this.checkinDate,
+    required this.mood,
+    required this.energy,
+    required this.sleepHours,
+    required this.pain,
+    this.notes,
+    required this.loggedAt,
+  });
+
+  factory WellnessEntry.fromMap(Map<String, dynamic> map) {
+    return WellnessEntry(
+      id: map['id']?.toString(),
+      userId: map['user_id'] as String,
+      checkinDate: DateTime.parse(map['checkin_date'] as String),
+      mood: map['mood'] as int,
+      energy: map['energy'] as int,
+      sleepHours: map['sleep_hours'] as int,
+      pain: map['pain'] as int,
+      notes: map['notes'] as String?,
+      loggedAt: DateTime.parse(map['logged_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        if (id != null) 'id': id,
+        'user_id': userId,
+        'checkin_date': checkinDate.toIso8601String().split('T').first,
+        'mood': mood,
+        'energy': energy,
+        'sleep_hours': sleepHours,
+        'pain': pain,
         if (notes != null) 'notes': notes,
         'logged_at': loggedAt.toIso8601String(),
       };

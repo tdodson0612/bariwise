@@ -1,4 +1,11 @@
 // lib/models/tracker_entry.dart
+//
+// ── Section 12 addition (this session) ────────────────────────────────────
+// Added optional `weightNote` field, additive and backward-compatible
+// (old stored JSON without this key still parses fine — defaults to null).
+// Needed to preserve the weight-note feature from extended_tracker_page.dart's
+// Weight tab when unifying it onto this model as the single source of truth
+// for weight tracking (per explicit user decision this session).
 
 /// Kept for backward-compatible JSON deserialization of existing stored data.
 /// New code uses `List<Map<String, dynamic>>` with a 'notes' key instead.
@@ -27,6 +34,7 @@ class TrackerEntry {
   final String? exercise;
   final String? waterIntake;
   final double? weight; // Weight in kg (nullable for days without weight tracking)
+  final String? weightNote; // ✅ Added this session
   final int dailyScore;
 
   TrackerEntry({
@@ -36,6 +44,7 @@ class TrackerEntry {
     this.exercise,
     this.waterIntake,
     this.weight,
+    this.weightNote,
     required this.dailyScore,
   });
 
@@ -55,6 +64,7 @@ class TrackerEntry {
       'exercise': exercise,
       'waterIntake': waterIntake,
       'weight': weight,
+      'weightNote': weightNote,
       'dailyScore': dailyScore,
     };
   }
@@ -79,6 +89,7 @@ class TrackerEntry {
       exercise: json['exercise'] as String?,
       waterIntake: json['waterIntake'] as String?,
       weight: json['weight'] != null ? (json['weight'] as num).toDouble() : null,
+      weightNote: json['weightNote'] as String?,
       dailyScore: json['dailyScore'] as int? ?? 0,
     );
   }
@@ -86,6 +97,14 @@ class TrackerEntry {
   // ========================================
   // COPY WITH
   // ========================================
+  //
+  // ⚠️ Note preserved from original: this copyWith cannot set `weight` or
+  // `weightNote` to null once set (the `?? this.weight` pattern keeps the
+  // old value if null is passed). Code that needs to explicitly CLEAR
+  // weight (e.g. deleting a weight entry for a day that still has other
+  // data) must construct a new TrackerEntry directly rather than use
+  // copyWith — done this way in extended_tracker_page.dart's weight
+  // delete flow this session.
 
   TrackerEntry copyWith({
     String? date,
@@ -94,6 +113,7 @@ class TrackerEntry {
     String? exercise,
     String? waterIntake,
     double? weight,
+    String? weightNote,
     int? dailyScore,
   }) {
     return TrackerEntry(
@@ -103,6 +123,7 @@ class TrackerEntry {
       exercise: exercise ?? this.exercise,
       waterIntake: waterIntake ?? this.waterIntake,
       weight: weight ?? this.weight,
+      weightNote: weightNote ?? this.weightNote,
       dailyScore: dailyScore ?? this.dailyScore,
     );
   }

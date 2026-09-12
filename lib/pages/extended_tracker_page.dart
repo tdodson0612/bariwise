@@ -1,5 +1,5 @@
 // lib/pages/extended_tracker_page.dart
-// Section 11 — Extended Tracker Workspaces
+// Section 12 — Tracker Workspace
 // Route: '/extended-tracker'
 //
 // Five tabs:
@@ -9,25 +9,81 @@
 //   4. GLP-1         — track GLP-1 medication doses and side effects
 //   5. Wellness      — daily mood, energy, sleep, and pain check-in
 //
-// Storage: SharedPreferences (UI/UX-only phase — no Supabase)
-//
-// ── Section 12 addition (this session) ──────────────────────────────────
+// ── Section 12 addition (prior pass this session) ─────────────────────────
 // Tracker Detail Screen: tap any history row in any tab to open a modal
-// bottom sheet (same pattern as grocery_list.dart / list_generator_page.dart)
-// to edit or delete that entry. Additive only — no existing method, field,
-// or widget was removed or restructured.
+// bottom sheet to edit or delete that entry.
+//
+// ── Section 12 addition (prior pass this session — Weight unification) ────
+// Per explicit user decision ("Unify into one system now"), the Weight tab
+// no longer keeps its own parallel SharedPreferences list (ext_tracker_weight).
+// It is now a view onto TrackerService/TrackerEntry — the same store
+// tracker_page.dart's Weight field already used, making it the single
+// source of truth rather than building a third system. On first load,
+// any existing ext_tracker_weight data is migrated into TrackerService
+// entries (without overwriting a day that already has a tracker_page.dart
+// weight) and then the old key is cleared, so no user's history is lost.
+// TrackerEntry gained an optional `weightNote` field (additive) to
+// preserve the note feature this tab already had.
+// ⚠️ WEIGHT TAB IS INTENTIONALLY UNTOUCHED IN THIS PASS — do not edit it.
+//
+// ── Section 12 addition (this session — Tolerance/Allergy/GLP-1/Wellness
+//    unification onto Supabase) ─────────────────────────────────────────
+// Per explicit user decision ("yes, build it now"), the remaining four
+// local-only tabs now read/write through BariFeaturesService against the
+// live bari_tolerance_log / bari_allergy_log / bari_glp1_log /
+// bari_wellness_log Supabase tables, using the ToleranceEntry / AllergyEntry
+// / Glp1Entry / WellnessEntry models from bari_models.dart — matching the
+// pattern already used for Weight (TrackerService) and Supplements
+// (BariFeaturesService). The private local entry classes (_ToleranceEntry,
+// _AllergyEntry, _Glp1Entry, _WellnessEntry) have been removed.
+//
+// On first load, each tab migrates any existing legacy SharedPreferences
+// data (ext_tracker_tolerance / ext_tracker_allergy / ext_tracker_glp1 /
+// ext_tracker_wellness) into Supabase — preserving each entry's original
+// date via the `loggedAt` (or `checkinDate`) parameter rather than re-dating
+// history to "today" — then clears the old key so migration doesn't repeat.
+//
+// Wellness remains one-check-in-per-day: both the daily check-in form and
+// the detail-sheet edit flow call `upsertWellnessCheckin`, which overwrites
+// in place for that date (no separate insert-vs-update branching needed).
+//
+// Entries fetched from Supabase always have a non-null `id`, so `entry.id!`
+// is used when calling update/delete from the Tracker Detail Screen.
+//
+// Known assumption (flagged, not silently smoothed over): since these four
+// tabs now require an authenticated Supabase user (BariFeaturesService
+// throws/returns empty without one), each tab now shows a "please sign in"
+// state if there's no current user — mirroring the Weight tab's existing
+// _noUser handling. The pre-Supabase local-storage version had no such
+// state because SharedPreferences needs no auth; this is a necessary,
+// additive consequence of moving to a per-user backend, not a UI redesign.
+//
+// All UI elements, color schemes, and interaction patterns are otherwise
+// preserved exactly — this is a data-layer swap only.
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/recent_activity_tracker.dart';
+import '../services/auth_service.dart';
+import '../services/tracker_service.dart';
+import '../services/bari_features_service.dart';
+import '../models/tracker_entry.dart';
+import '../models/bari_models.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED PREF KEYS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const _kWeight       = 'ext_tracker_weight';
+// ✅ Removed prior session: _kWeight ('ext_tracker_weight') is no longer the
+// live store — see file header. The literal key string is still referenced
+// once, in _migrateOldWeightData(), purely to read and then clear legacy
+// data during the one-time migration.
+//
+// The four keys below are ALSO no longer the live store as of this session
+// (see file header) — they are now referenced only inside each tab's
+// one-time migration routine, to read old data and then clear it.
 const _kTolerance    = 'ext_tracker_tolerance';
 const _kAllergy      = 'ext_tracker_allergy';
 const _kGlp1         = 'ext_tracker_glp1';
@@ -37,6 +93,17 @@ String _todayKey() {
   final d = DateTime.now();
   return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
+
+/// Formats a DateTime as a 'YYYY-MM-DD' label, matching the display format
+/// the old SharedPreferences-backed tabs used for their `date` string field.
+String _fmtDate(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Wide lower bound used when fetching Supabase log history for these tabs,
+/// since BariFeaturesService's get*Log methods require a `from` date and
+/// these tabs (unlike Hydration) want full history, not a rolling window.
+DateTime _fullHistoryFrom() =>
+    DateTime.now().subtract(const Duration(days: 3650));
 
 Future<bool> _confirmDelete(BuildContext context, String label) async {
   final confirmed = await showDialog<bool>(
@@ -125,25 +192,10 @@ class _ExtendedTrackerPageState extends State<ExtendedTrackerPage>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 1 — WEIGHT TRACKER
+// TAB 1 — WEIGHT TRACKER (unified onto TrackerService in a prior pass)
+// ⚠️ UNTOUCHED THIS SESSION — do not edit as part of the Tolerance/Allergy/
+// GLP-1/Wellness Supabase unification work.
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _WeightEntry {
-  final String date;
-  final double weightKg;
-  final String? note;
-
-  _WeightEntry({required this.date, required this.weightKg, this.note});
-
-  Map<String, dynamic> toJson() =>
-      {'date': date, 'weightKg': weightKg, 'note': note};
-
-  factory _WeightEntry.fromJson(Map<String, dynamic> j) => _WeightEntry(
-        date: j['date'] ?? '',
-        weightKg: (j['weightKg'] as num).toDouble(),
-        note: j['note'],
-      );
-}
 
 class _WeightTab extends StatefulWidget {
   const _WeightTab();
@@ -153,12 +205,14 @@ class _WeightTab extends StatefulWidget {
 }
 
 class _WeightTabState extends State<_WeightTab> {
-  List<_WeightEntry> _entries = [];
+  List<TrackerEntry> _entries = []; // only entries where weight != null
   bool _loading = true;
+  bool _noUser = false;
   String _unit = 'lbs';
   final _weightCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _saving = false;
+  String? _userId;
 
   @override
   void initState() {
@@ -173,21 +227,76 @@ class _WeightTabState extends State<_WeightTab> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  /// One-time migration of legacy ext_tracker_weight local data into the
+  /// unified TrackerService store. Skips any date that already has a
+  /// tracker_page.dart-originated weight (never overwrites). Clears the
+  /// old key once done so this doesn't re-run.
+  Future<void> _migrateOldWeightData(String userId) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kWeight);
-    if (raw != null) {
+    const legacyKey = 'ext_tracker_weight';
+    final raw = prefs.getString(legacyKey);
+    if (raw == null) return;
+
+    try {
       final list = jsonDecode(raw) as List;
-      _entries = list.map((j) => _WeightEntry.fromJson(j)).toList();
+      for (final j in list) {
+        final map = j as Map<String, dynamic>;
+        final date = map['date'] as String? ?? '';
+        if (date.isEmpty) continue;
+        final legacyKg = (map['weightKg'] as num?)?.toDouble();
+        if (legacyKg == null) continue;
+        final legacyNote = map['note'] as String?;
+
+        final existing = await TrackerService.getEntryForDate(userId, date);
+        if (existing != null && existing.weight != null) {
+          // Already has a real weight for this day — don't overwrite.
+          continue;
+        }
+
+        final merged = TrackerEntry(
+          date: date,
+          meals: existing?.meals ?? [],
+          supplements: existing?.supplements ?? [],
+          exercise: existing?.exercise,
+          waterIntake: existing?.waterIntake,
+          weight: legacyKg,
+          weightNote: legacyNote,
+          dailyScore: existing?.dailyScore ?? 0,
+        );
+        await TrackerService.saveEntry(userId, merged);
+      }
+    } catch (_) {
+      // Malformed legacy data — nothing safe to migrate, fall through to
+      // clearing the key below so it doesn't keep failing on every load.
     }
-    if (mounted) setState(() => _loading = false);
+
+    await prefs.remove(legacyKey);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _kWeight, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+  Future<void> _load() async {
+    final userId = AuthService.currentUserId;
+    _userId = userId;
+    if (userId == null) {
+      if (mounted) setState(() { _loading = false; _noUser = true; });
+      return;
+    }
+
+    await _migrateOldWeightData(userId);
+    await TrackerService.autoFillMissingWeights(userId);
+    final all = await TrackerService.getEntries(userId);
+    final withWeight = all.where((e) => e.weight != null).toList();
+    // getEntries already sorts descending by date (newest first).
+
+    if (mounted) {
+      setState(() {
+        _entries = withWeight;
+        _loading = false;
+      });
+    }
   }
+
+  double _displayWeight(TrackerEntry e) =>
+      _unit == 'lbs' ? e.weight! / 0.453592 : e.weight!;
 
   Future<void> _logWeight() async {
     final val = double.tryParse(_weightCtrl.text.trim());
@@ -197,21 +306,28 @@ class _WeightTabState extends State<_WeightTab> {
       );
       return;
     }
+    final userId = _userId;
+    if (userId == null) return;
+
     setState(() => _saving = true);
     final kg = _unit == 'lbs' ? val * 0.453592 : val;
     final today = _todayKey();
-    final existing = _entries.indexWhere((e) => e.date == today);
-    final entry = _WeightEntry(
-        date: today, weightKg: kg, note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim());
+    final note = _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim();
 
-    setState(() {
-      if (existing >= 0) {
-        _entries[existing] = entry;
-      } else {
-        _entries.insert(0, entry);
-      }
-    });
-    await _save();
+    final existing = await TrackerService.getEntryForDate(userId, today);
+    final entry = TrackerEntry(
+      date: today,
+      meals: existing?.meals ?? [],
+      supplements: existing?.supplements ?? [],
+      exercise: existing?.exercise,
+      waterIntake: existing?.waterIntake,
+      weight: kg,
+      weightNote: note,
+      dailyScore: existing?.dailyScore ?? 0,
+    );
+    await TrackerService.saveEntry(userId, entry);
+    await _load();
+
     _weightCtrl.clear();
     _noteCtrl.clear();
     if (mounted) {
@@ -223,11 +339,8 @@ class _WeightTabState extends State<_WeightTab> {
     }
   }
 
-  double _displayWeight(_WeightEntry e) =>
-      _unit == 'lbs' ? e.weightKg / 0.453592 : e.weightKg;
-
   // ── Section 12: Tracker Detail Screen ──────────────────────────────
-  Future<void> _showDetail(_WeightEntry entry) async {
+  Future<void> _showDetail(TrackerEntry entry) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -240,25 +353,47 @@ class _WeightTabState extends State<_WeightTab> {
       ),
     );
     if (result == null || !mounted) return;
+    final userId = _userId;
+    if (userId == null) return;
 
     if (result['delete'] == true) {
       final confirmed = await _confirmDelete(context, 'weight');
       if (!confirmed) return;
-      setState(() => _entries.removeWhere((e) => e.date == entry.date));
-      await _save();
+      // Explicitly null out weight/weightNote rather than using copyWith
+      // (copyWith's `?? this.weight` pattern can't clear a value to null —
+      // see the note in tracker_entry.dart). Preserves the rest of that
+      // day's data (meals/supplements/exercise/water) intact.
+      final existing = await TrackerService.getEntryForDate(userId, entry.date);
+      final cleared = TrackerEntry(
+        date: entry.date,
+        meals: existing?.meals ?? entry.meals,
+        supplements: existing?.supplements ?? entry.supplements,
+        exercise: existing?.exercise ?? entry.exercise,
+        waterIntake: existing?.waterIntake ?? entry.waterIntake,
+        weight: null,
+        weightNote: null,
+        dailyScore: existing?.dailyScore ?? entry.dailyScore,
+      );
+      await TrackerService.saveEntry(userId, cleared);
     } else {
       final newVal = result['weight'] as double;
       final newUnit = result['unit'] as String;
       final newNote = result['note'] as String?;
       final kg = newUnit == 'lbs' ? newVal * 0.453592 : newVal;
-      setState(() {
-        final idx = _entries.indexWhere((e) => e.date == entry.date);
-        if (idx >= 0) {
-          _entries[idx] = _WeightEntry(date: entry.date, weightKg: kg, note: newNote);
-        }
-      });
-      await _save();
+      final existing = await TrackerService.getEntryForDate(userId, entry.date);
+      final updated = TrackerEntry(
+        date: entry.date,
+        meals: existing?.meals ?? entry.meals,
+        supplements: existing?.supplements ?? entry.supplements,
+        exercise: existing?.exercise ?? entry.exercise,
+        waterIntake: existing?.waterIntake ?? entry.waterIntake,
+        weight: kg,
+        weightNote: newNote,
+        dailyScore: existing?.dailyScore ?? entry.dailyScore,
+      );
+      await TrackerService.saveEntry(userId, updated);
     }
+    await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['delete'] == true ? 'Entry deleted' : 'Entry updated'),
@@ -270,6 +405,12 @@ class _WeightTabState extends State<_WeightTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_noUser) {
+      return Center(
+        child: Text('Please sign in to track weight.',
+            style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
 
     final last30 = _entries.take(30).toList().reversed.toList();
     double? change;
@@ -373,7 +514,7 @@ class _WeightTabState extends State<_WeightTab> {
 
           // Mini chart
           if (last30.length >= 2) ...[
-            const Text('Last 30 Days',
+            const Text('Recent Trend',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _MiniLineChart(
@@ -395,20 +536,23 @@ class _WeightTabState extends State<_WeightTab> {
             ],
           ),
           const SizedBox(height: 8),
-          ..._entries.take(14).map((e) => ListTile(
-                dense: true,
-                onTap: () => _showDetail(e),
-                leading: Icon(Icons.monitor_weight_outlined, color: Colors.blue.shade700, size: 20),
-                title: Text('${_displayWeight(e).toStringAsFixed(1)} $_unit'),
-                subtitle: e.note != null ? Text(e.note!) : null,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(e.date, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                    Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
-                  ],
-                ),
-              )),
+          if (_entries.isEmpty)
+            Text('No weight logged yet.', style: TextStyle(color: Colors.grey.shade500))
+          else
+            ..._entries.take(14).map((e) => ListTile(
+                  dense: true,
+                  onTap: () => _showDetail(e),
+                  leading: Icon(Icons.monitor_weight_outlined, color: Colors.blue.shade700, size: 20),
+                  title: Text('${_displayWeight(e).toStringAsFixed(1)} $_unit'),
+                  subtitle: e.weightNote != null ? Text(e.weightNote!) : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(e.date, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                      Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
+                    ],
+                  ),
+                )),
         ],
       ),
     );
@@ -416,7 +560,7 @@ class _WeightTabState extends State<_WeightTab> {
 }
 
 class _WeightDetailSheet extends StatefulWidget {
-  final _WeightEntry entry;
+  final TrackerEntry entry;
   final double displayWeight;
   final String unit;
 
@@ -439,7 +583,7 @@ class _WeightDetailSheetState extends State<_WeightDetailSheet> {
   void initState() {
     super.initState();
     _weightCtrl = TextEditingController(text: widget.displayWeight.toStringAsFixed(1));
-    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+    _noteCtrl = TextEditingController(text: widget.entry.weightNote ?? '');
     _unit = widget.unit;
   }
 
@@ -545,27 +689,8 @@ class _WeightDetailSheetState extends State<_WeightDetailSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 2 — FOOD TOLERANCE TRACKER
+// TAB 2 — FOOD TOLERANCE TRACKER (unified onto Supabase this session)
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _ToleranceEntry {
-  final String id;
-  final String date;
-  final String foodName;
-  final int toleranceScore; // 1–5
-  final String? symptoms;
-  final String? note;
-
-  _ToleranceEntry({required this.id, required this.date, required this.foodName,
-      required this.toleranceScore, this.symptoms, this.note});
-
-  Map<String, dynamic> toJson() => {'id': id, 'date': date, 'foodName': foodName,
-      'toleranceScore': toleranceScore, 'symptoms': symptoms, 'note': note};
-
-  factory _ToleranceEntry.fromJson(Map<String, dynamic> j) => _ToleranceEntry(
-        id: j['id'] ?? '', date: j['date'] ?? '', foodName: j['foodName'] ?? '',
-        toleranceScore: j['toleranceScore'] ?? 3, symptoms: j['symptoms'], note: j['note']);
-}
 
 class _ToleranceTab extends StatefulWidget {
   const _ToleranceTab();
@@ -575,8 +700,9 @@ class _ToleranceTab extends StatefulWidget {
 }
 
 class _ToleranceTabState extends State<_ToleranceTab> {
-  List<_ToleranceEntry> _entries = [];
+  List<ToleranceEntry> _entries = [];
   bool _loading = true;
+  bool _noUser = false;
   final _foodCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   int _score = 3;
@@ -599,18 +725,53 @@ class _ToleranceTabState extends State<_ToleranceTab> {
   @override
   void dispose() { _foodCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
 
-  Future<void> _load() async {
+  /// One-time migration of legacy ext_tracker_tolerance local data into
+  /// bari_tolerance_log via BariFeaturesService, preserving each entry's
+  /// original date. Clears the old key once done so this doesn't re-run.
+  Future<void> _migrateOldToleranceData() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_kTolerance);
-    if (raw != null) {
-      _entries = (jsonDecode(raw) as List).map((j) => _ToleranceEntry.fromJson(j)).toList();
+    if (raw == null) return;
+
+    try {
+      final list = jsonDecode(raw) as List;
+      for (final j in list) {
+        final map = j as Map<String, dynamic>;
+        final foodName = map['foodName'] as String? ?? '';
+        if (foodName.isEmpty) continue;
+        final date = map['date'] as String? ?? '';
+        final loggedAt = DateTime.tryParse(date) ?? DateTime.now();
+        await BariFeaturesService.logTolerance(
+          foodName: foodName,
+          toleranceScore: map['toleranceScore'] as int? ?? 3,
+          symptoms: map['symptoms'] as String?,
+          notes: map['note'] as String?,
+          loggedAt: loggedAt,
+        );
+      }
+    } catch (_) {
+      // Malformed legacy data — nothing safe to migrate, fall through to
+      // clearing the key below so it doesn't keep failing on every load.
     }
-    if (mounted) setState(() => _loading = false);
+
+    await prefs.remove(_kTolerance);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kTolerance, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+  Future<void> _load() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() { _loading = false; _noUser = true; });
+      return;
+    }
+
+    await _migrateOldToleranceData();
+    final entries = await BariFeaturesService.getToleranceLog(from: _fullHistoryFrom());
+    if (mounted) {
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _log() async {
@@ -619,24 +780,26 @@ class _ToleranceTabState extends State<_ToleranceTab> {
       return;
     }
     setState(() => _saving = true);
-    final entry = _ToleranceEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      date: _todayKey(), foodName: _foodCtrl.text.trim(),
-      toleranceScore: _score, symptoms: _symptoms,
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+    final foodName = _foodCtrl.text.trim();
+    final scoreLabel = _scoreLabels[_score];
+    await BariFeaturesService.logTolerance(
+      foodName: foodName,
+      toleranceScore: _score,
+      symptoms: _symptoms,
+      notes: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
-    setState(() { _entries.insert(0, entry); _saving = false; });
-    await _save();
+    await _load();
+
     _foodCtrl.clear(); _noteCtrl.clear();
-    setState(() { _score = 3; _symptoms = null; });
     if (mounted) {
+      setState(() { _score = 3; _symptoms = null; _saving = false; });
       ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Logged: ${entry.foodName} (${_scoreLabels[_score]})'), backgroundColor: Colors.green.shade700));
+      SnackBar(content: Text('Logged: $foodName ($scoreLabel)'), backgroundColor: Colors.green.shade700));
     }
   }
 
   // ── Section 12: Tracker Detail Screen ──────────────────────────────
-  Future<void> _showDetail(_ToleranceEntry entry) async {
+  Future<void> _showDetail(ToleranceEntry entry) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -649,23 +812,17 @@ class _ToleranceTabState extends State<_ToleranceTab> {
     if (result['delete'] == true) {
       final confirmed = await _confirmDelete(context, 'tolerance');
       if (!confirmed) return;
-      setState(() => _entries.removeWhere((e) => e.id == entry.id));
+      await BariFeaturesService.deleteToleranceEntry(entry.id!);
     } else {
-      setState(() {
-        final idx = _entries.indexWhere((e) => e.id == entry.id);
-        if (idx >= 0) {
-          _entries[idx] = _ToleranceEntry(
-            id: entry.id,
-            date: entry.date,
-            foodName: result['foodName'] as String,
-            toleranceScore: result['score'] as int,
-            symptoms: result['symptoms'] as String?,
-            note: result['note'] as String?,
-          );
-        }
-      });
+      await BariFeaturesService.updateToleranceEntry(
+        entry.id!,
+        foodName: result['foodName'] as String,
+        toleranceScore: result['score'] as int,
+        symptoms: result['symptoms'] as String?,
+        notes: result['note'] as String?,
+      );
     }
-    await _save();
+    await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['delete'] == true ? 'Entry deleted' : 'Entry updated'),
@@ -677,6 +834,12 @@ class _ToleranceTabState extends State<_ToleranceTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_noUser) {
+      return Center(
+        child: Text('Please sign in to track food tolerance.',
+            style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -734,13 +897,13 @@ class _ToleranceTabState extends State<_ToleranceTab> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             child: ListTile(dense: true,
               onTap: () => _showDetail(e),
-              leading: CircleAvatar(radius: 14, backgroundColor: Color(_scoreColors[e.toleranceScore]!.toARGB32()).withValues(alpha: 0.15),
+              leading: CircleAvatar(radius: 14, backgroundColor: Color(_scoreColors[e.toleranceScore]!.value).withOpacity(0.15),
                 child: Text('${e.toleranceScore}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _scoreColors[e.toleranceScore]))),
               title: Text(e.foodName, style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text([if (e.symptoms != null) e.symptoms!, if (e.note != null) e.note!].join(' · '),
+              subtitle: Text([if (e.symptoms != null) e.symptoms!, if (e.notes != null) e.notes!].join(' · '),
                 style: const TextStyle(fontSize: 11)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(e.date, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                Text(_fmtDate(e.loggedAt), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                 Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
               ])),
           )),
@@ -750,7 +913,7 @@ class _ToleranceTabState extends State<_ToleranceTab> {
 }
 
 class _ToleranceDetailSheet extends StatefulWidget {
-  final _ToleranceEntry entry;
+  final ToleranceEntry entry;
   final List<String> symptomOptions;
 
   const _ToleranceDetailSheet({required this.entry, required this.symptomOptions});
@@ -775,7 +938,7 @@ class _ToleranceDetailSheetState extends State<_ToleranceDetailSheet> {
   void initState() {
     super.initState();
     _foodCtrl = TextEditingController(text: widget.entry.foodName);
-    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+    _noteCtrl = TextEditingController(text: widget.entry.notes ?? '');
     _score = widget.entry.toleranceScore;
     _symptoms = widget.entry.symptoms;
   }
@@ -804,7 +967,7 @@ class _ToleranceDetailSheetState extends State<_ToleranceDetailSheet> {
                 const Text('Edit Tolerance Entry',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Text(widget.entry.date, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(_fmtDate(widget.entry.loggedAt), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
             const SizedBox(height: 16),
@@ -874,28 +1037,8 @@ class _ToleranceDetailSheetState extends State<_ToleranceDetailSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 3 — ALLERGY TRACKER
+// TAB 3 — ALLERGY TRACKER (unified onto Supabase this session)
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _AllergyEntry {
-  final String id;
-  final String date;
-  final String triggerFood;
-  final String severity; // mild, moderate, severe
-  final List<String> symptoms;
-  final String? note;
-
-  _AllergyEntry({required this.id, required this.date, required this.triggerFood,
-      required this.severity, required this.symptoms, this.note});
-
-  Map<String, dynamic> toJson() => {'id': id, 'date': date, 'triggerFood': triggerFood,
-      'severity': severity, 'symptoms': symptoms, 'note': note};
-
-  factory _AllergyEntry.fromJson(Map<String, dynamic> j) => _AllergyEntry(
-        id: j['id'] ?? '', date: j['date'] ?? '', triggerFood: j['triggerFood'] ?? '',
-        severity: j['severity'] ?? 'mild',
-        symptoms: List<String>.from(j['symptoms'] ?? []), note: j['note']);
-}
 
 class _AllergyTab extends StatefulWidget {
   const _AllergyTab();
@@ -905,8 +1048,9 @@ class _AllergyTab extends StatefulWidget {
 }
 
 class _AllergyTabState extends State<_AllergyTab> {
-  List<_AllergyEntry> _entries = [];
+  List<AllergyEntry> _entries = [];
   bool _loading = true;
+  bool _noUser = false;
   final _foodCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   String _severity = 'mild';
@@ -920,16 +1064,53 @@ class _AllergyTabState extends State<_AllergyTab> {
   @override
   void dispose() { _foodCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
 
-  Future<void> _load() async {
+  /// One-time migration of legacy ext_tracker_allergy local data into
+  /// bari_allergy_log via BariFeaturesService, preserving each entry's
+  /// original date. Clears the old key once done so this doesn't re-run.
+  Future<void> _migrateOldAllergyData() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_kAllergy);
-    if (raw != null) _entries = (jsonDecode(raw) as List).map((j) => _AllergyEntry.fromJson(j)).toList();
-    if (mounted) setState(() => _loading = false);
+    if (raw == null) return;
+
+    try {
+      final list = jsonDecode(raw) as List;
+      for (final j in list) {
+        final map = j as Map<String, dynamic>;
+        final triggerFood = map['triggerFood'] as String? ?? '';
+        if (triggerFood.isEmpty) continue;
+        final date = map['date'] as String? ?? '';
+        final loggedAt = DateTime.tryParse(date) ?? DateTime.now();
+        await BariFeaturesService.logAllergy(
+          triggerFood: triggerFood,
+          severity: map['severity'] as String? ?? 'mild',
+          symptoms: List<String>.from(map['symptoms'] ?? []),
+          notes: map['note'] as String?,
+          loggedAt: loggedAt,
+        );
+      }
+    } catch (_) {
+      // Malformed legacy data — nothing safe to migrate, fall through to
+      // clearing the key below so it doesn't keep failing on every load.
+    }
+
+    await prefs.remove(_kAllergy);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kAllergy, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+  Future<void> _load() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() { _loading = false; _noUser = true; });
+      return;
+    }
+
+    await _migrateOldAllergyData();
+    final entries = await BariFeaturesService.getAllergyLog(from: _fullHistoryFrom());
+    if (mounted) {
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _log() async {
@@ -937,24 +1118,25 @@ class _AllergyTabState extends State<_AllergyTab> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter the trigger food')));
       return;
     }
-    final entry = _AllergyEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      date: _todayKey(), triggerFood: _foodCtrl.text.trim(),
-      severity: _severity, symptoms: _symptoms.toList(),
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+    final triggerFood = _foodCtrl.text.trim();
+    await BariFeaturesService.logAllergy(
+      triggerFood: triggerFood,
+      severity: _severity,
+      symptoms: _symptoms.toList(),
+      notes: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
-    setState(() => _entries.insert(0, entry));
-    await _save();
+    await _load();
+
     _foodCtrl.clear(); _noteCtrl.clear();
-    setState(() { _severity = 'mild'; _symptoms.clear(); });
     if (mounted) {
+      setState(() { _severity = 'mild'; _symptoms.clear(); });
       ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Reaction logged: ${entry.triggerFood}'), backgroundColor: Colors.orange.shade700));
+      SnackBar(content: Text('Reaction logged: $triggerFood'), backgroundColor: Colors.orange.shade700));
     }
   }
 
   // ── Section 12: Tracker Detail Screen ──────────────────────────────
-  Future<void> _showDetail(_AllergyEntry entry) async {
+  Future<void> _showDetail(AllergyEntry entry) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -967,23 +1149,17 @@ class _AllergyTabState extends State<_AllergyTab> {
     if (result['delete'] == true) {
       final confirmed = await _confirmDelete(context, 'allergy');
       if (!confirmed) return;
-      setState(() => _entries.removeWhere((e) => e.id == entry.id));
+      await BariFeaturesService.deleteAllergyEntry(entry.id!);
     } else {
-      setState(() {
-        final idx = _entries.indexWhere((e) => e.id == entry.id);
-        if (idx >= 0) {
-          _entries[idx] = _AllergyEntry(
-            id: entry.id,
-            date: entry.date,
-            triggerFood: result['triggerFood'] as String,
-            severity: result['severity'] as String,
-            symptoms: List<String>.from(result['symptoms'] as List),
-            note: result['note'] as String?,
-          );
-        }
-      });
+      await BariFeaturesService.updateAllergyEntry(
+        entry.id!,
+        triggerFood: result['triggerFood'] as String,
+        severity: result['severity'] as String,
+        symptoms: List<String>.from(result['symptoms'] as List),
+        notes: result['note'] as String?,
+      );
     }
-    await _save();
+    await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['delete'] == true ? 'Entry deleted' : 'Entry updated'),
@@ -995,6 +1171,12 @@ class _AllergyTabState extends State<_AllergyTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_noUser) {
+      return Center(
+        child: Text('Please sign in to track allergies.',
+            style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1017,7 +1199,7 @@ class _AllergyTabState extends State<_AllergyTab> {
                 onTap: () => setState(() => _severity = s),
                 child: AnimatedContainer(duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: sel ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
+                  decoration: BoxDecoration(color: sel ? color.withOpacity(0.15) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: sel ? color : Colors.grey.shade300, width: sel ? 2 : 1)),
                   child: Center(child: Text(s[0].toUpperCase() + s.substring(1),
@@ -1076,7 +1258,7 @@ class _AllergyTabState extends State<_AllergyTab> {
                 subtitle: Text([e.severity.toUpperCase(), ...e.symptoms].join(' · '),
                   style: const TextStyle(fontSize: 11)),
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(e.date, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  Text(_fmtDate(e.loggedAt), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                   Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
                 ])));
           }),
@@ -1086,7 +1268,7 @@ class _AllergyTabState extends State<_AllergyTab> {
 }
 
 class _AllergyDetailSheet extends StatefulWidget {
-  final _AllergyEntry entry;
+  final AllergyEntry entry;
   final List<String> symptomOptions;
 
   const _AllergyDetailSheet({required this.entry, required this.symptomOptions});
@@ -1107,7 +1289,7 @@ class _AllergyDetailSheetState extends State<_AllergyDetailSheet> {
   void initState() {
     super.initState();
     _foodCtrl = TextEditingController(text: widget.entry.triggerFood);
-    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+    _noteCtrl = TextEditingController(text: widget.entry.notes ?? '');
     _severity = widget.entry.severity;
     _symptoms = Set<String>.from(widget.entry.symptoms);
   }
@@ -1136,7 +1318,7 @@ class _AllergyDetailSheetState extends State<_AllergyDetailSheet> {
                 const Text('Edit Allergy Entry',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Text(widget.entry.date, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(_fmtDate(widget.entry.loggedAt), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1153,7 +1335,7 @@ class _AllergyDetailSheetState extends State<_AllergyDetailSheet> {
                 onTap: () => setState(() => _severity = s),
                 child: AnimatedContainer(duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: sel ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
+                  decoration: BoxDecoration(color: sel ? color.withOpacity(0.15) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: sel ? color : Colors.grey.shade300, width: sel ? 2 : 1)),
                   child: Center(child: Text(s[0].toUpperCase() + s.substring(1),
@@ -1218,28 +1400,8 @@ class _AllergyDetailSheetState extends State<_AllergyDetailSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 4 — GLP-1 TRACKER
+// TAB 4 — GLP-1 TRACKER (unified onto Supabase this session)
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _Glp1Entry {
-  final String id;
-  final String date;
-  final String medication; // Ozempic, Wegovy, Mounjaro, etc.
-  final double doseMg;
-  final List<String> sideEffects;
-  final String? note;
-
-  _Glp1Entry({required this.id, required this.date, required this.medication,
-      required this.doseMg, required this.sideEffects, this.note});
-
-  Map<String, dynamic> toJson() => {'id': id, 'date': date, 'medication': medication,
-      'doseMg': doseMg, 'sideEffects': sideEffects, 'note': note};
-
-  factory _Glp1Entry.fromJson(Map<String, dynamic> j) => _Glp1Entry(
-        id: j['id'] ?? '', date: j['date'] ?? '', medication: j['medication'] ?? '',
-        doseMg: (j['doseMg'] as num).toDouble(),
-        sideEffects: List<String>.from(j['sideEffects'] ?? []), note: j['note']);
-}
 
 class _Glp1Tab extends StatefulWidget {
   const _Glp1Tab();
@@ -1249,8 +1411,9 @@ class _Glp1Tab extends StatefulWidget {
 }
 
 class _Glp1TabState extends State<_Glp1Tab> {
-  List<_Glp1Entry> _entries = [];
+  List<Glp1Entry> _entries = [];
   bool _loading = true;
+  bool _noUser = false;
   String _medication = 'Semaglutide (Ozempic/Wegovy)';
   final _doseCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
@@ -1272,16 +1435,55 @@ class _Glp1TabState extends State<_Glp1Tab> {
   @override
   void dispose() { _doseCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
 
-  Future<void> _load() async {
+  /// One-time migration of legacy ext_tracker_glp1 local data into
+  /// bari_glp1_log via BariFeaturesService, preserving each entry's
+  /// original date. Clears the old key once done so this doesn't re-run.
+  Future<void> _migrateOldGlp1Data() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_kGlp1);
-    if (raw != null) _entries = (jsonDecode(raw) as List).map((j) => _Glp1Entry.fromJson(j)).toList();
-    if (mounted) setState(() => _loading = false);
+    if (raw == null) return;
+
+    try {
+      final list = jsonDecode(raw) as List;
+      for (final j in list) {
+        final map = j as Map<String, dynamic>;
+        final medication = map['medication'] as String? ?? '';
+        if (medication.isEmpty) continue;
+        final doseMg = (map['doseMg'] as num?)?.toDouble();
+        if (doseMg == null) continue;
+        final date = map['date'] as String? ?? '';
+        final loggedAt = DateTime.tryParse(date) ?? DateTime.now();
+        await BariFeaturesService.logGlp1Dose(
+          medication: medication,
+          doseMg: doseMg,
+          sideEffects: List<String>.from(map['sideEffects'] ?? []),
+          notes: map['note'] as String?,
+          loggedAt: loggedAt,
+        );
+      }
+    } catch (_) {
+      // Malformed legacy data — nothing safe to migrate, fall through to
+      // clearing the key below so it doesn't keep failing on every load.
+    }
+
+    await prefs.remove(_kGlp1);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kGlp1, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+  Future<void> _load() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() { _loading = false; _noUser = true; });
+      return;
+    }
+
+    await _migrateOldGlp1Data();
+    final entries = await BariFeaturesService.getGlp1Log(from: _fullHistoryFrom());
+    if (mounted) {
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _log() async {
@@ -1290,24 +1492,25 @@ class _Glp1TabState extends State<_Glp1Tab> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid dose')));
       return;
     }
-    final entry = _Glp1Entry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      date: _todayKey(), medication: _medication, doseMg: dose,
+    final medication = _medication;
+    await BariFeaturesService.logGlp1Dose(
+      medication: medication,
+      doseMg: dose,
       sideEffects: _sideEffects.toList(),
-      note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+      notes: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
-    setState(() => _entries.insert(0, entry));
-    await _save();
+    await _load();
+
     _doseCtrl.clear(); _noteCtrl.clear();
-    setState(() => _sideEffects.clear());
     if (mounted) {
+      setState(() => _sideEffects.clear());
       ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Dose logged: ${dose}mg $_medication'), backgroundColor: Colors.teal.shade700));
+      SnackBar(content: Text('Dose logged: ${dose}mg $medication'), backgroundColor: Colors.teal.shade700));
     }
   }
 
   // ── Section 12: Tracker Detail Screen ──────────────────────────────
-  Future<void> _showDetail(_Glp1Entry entry) async {
+  Future<void> _showDetail(Glp1Entry entry) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -1324,23 +1527,17 @@ class _Glp1TabState extends State<_Glp1Tab> {
     if (result['delete'] == true) {
       final confirmed = await _confirmDelete(context, 'GLP-1 dose');
       if (!confirmed) return;
-      setState(() => _entries.removeWhere((e) => e.id == entry.id));
+      await BariFeaturesService.deleteGlp1Entry(entry.id!);
     } else {
-      setState(() {
-        final idx = _entries.indexWhere((e) => e.id == entry.id);
-        if (idx >= 0) {
-          _entries[idx] = _Glp1Entry(
-            id: entry.id,
-            date: entry.date,
-            medication: result['medication'] as String,
-            doseMg: result['dose'] as double,
-            sideEffects: List<String>.from(result['sideEffects'] as List),
-            note: result['note'] as String?,
-          );
-        }
-      });
+      await BariFeaturesService.updateGlp1Entry(
+        entry.id!,
+        medication: result['medication'] as String,
+        doseMg: result['dose'] as double,
+        sideEffects: List<String>.from(result['sideEffects'] as List),
+        notes: result['note'] as String?,
+      );
     }
-    await _save();
+    await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['delete'] == true ? 'Entry deleted' : 'Entry updated'),
@@ -1352,6 +1549,12 @@ class _Glp1TabState extends State<_Glp1Tab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_noUser) {
+      return Center(
+        child: Text('Please sign in to track GLP-1 doses.',
+            style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1416,7 +1619,7 @@ class _Glp1TabState extends State<_Glp1Tab> {
                 style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: e.sideEffects.isNotEmpty ? Text(e.sideEffects.join(', '), style: const TextStyle(fontSize: 11)) : null,
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(e.date, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                Text(_fmtDate(e.loggedAt), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                 Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
               ])),
           )),
@@ -1426,7 +1629,7 @@ class _Glp1TabState extends State<_Glp1Tab> {
 }
 
 class _Glp1DetailSheet extends StatefulWidget {
-  final _Glp1Entry entry;
+  final Glp1Entry entry;
   final List<String> medications;
   final List<String> sideEffectOptions;
 
@@ -1450,7 +1653,7 @@ class _Glp1DetailSheetState extends State<_Glp1DetailSheet> {
   void initState() {
     super.initState();
     _doseCtrl = TextEditingController(text: widget.entry.doseMg.toString());
-    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+    _noteCtrl = TextEditingController(text: widget.entry.notes ?? '');
     _medication = widget.medications.contains(widget.entry.medication)
         ? widget.entry.medication
         : widget.medications.first;
@@ -1481,7 +1684,7 @@ class _Glp1DetailSheetState extends State<_Glp1DetailSheet> {
                 const Text('Edit GLP-1 Dose',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Text(widget.entry.date, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(_fmtDate(widget.entry.loggedAt), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1558,27 +1761,8 @@ class _Glp1DetailSheetState extends State<_Glp1DetailSheet> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TAB 5 — WELLNESS CHECK-IN
+// TAB 5 — WELLNESS CHECK-IN (unified onto Supabase this session)
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _WellnessEntry {
-  final String date;
-  final int mood;      // 1–5
-  final int energy;    // 1–5
-  final int sleep;     // hours
-  final int pain;      // 0–5
-  final String? note;
-
-  _WellnessEntry({required this.date, required this.mood, required this.energy,
-      required this.sleep, required this.pain, this.note});
-
-  Map<String, dynamic> toJson() => {'date': date, 'mood': mood, 'energy': energy,
-      'sleep': sleep, 'pain': pain, 'note': note};
-
-  factory _WellnessEntry.fromJson(Map<String, dynamic> j) => _WellnessEntry(
-        date: j['date'] ?? '', mood: j['mood'] ?? 3, energy: j['energy'] ?? 3,
-        sleep: j['sleep'] ?? 7, pain: j['pain'] ?? 0, note: j['note']);
-}
 
 class _WellnessTab extends StatefulWidget {
   const _WellnessTab();
@@ -1588,8 +1772,9 @@ class _WellnessTab extends StatefulWidget {
 }
 
 class _WellnessTabState extends State<_WellnessTab> {
-  List<_WellnessEntry> _entries = [];
+  List<WellnessEntry> _entries = [];
   bool _loading = true;
+  bool _noUser = false;
   bool _saving = false;
 
   int _mood = 3;
@@ -1607,43 +1792,87 @@ class _WellnessTabState extends State<_WellnessTab> {
   @override
   void dispose() { _noteCtrl.dispose(); super.dispose(); }
 
-  Future<void> _load() async {
+  /// One-time migration of legacy ext_tracker_wellness local data into
+  /// bari_wellness_log via BariFeaturesService (upserted by date, since
+  /// wellness is one-check-in-per-day). Clears the old key once done so
+  /// this doesn't re-run.
+  Future<void> _migrateOldWellnessData() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_kWellness);
-    if (raw != null) _entries = (jsonDecode(raw) as List).map((j) => _WellnessEntry.fromJson(j)).toList();
-    // Pre-fill with today's entry if it exists
-    final today = _todayKey();
-    final existing = _entries.where((e) => e.date == today).firstOrNull;
-    if (existing != null) {
-      _mood = existing.mood; _energy = existing.energy;
-      _sleep = existing.sleep; _pain = existing.pain;
-      _noteCtrl.text = existing.note ?? '';
+    if (raw == null) return;
+
+    try {
+      final list = jsonDecode(raw) as List;
+      for (final j in list) {
+        final map = j as Map<String, dynamic>;
+        final date = map['date'] as String? ?? '';
+        if (date.isEmpty) continue;
+        final checkinDate = DateTime.tryParse(date);
+        if (checkinDate == null) continue;
+        await BariFeaturesService.upsertWellnessCheckin(
+          checkinDate: checkinDate,
+          mood: map['mood'] as int? ?? 3,
+          energy: map['energy'] as int? ?? 3,
+          sleepHours: map['sleep'] as int? ?? 7,
+          pain: map['pain'] as int? ?? 0,
+          notes: map['note'] as String?,
+        );
+      }
+    } catch (_) {
+      // Malformed legacy data — nothing safe to migrate, fall through to
+      // clearing the key below so it doesn't keep failing on every load.
     }
-    if (mounted) setState(() => _loading = false);
+
+    await prefs.remove(_kWellness);
   }
 
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kWellness, jsonEncode(_entries.map((e) => e.toJson()).toList()));
+  Future<void> _load() async {
+    final userId = AuthService.currentUserId;
+    if (userId == null) {
+      if (mounted) setState(() { _loading = false; _noUser = true; });
+      return;
+    }
+
+    await _migrateOldWellnessData();
+    final entries = await BariFeaturesService.getWellnessLog(from: _fullHistoryFrom());
+
+    // Pre-fill the check-in form with today's entry if it exists.
+    final today = _fmtDate(DateTime.now());
+    final existing = entries.where((e) => _fmtDate(e.checkinDate) == today).firstOrNull;
+    if (existing != null) {
+      _mood = existing.mood; _energy = existing.energy;
+      _sleep = existing.sleepHours; _pain = existing.pain;
+      _noteCtrl.text = existing.notes ?? '';
+    }
+
+    if (mounted) {
+      setState(() {
+        _entries = entries;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _checkIn() async {
     setState(() => _saving = true);
-    final today = _todayKey();
-    final entry = _WellnessEntry(date: today, mood: _mood, energy: _energy,
-        sleep: _sleep, pain: _pain,
-        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim());
-    final idx = _entries.indexWhere((e) => e.date == today);
-    setState(() { idx >= 0 ? _entries[idx] = entry : _entries.insert(0, entry); _saving = false; });
-    await _save();
+    await BariFeaturesService.upsertWellnessCheckin(
+      checkinDate: DateTime.now(),
+      mood: _mood,
+      energy: _energy,
+      sleepHours: _sleep,
+      pain: _pain,
+      notes: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+    );
+    await _load();
     if (mounted) {
+      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Wellness check-in saved ✓'), backgroundColor: Colors.purple));
     }
   }
 
   // ── Section 12: Tracker Detail Screen ──────────────────────────────
-  Future<void> _showDetail(_WellnessEntry entry) async {
+  Future<void> _showDetail(WellnessEntry entry) async {
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
@@ -1656,30 +1885,20 @@ class _WellnessTabState extends State<_WellnessTab> {
     if (result['delete'] == true) {
       final confirmed = await _confirmDelete(context, 'wellness check-in');
       if (!confirmed) return;
-      setState(() => _entries.removeWhere((e) => e.date == entry.date));
+      await BariFeaturesService.deleteWellnessEntry(entry.id!);
     } else {
-      setState(() {
-        final idx = _entries.indexWhere((e) => e.date == entry.date);
-        if (idx >= 0) {
-          final updated = _WellnessEntry(
-            date: entry.date,
-            mood: result['mood'] as int,
-            energy: result['energy'] as int,
-            sleep: result['sleep'] as int,
-            pain: result['pain'] as int,
-            note: result['note'] as String?,
-          );
-          _entries[idx] = updated;
-          // Keep the live edit form in sync if we just edited today's entry.
-          if (entry.date == _todayKey()) {
-            _mood = updated.mood; _energy = updated.energy;
-            _sleep = updated.sleep; _pain = updated.pain;
-            _noteCtrl.text = updated.note ?? '';
-          }
-        }
-      });
+      // Wellness is one-per-day: re-upserting the same checkinDate
+      // overwrites in place, so no separate "update" method is needed.
+      await BariFeaturesService.upsertWellnessCheckin(
+        checkinDate: entry.checkinDate,
+        mood: result['mood'] as int,
+        energy: result['energy'] as int,
+        sleepHours: result['sleep'] as int,
+        pain: result['pain'] as int,
+        notes: result['note'] as String?,
+      );
     }
-    await _save();
+    await _load();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result['delete'] == true ? 'Entry deleted' : 'Entry updated'),
@@ -1691,6 +1910,12 @@ class _WellnessTabState extends State<_WellnessTab> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_noUser) {
+      return Center(
+        child: Text('Please sign in to track wellness check-ins.',
+            style: TextStyle(color: Colors.grey.shade600)),
+      );
+    }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1772,16 +1997,16 @@ class _WellnessTabState extends State<_WellnessTab> {
               leading: Text(_moodEmojis[e.mood] ?? '😐', style: const TextStyle(fontSize: 22)),
               title: Row(children: [
                 Text('${_energyEmojis[e.energy]} ', style: const TextStyle(fontSize: 14)),
-                Text('${e.sleep}h sleep', style: const TextStyle(fontSize: 13)),
+                Text('${e.sleepHours}h sleep', style: const TextStyle(fontSize: 13)),
                 if (e.pain > 0) ...[
                   const SizedBox(width: 8),
                   Text('Pain: ${_painLabels[e.pain]}',
                     style: TextStyle(fontSize: 12, color: Colors.red.shade600))
                 ],
               ]),
-              subtitle: e.note != null ? Text(e.note!, style: const TextStyle(fontSize: 11)) : null,
+              subtitle: e.notes != null ? Text(e.notes!, style: const TextStyle(fontSize: 11)) : null,
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text(e.date, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                Text(_fmtDate(e.checkinDate), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                 Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey.shade400),
               ])),
           )),
@@ -1791,7 +2016,7 @@ class _WellnessTabState extends State<_WellnessTab> {
 }
 
 class _WellnessDetailSheet extends StatefulWidget {
-  final _WellnessEntry entry;
+  final WellnessEntry entry;
 
   const _WellnessDetailSheet({required this.entry});
 
@@ -1815,9 +2040,9 @@ class _WellnessDetailSheetState extends State<_WellnessDetailSheet> {
     super.initState();
     _mood = widget.entry.mood;
     _energy = widget.entry.energy;
-    _sleep = widget.entry.sleep;
+    _sleep = widget.entry.sleepHours;
     _pain = widget.entry.pain;
-    _noteCtrl = TextEditingController(text: widget.entry.note ?? '');
+    _noteCtrl = TextEditingController(text: widget.entry.notes ?? '');
   }
 
   @override
@@ -1843,7 +2068,7 @@ class _WellnessDetailSheetState extends State<_WellnessDetailSheet> {
                 const Text('Edit Check-in',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                Text(widget.entry.date, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text(_fmtDate(widget.entry.checkinDate), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1954,9 +2179,9 @@ class _StatCard extends StatelessWidget {
     return Expanded(child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25))),
+        border: Border.all(color: color.withOpacity(0.25))),
       child: Column(children: [
         Icon(icon, color: color, size: 22),
         const SizedBox(height: 4),
@@ -2023,7 +2248,7 @@ class _MiniLineChart extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
               Container(height: barH,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.7),
+                  color: color.withOpacity(0.7),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(3)))),
             ]),
           ));

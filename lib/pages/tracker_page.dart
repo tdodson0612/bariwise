@@ -2,13 +2,27 @@
 // Updated with supplement tracker, unit dropdowns, improved height handling with preferences,
 // nutrition summary section, bariatric supplement chips, and debugging
 //
-// ── Section 12 addition (this session) ──────────────────────────────────
+// ── Section 12 addition (prior pass this session) ─────────────────────────
 // Tracker Detail Screen: tap any meal in the Meals list to open a modal
-// bottom sheet (same pattern as grocery_list.dart / list_generator_page.dart
-// and the sibling detail sheets added to extended_tracker_page.dart) to
-// edit or delete that meal. Additive only — every existing method, field,
-// and widget is unchanged; the existing "Add Meal" dialog (_MealDialog)
-// is untouched.
+// bottom sheet to edit or delete that meal.
+//
+// ── Section 12 addition (this session — Supplement unification) ──────────
+// Per explicit user decision ("Unify into one system now"), the Supplements
+// section no longer keeps its own local list on TrackerEntry.supplements.
+// It now reads/writes through BariFeaturesService — the same Supabase-backed
+// system supplement_schedule_page.dart already used — showing today's
+// scheduled items with mark-taken, plus a "log one-off" action for
+// unscheduled supplements (logSupplementTaken allows a null scheduleId),
+// and a link to the full Schedule page for managing recurring items.
+//
+// Real, confirmed loss from unifying (flagged, not silently dropped):
+// BariFeaturesService.logSupplementTaken has no notes field, so the
+// free-text note the old local dialog supported is gone. Ad-hoc logging
+// itself is preserved.
+//
+// TrackerEntry.supplements is no longer written to from this page. Any
+// pre-existing data in it is left untouched (not deleted) but is now
+// orphaned — nothing reads it anymore.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,8 +32,10 @@ import '../services/auth_service.dart';
 import '../services/error_handling_service.dart';
 import '../services/saved_ingredients_service.dart';
 import '../services/recent_activity_tracker.dart';
+import '../services/bari_features_service.dart';
 import '../models/tracker_entry.dart';
 import '../models/nutrition_info.dart';
+import '../models/bari_models.dart';
 import '../barihealthbar.dart';
 import '../config/app_config.dart';
 import '../widgets/premium_gate.dart';
@@ -36,7 +52,6 @@ class TrackerPage extends StatefulWidget {
 
 class _TrackerPageState extends State<TrackerPage> {
   late final PremiumGateController _premiumController;
-  // ignore: unused_field
   bool _isPremium = false;
 
   DateTime _selectedDate = DateTime.now();
@@ -59,12 +74,17 @@ class _TrackerPageState extends State<TrackerPage> {
   String _exerciseUnit = 'minutes';
   String _waterUnit = 'cups';
 
-  static const String _prefWeightUnit = 'tracker_weight_unit_';
-  static const String _prefExerciseUnit = 'tracker_exercise_unit_';
-  static const String _prefWaterUnit = 'tracker_water_unit_';
+  static const String _PREF_WEIGHT_UNIT = 'tracker_weight_unit_';
+  static const String _PREF_EXERCISE_UNIT = 'tracker_exercise_unit_';
+  static const String _PREF_WATER_UNIT = 'tracker_water_unit_';
 
   List<Map<String, dynamic>> _meals = [];
-  List<Map<String, dynamic>> _supplements = [];
+
+  // ✅ Section 12 addition (this session): Supplements now come from
+  // BariFeaturesService instead of TrackerEntry.supplements.
+  List<SupplementSchedule> _supplementSchedules = [];
+  List<SupplementTakenEntry> _supplementTakenToday = [];
+  bool _loadingSupplements = true;
 
   @override
   void initState() {
@@ -177,7 +197,6 @@ class _TrackerPageState extends State<TrackerPage> {
             onPressed: () async {
               await TrackerService.acceptDisclaimer();
               if (mounted) {
-                // ignore: use_build_context_synchronously
                 Navigator.pop(context);
               }
             },
@@ -198,10 +217,10 @@ class _TrackerPageState extends State<TrackerPage> {
       final userId = AuthService.currentUserId ?? '';
 
       setState(() {
-        _weightUnit = prefs.getString('$_prefWeightUnit$userId') ?? 'kg';
+        _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'kg';
         _exerciseUnit =
-            prefs.getString('$_prefExerciseUnit$userId') ?? 'minutes';
-        _waterUnit = prefs.getString('$_prefWaterUnit$userId') ?? 'cups';
+            prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
+        _waterUnit = prefs.getString('$_PREF_WATER_UNIT$userId') ?? 'cups';
       });
 
       AppConfig.debugPrint('📋 Loaded unit preferences:');
@@ -224,12 +243,98 @@ class _TrackerPageState extends State<TrackerPage> {
     }
   }
 
+  // ✅ Section 12 addition (this session): load today's scheduled
+  // supplements + which have been marked taken today, from
+  // BariFeaturesService (the unified supplement store).
+  Future<void> _loadSupplements() async {
+    setState(() => _loadingSupplements = true);
+    try {
+      final today = DateTime.now();
+      final todayStart = DateTime(today.year, today.month, today.day);
+      final todayEnd = todayStart.add(const Duration(days: 1));
+      final results = await Future.wait([
+        BariFeaturesService.getSupplementSchedules(),
+        BariFeaturesService.getSupplementTakenLog(
+            from: todayStart, to: todayEnd),
+      ]);
+      if (mounted) {
+        setState(() {
+          _supplementSchedules = results[0] as List<SupplementSchedule>;
+          _supplementTakenToday = results[1] as List<SupplementTakenEntry>;
+          _loadingSupplements = false;
+        });
+      }
+    } catch (e) {
+      AppConfig.debugPrint('❌ Error loading supplements: $e');
+      if (mounted) setState(() => _loadingSupplements = false);
+    }
+  }
+
+  bool _isTakenToday(SupplementSchedule s) => _supplementTakenToday
+      .any((t) => t.scheduleId == s.id || t.name == s.name);
+
+  Future<void> _markSupplementTaken(SupplementSchedule s) async {
+    try {
+      await BariFeaturesService.logSupplementTaken(
+        name: s.name,
+        dose: s.dose,
+        scheduleId: s.id,
+      );
+      await _loadSupplements();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('💊 ${s.name} marked as taken!'),
+            backgroundColor: Colors.teal,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _logOneOffSupplement() async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => const _OneOffSupplementDialog(),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await BariFeaturesService.logSupplementTaken(
+        name: result['name']!,
+        dose: result['dose']!,
+      );
+      await _loadSupplements();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('💊 ${result['name']} logged!'),
+            backgroundColor: Colors.teal,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
       AppConfig.debugPrint('📂 Loading tracker data...');
 
       await _loadUnitPreferences();
+      unawaited(_loadSupplements());
 
       final userId = AuthService.currentUserId;
       if (userId == null) throw Exception('User not logged in');
@@ -290,7 +395,6 @@ class _TrackerPageState extends State<TrackerPage> {
           _currentStreak = streak;
           _currentEntry = entry;
           _meals = entry?.meals ?? [];
-          _supplements = entry?.supplements ?? [];
           _exerciseController.text = entry?.exercise ?? '';
           _waterController.text = entry?.waterIntake ?? '';
           _weightController.text = entry?.weight?.toStringAsFixed(1) ?? '';
@@ -391,13 +495,18 @@ class _TrackerPageState extends State<TrackerPage> {
         AppConfig.debugPrint('   Weight: none entered');
       }
 
+      // ✅ Section 12 change (this session): supplements are no longer
+      // sourced from local UI state — preserve whatever was already on
+      // the stored entry (if anything, from before unification) rather
+      // than actively adding to it. See file header note.
       final entry = TrackerEntry(
         date: _selectedDate.toString().split(' ')[0],
         meals: _meals,
-        supplements: _supplements,
+        supplements: _currentEntry?.supplements ?? [],
         exercise: exerciseText,
         waterIntake: waterText,
         weight: weight,
+        weightNote: _currentEntry?.weightNote,
         dailyScore: score,
       );
 
@@ -482,22 +591,6 @@ class _TrackerPageState extends State<TrackerPage> {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  // ── Supplements ───────────────────────────────────────────────
-
-  Future<void> _addSupplement() async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => const _SupplementDialog(),
-    );
-    if (result != null && mounted) {
-      setState(() => _supplements.add(result));
-    }
-  }
-
-  void _removeSupplement(int index) {
-    setState(() => _supplements.removeAt(index));
   }
 
   // ── Meals ─────────────────────────────────────────────────────
@@ -641,7 +734,6 @@ class _TrackerPageState extends State<TrackerPage> {
     }
 
     return showDialog(
-      // ignore: use_build_context_synchronously
       context: context,
       barrierDismissible: existingHeight != null,
       builder: (context) => StatefulBuilder(
@@ -878,17 +970,14 @@ class _TrackerPageState extends State<TrackerPage> {
                       AppConfig.debugPrint(
                           '✅ Height and preference saved: $heightInCm cm ($heightSystem)');
                       ErrorHandlingService.showSuccess(
-                          // ignore: use_build_context_synchronously
                           context,
                           'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}');
                     }
                   }
-                  // ignore: use_build_context_synchronously
                   Navigator.pop(context);
                 } catch (e) {
                   AppConfig.debugPrint('❌ Error saving height: $e');
                   if (mounted) {
-                    // ignore: use_build_context_synchronously
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(
                           'Failed to save height: ${e.toString()}'),
@@ -933,7 +1022,6 @@ class _TrackerPageState extends State<TrackerPage> {
                 final userId = AuthService.currentUserId;
                 if (userId != null) {
                   await TrackerService.debugStorageState(userId);
-                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content:
                           Text('Check debug logs for storage state')));
@@ -1097,7 +1185,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _weightUnit = value);
-                        _saveUnitPreference(_prefWeightUnit, value);
+                        _saveUnitPreference(_PREF_WEIGHT_UNIT, value);
                       }
                     },
                   ),
@@ -1455,7 +1543,7 @@ class _TrackerPageState extends State<TrackerPage> {
     );
   }
 
-  // ── Supplement Section ────────────────────────────────────────
+  // ── Supplement Section (unified onto BariFeaturesService this session) ──
 
   Widget _buildSupplementsSection() {
     return Card(
@@ -1471,23 +1559,40 @@ class _TrackerPageState extends State<TrackerPage> {
                   children: [
                     const Icon(Icons.medication, color: Colors.teal, size: 24),
                     const SizedBox(width: 8),
-                    Text('Supplements (${_supplements.length})',
-                        style: const TextStyle(
+                    const Text('Supplements',
+                        style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold)),
                   ],
                 ),
-                IconButton(
-                  onPressed: _addSupplement,
-                  icon: const Icon(Icons.add_circle, color: Colors.teal),
-                  tooltip: 'Add Supplement',
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: _logOneOffSupplement,
+                      icon: const Icon(Icons.add_circle, color: Colors.teal),
+                      tooltip: 'Log a one-off supplement',
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/supplement-schedule'),
+                      child: const Text('Manage', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 ),
               ],
             ),
-            if (_supplements.isEmpty) ...[
+            if (_loadingSupplements) ...[
+              const SizedBox(height: 12),
+              const Center(
+                  child: Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )),
+            ] else if (_supplementSchedules.isEmpty) ...[
               const SizedBox(height: 12),
               Center(
                   child: Text(
-                'No supplements logged yet. Tap + to add one.',
+                'No supplement schedule yet. Tap Manage to set one up, or use + to log a one-off.',
+                textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600),
               )),
             ] else ...[
@@ -1495,13 +1600,10 @@ class _TrackerPageState extends State<TrackerPage> {
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: _supplements.length,
+                itemCount: _supplementSchedules.length,
                 itemBuilder: (context, index) {
-                  final supplement = _supplements[index];
-                  final name = supplement['name'] as String? ??
-                      'Supplement ${index + 1}';
-                  final amount = supplement['amount'] as String? ?? '';
-                  final notes = supplement['notes'] as String? ?? '';
+                  final s = _supplementSchedules[index];
+                  final taken = _isTakenToday(s);
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
@@ -1509,35 +1611,36 @@ class _TrackerPageState extends State<TrackerPage> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.teal.shade50,
+                          color: taken
+                              ? Colors.teal.shade100
+                              : Colors.teal.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: Colors.teal.shade200),
+                          border: Border.all(color: Colors.teal.shade200),
                         ),
-                        child: Icon(Icons.medication_liquid,
-                            color: Colors.teal.shade700, size: 20),
+                        child: Icon(
+                          taken
+                              ? Icons.check_circle_rounded
+                              : Icons.medication_liquid,
+                          color: Colors.teal.shade700,
+                          size: 20,
+                        ),
                       ),
-                      title: Text(name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (amount.isNotEmpty)
-                            Text('Amount: $amount',
-                                style: const TextStyle(fontSize: 12)),
-                          if (notes.isNotEmpty)
-                            Text(notes,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600)),
-                        ],
-                      ),
-                      isThreeLine: notes.isNotEmpty,
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete, color: Colors.red),
-                        onPressed: () => _removeSupplement(index),
-                      ),
+                      title: Text(s.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${s.dose} · ${s.timeOfDay}',
+                          style: const TextStyle(fontSize: 12)),
+                      trailing: taken
+                          ? const Chip(
+                              label: Text('Taken',
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.white)),
+                              backgroundColor: Colors.green,
+                              padding: EdgeInsets.zero,
+                            )
+                          : TextButton(
+                              onPressed: () => _markSupplementTaken(s),
+                              child: const Text('Mark Taken'),
+                            ),
                     ),
                   );
                 },
@@ -1603,7 +1706,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _exerciseUnit = value);
-                        _saveUnitPreference(_prefExerciseUnit, value);
+                        _saveUnitPreference(_PREF_EXERCISE_UNIT, value);
                       }
                     },
                   ),
@@ -1673,7 +1776,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _waterUnit = value);
-                        _saveUnitPreference(_prefWaterUnit, value);
+                        _saveUnitPreference(_PREF_WATER_UNIT, value);
                       }
                     },
                   ),
@@ -1755,21 +1858,25 @@ class _TrackerPageState extends State<TrackerPage> {
   }
 }
 
+void unawaited(Future<void> future) {}
+
 // ════════════════════════════════════════════════════════════════
-// Supplement Dialog
+// One-Off Supplement Dialog (Section 12 addition — replaces the old
+// local-only _SupplementDialog; logs directly via BariFeaturesService,
+// no notes field since the backend doesn't support one)
 // ════════════════════════════════════════════════════════════════
 
-class _SupplementDialog extends StatefulWidget {
-  const _SupplementDialog();
+class _OneOffSupplementDialog extends StatefulWidget {
+  const _OneOffSupplementDialog();
 
   @override
-  State<_SupplementDialog> createState() => _SupplementDialogState();
+  State<_OneOffSupplementDialog> createState() =>
+      _OneOffSupplementDialogState();
 }
 
-class _SupplementDialogState extends State<_SupplementDialog> {
+class _OneOffSupplementDialogState extends State<_OneOffSupplementDialog> {
   final _nameController = TextEditingController();
   final _amountController = TextEditingController();
-  final _notesController = TextEditingController();
 
   String _selectedUnit = 'mg';
   static const List<String> _units = [
@@ -1803,7 +1910,6 @@ class _SupplementDialogState extends State<_SupplementDialog> {
   void dispose() {
     _nameController.dispose();
     _amountController.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
@@ -1815,13 +1921,11 @@ class _SupplementDialogState extends State<_SupplementDialog> {
     }
 
     final rawAmount = _amountController.text.trim();
-    final amountString =
-        rawAmount.isNotEmpty ? '$rawAmount $_selectedUnit' : '';
+    final dose = rawAmount.isNotEmpty ? '$rawAmount $_selectedUnit' : '—';
 
     Navigator.pop(context, {
       'name': _nameController.text.trim(),
-      'amount': amountString,
-      'notes': _notesController.text.trim(),
+      'dose': dose,
     });
   }
 
@@ -1832,7 +1936,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
         children: [
           Icon(Icons.medication, color: Colors.teal),
           SizedBox(width: 8),
-          Text('Add Supplement'),
+          Text('Log Supplement'),
         ],
       ),
       content: SingleChildScrollView(
@@ -1932,16 +2036,10 @@ class _SupplementDialogState extends State<_SupplementDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _notesController,
-              textCapitalization: TextCapitalization.sentences,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                hintText: 'e.g., Take with food',
-                border: OutlineInputBorder(),
-              ),
+            const SizedBox(height: 8),
+            Text(
+              'Note: free-text notes aren\'t supported for logged supplements.',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
             ),
           ],
         ),
@@ -1954,7 +2052,7 @@ class _SupplementDialogState extends State<_SupplementDialog> {
           onPressed: _save,
           style: ElevatedButton.styleFrom(
               backgroundColor: Colors.teal, foregroundColor: Colors.white),
-          child: const Text('Add'),
+          child: const Text('Log'),
         ),
       ],
     );

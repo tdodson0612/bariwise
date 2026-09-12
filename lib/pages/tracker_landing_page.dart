@@ -34,7 +34,9 @@ import 'alcohol_log_page.dart';
 // extended_tracker_page.dart. Duplicated intentionally (Dart library
 // privacy prevents cross-file reuse of `_`-prefixed consts) rather than
 // modifying that file to export them — additive only, per Rule 1.5.
-const String _kExtWeight = 'ext_tracker_weight';
+// ✅ Removed this session: _kExtWeight is no longer read here — Weight was
+// unified this session onto TrackerService/TrackerEntry as the single
+// source of truth. weightDone (below) now fully reflects the real state.
 const String _kExtTolerance = 'ext_tracker_tolerance';
 const String _kExtAllergy = 'ext_tracker_allergy';
 const String _kExtGlp1 = 'ext_tracker_glp1';
@@ -104,15 +106,10 @@ class _TrackerLandingPageState extends State<TrackerLandingPage> {
       final glp1Done = checkListHasToday(prefs.getString(_kExtGlp1));
       final wellnessDone =
           checkListHasToday(prefs.getString(_kExtWellness));
-      // Extended-tracker weight entries are keyed the same way as the
-      // other ext_tracker_* lists (date field), independent of the
-      // tracker_page.dart weight field above — intentionally checked
-      // separately since they are two distinct, unreconciled systems.
-      final extWeightDone = checkListHasToday(prefs.getString(_kExtWeight));
 
       if (mounted) {
         setState(() {
-          _weightLoggedToday = weightDone || extWeightDone;
+          _weightLoggedToday = weightDone;
           _mealsLoggedToday = mealsDone;
           _toleranceLoggedToday = toleranceDone;
           _allergyLoggedToday = allergyDone;
@@ -346,7 +343,7 @@ class _TrackerTile extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: color),

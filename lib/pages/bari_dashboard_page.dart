@@ -47,7 +47,11 @@ const String _kMealPlannerData = 'meal_planner_data';
 
 // Mirrors extended_tracker_page.dart's private `_kWeight` key, for the
 // same reason as above.
-const String _kExtWeight = 'ext_tracker_weight';
+// ✅ Removed this session: _kExtWeight ('ext_tracker_weight') is no longer
+// read here. Weight was unified this session onto TrackerService/TrackerEntry
+// as the single source of truth (see tracker_entry.dart / extended_tracker_page.dart
+// headers) — the two-system conflict-detection logic below is obsolete and
+// has been removed rather than left as dead/misleading code.
 
 class BariDashboardPage extends StatefulWidget {
   const BariDashboardPage({super.key});
@@ -73,9 +77,6 @@ class _BariDashboardPageState extends State<BariDashboardPage>
   List<SupplementTakenEntry> _supplementTakenToday = [];
 
   Map<String, List<PlannedMeal>> _mealPlan = {};
-
-  double? _extWeightLatestKg;
-  String? _extWeightLatestDate;
 
   final _proteinCtrl = TextEditingController();
   final _sodiumCtrl = TextEditingController();
@@ -213,31 +214,6 @@ class _BariDashboardPageState extends State<BariDashboardPage>
         AppConfig.debugPrint('Dashboard meal-plan load error: $e');
       }
 
-      // ── Section 13: extended_tracker_page.dart Weight system read ────
-      double? extWeightKg;
-      String? extWeightDate;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final raw = prefs.getString(_kExtWeight);
-        if (raw != null) {
-          final list = jsonDecode(raw) as List;
-          if (list.isNotEmpty) {
-            // Entries are inserted most-recent-first in
-            // extended_tracker_page.dart, but read defensively by date
-            // rather than assuming order.
-            final sorted = list
-                .map((j) => j as Map<String, dynamic>)
-                .toList()
-              ..sort((a, b) =>
-                  (b['date'] as String).compareTo(a['date'] as String));
-            extWeightKg = (sorted.first['weightKg'] as num).toDouble();
-            extWeightDate = sorted.first['date'] as String?;
-          }
-        }
-      } catch (e) {
-        AppConfig.debugPrint('Dashboard ext-weight load error: $e');
-      }
-
       if (mounted) {
         setState(() {
           _snapshots = combined;
@@ -247,8 +223,6 @@ class _BariDashboardPageState extends State<BariDashboardPage>
           _supplementSchedules = schedules;
           _supplementTakenToday = takenToday;
           _mealPlan = mealPlan;
-          _extWeightLatestKg = extWeightKg;
-          _extWeightLatestDate = extWeightDate;
           _loading = false;
           _proteinCtrl.text =
               weekGoal?.goalProteinG?.toStringAsFixed(0) ?? '60';
@@ -416,8 +390,6 @@ class _BariDashboardPageState extends State<BariDashboardPage>
                   todayHydrationCups: _todayHydrationCups,
                   supplementSchedules: _supplementSchedules,
                   supplementTakenToday: _supplementTakenToday,
-                  extWeightLatestKg: _extWeightLatestKg,
-                  extWeightLatestDate: _extWeightLatestDate,
                   todayPlannedMealCount: _todayPlannedMealCount,
                   weekPlannedMealCount: _weekPlannedMealCount,
                   todaySymptomCount: _todaySymptomCount,
@@ -460,8 +432,6 @@ class _OverviewTab extends StatelessWidget {
   final double? todayHydrationCups;
   final List<SupplementSchedule> supplementSchedules;
   final List<SupplementTakenEntry> supplementTakenToday;
-  final double? extWeightLatestKg;
-  final String? extWeightLatestDate;
   final int todayPlannedMealCount;
   final int weekPlannedMealCount;
   final int todaySymptomCount;
@@ -475,8 +445,6 @@ class _OverviewTab extends StatelessWidget {
     required this.todayHydrationCups,
     required this.supplementSchedules,
     required this.supplementTakenToday,
-    required this.extWeightLatestKg,
-    required this.extWeightLatestDate,
     required this.todayPlannedMealCount,
     required this.weekPlannedMealCount,
     required this.todaySymptomCount,
@@ -489,46 +457,18 @@ class _OverviewTab extends StatelessWidget {
       .any((t) => t.scheduleId == s.id || t.name == s.name);
 
   /// Weight card: compares the local tracker_page.dart weight (folded
-  /// into today's snapshot, if present) against the separate
-  /// extended_tracker_page.dart weight system by date, and shows
-  /// whichever is more recent. Flags with a warning icon if both exist
-  /// and disagree — surfaces the duplication rather than resolving it.
+  /// ✅ Simplified this session: Weight was unified onto TrackerService
+  /// this session (see tracker_entry.dart / extended_tracker_page.dart
+  /// headers), so there is no longer a second system to compare against.
+  /// This card now just shows today's snapshot weight, if any.
   Widget _buildWeightCard() {
-    final trackerPageKg = todaySnapshot?.weightKg;
-    final trackerPageDate = todaySnapshot?.snapshotDate;
-
-    double? displayKg;
-    String? sourceLabel;
-    bool conflict = false;
-
-    if (trackerPageKg != null && extWeightLatestKg != null) {
-      displayKg = trackerPageKg;
-      sourceLabel = 'Tracker';
-      if ((trackerPageKg - extWeightLatestKg!).abs() > 0.5) {
-        conflict = true;
-      }
-    } else if (trackerPageKg != null) {
-      displayKg = trackerPageKg;
-      sourceLabel = 'Tracker';
-    } else if (extWeightLatestKg != null) {
-      displayKg = extWeightLatestKg;
-      sourceLabel = 'Extended';
-    }
-
+    final kg = todaySnapshot?.weightKg;
     return _TrackerSummaryCard(
       icon: Icons.monitor_weight_rounded,
       color: Colors.blue.shade700,
       title: 'Weight',
-      value: displayKg != null
-          ? '${(displayKg * 2.20462).toStringAsFixed(1)} lbs'
-          : '—',
-      subtitle: displayKg == null
-          ? 'Not logged'
-          : conflict
-              ? '⚠ $sourceLabel system · two systems differ'
-              : '$sourceLabel system'
-                  '${trackerPageDate != null ? ' · today' : extWeightLatestDate != null ? ' · $extWeightLatestDate' : ''}',
-      subtitleColor: conflict ? Colors.orange.shade800 : null,
+      value: kg != null ? '${(kg * 2.20462).toStringAsFixed(1)} lbs' : '—',
+      subtitle: kg != null ? 'Logged today' : 'Not logged today',
     );
   }
 

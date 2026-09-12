@@ -36,6 +36,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../config/app_config.dart';
 import '../services/premium_service.dart';
 import '../services/bari_notification_service.dart';
@@ -78,9 +79,14 @@ const List<String> _kLocalDataLabels = [
   'Wellness check-ins (Health Trackers tab)',
 ];
 
-// App metadata — hardcoded rather than pulled from a package_info-style
-// plugin, since no such dependency was confirmed present this session.
-// Flagged in Technical Debt as a placeholder pending a real version source.
+// ✅ CORRECTED THIS SESSION: the previous comment here claimed no
+// package_info-style plugin was available — that was false. `package_info_plus`
+// is already a pubspec dependency and already used in contact_service.dart.
+// _kAppVersion is now only a fallback value, used if PackageInfo.fromPlatform()
+// fails for any reason (see _loadSettings() below, which populates the real
+// _displayVersion state field). _kSupportEmail remains a genuine placeholder —
+// this cannot be sourced from anywhere in the codebase and needs a real
+// support inbox from the user before release. Still flagged in Technical Debt.
 const String _kAppVersion = '1.0.0';
 const String _kSupportEmail = 'support@bariwise.app';
 
@@ -117,6 +123,11 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _clearingData = false;
   bool _deletingAccount = false;
 
+  // ✅ Added this session — real app version, populated in _loadSettings()
+  // via PackageInfo.fromPlatform(). Defaults to the hardcoded fallback
+  // constant until that completes (or if it fails).
+  String _displayVersion = _kAppVersion;
+
   @override
   void initState() {
     super.initState();
@@ -131,6 +142,19 @@ class _SettingsPageState extends State<SettingsPage> {
       // initialized this service.
       await BariNotificationService.initialize();
 
+      // ✅ Added this session — real version instead of the hardcoded
+      // fallback. Isolated in its own try/catch (matching
+      // contact_service.dart's pattern) so a PackageInfo failure can't
+      // block the rest of settings from loading.
+      String resolvedVersion = _kAppVersion;
+      try {
+        final packageInfo = await PackageInfo.fromPlatform();
+        resolvedVersion = '${packageInfo.version} (${packageInfo.buildNumber})';
+      } catch (e) {
+        AppConfig.debugPrint(
+            '⚠️ SettingsPage: could not read PackageInfo, using fallback: $e');
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final user = Supabase.instance.client.auth.currentUser;
 
@@ -139,6 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (mounted) {
         setState(() {
+          _displayVersion = resolvedVersion;
           _email = user?.email;
           _displayName = prefs.getString('display_name') ?? user?.email?.split('@').first;
           _isPremium = isPremium;
@@ -837,7 +862,7 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         _InfoTile(
           label: 'Version',
-          value: _kAppVersion,
+          value: _displayVersion,
         ),
         _ActionTile(
           icon: Icons.email_outlined,

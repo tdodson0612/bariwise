@@ -380,6 +380,21 @@ class AppDrawerState extends State<AppDrawer> with WidgetsBindingObserver {
                     route: '/bari-hub',
                     iconColor: Colors.orange.shade700,
                   ),
+                  // ✅ ADDED THIS SESSION — confirmed via direct inspection
+                  // that '/tracker-landing' (and therefore '/extended-tracker',
+                  // which it links into directly) had NO entry point anywhere
+                  // in the app. This was a real, silent dead-end: the entire
+                  // Weight/Tolerance/Allergy/GLP-1/Wellness tracker workspace
+                  // built this session was unreachable to users. Additive —
+                  // every existing tile in this section is untouched.
+                  _tile(
+                    context: context,
+                    icon: Icons.checklist_rtl_rounded,
+                    label: 'Tracker Hub',
+                    pageKey: 'tracker_landing',
+                    route: '/tracker-landing',
+                    iconColor: Colors.deepOrange.shade400,
+                  ),
                   _tile(
                     context: context,
                     icon: Icons.water_drop_rounded,

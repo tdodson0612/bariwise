@@ -19,6 +19,19 @@
     <!-- Optional but recommended -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- ✅ ADDED THIS SESSION — required on Android 13+ (API 33) for ANY
+         notification (local via flutter_local_notifications, or push via
+         firebase_messaging) to display at all. Confirmed via direct
+         inspection that this was completely absent from the manifest,
+         meaning BariNotificationService's hydration/supplement/daily
+         check-in reminders, and any Firebase push notification, would
+         silently fail to show on Android 13+ devices regardless of any
+         runtime permission request — the OS requires this manifest
+         declaration to exist before it will even surface the permission
+         prompt. See bari_notification_service.dart for the accompanying
+         runtime request added this session. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Device features -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />

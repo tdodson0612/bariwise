@@ -17,9 +17,29 @@
 // isDailyCheckinReminderEnabled() getter, matching the pattern already used
 // for hydration reminders. Additive only — every existing method, key, and
 // behavior is unchanged.
+//
+// ── Section 20 (Android Tasks) addition — confirmed real bug, not
+//    speculative ─────────────────────────────────────────────────────────
+// Direct inspection of AndroidManifest.xml found NO `POST_NOTIFICATIONS`
+// permission declared anywhere in the project, and no call anywhere in the
+// codebase to request it at runtime (main.dart only calls
+// FirebaseMessaging.instance.requestPermission(), which governs push/FCM
+// delivery, not local notification display). On Android 13+ (API 33+),
+// this means every reminder scheduled by this service — hydration,
+// supplement, daily check-in — would silently never appear, with no error
+// surfaced anywhere. Fixed additively:
+//   1. AndroidManifest.xml — added the `POST_NOTIFICATIONS` <uses-permission>.
+//   2. Here — added _requestAndroidNotificationPermission(), called once
+//      from initialize(), using the same permission_handler package and
+//      Permission.x.request() pattern already established in
+//      profile_screen.dart's requestImagePermission(). Non-fatal on
+//      denial — matches this file's existing "app works without
+//      notifications" philosophy in the initialize() catch block below.
 
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -78,12 +98,40 @@ class BariNotificationService {
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
+      // ✅ Added this session — see file header note. Must happen after
+      // manifest declares POST_NOTIFICATIONS; without both pieces present,
+      // Android silently never shows any notification this service
+      // schedules.
+      await _requestAndroidNotificationPermission();
+
       _initialized = true;
       AppConfig.debugPrint('✅ BariNotificationService initialized');
     } catch (e) {
       AppConfig.debugPrint(
           '⚠️ BariNotificationService init failed: $e');
       // Non-fatal — app works without notifications
+    }
+  }
+
+  /// Requests the Android 13+ runtime notification permission. No-op on
+  /// iOS/web (handled separately by DarwinInitializationSettings above and
+  /// FirebaseMessaging.requestPermission() in main.dart). Non-fatal on
+  /// denial, matching this service's existing "app works without
+  /// notifications" philosophy — callers don't need to check the result;
+  /// if denied, scheduled notifications simply won't display, same as any
+  /// other permission-denied state this app already tolerates.
+  static Future<void> _requestAndroidNotificationPermission() async {
+    if (kIsWeb) return;
+    if (!Platform.isAndroid) return;
+
+    try {
+      final status = await Permission.notification.request();
+      AppConfig.debugPrint(
+          '🔔 Android POST_NOTIFICATIONS permission: $status');
+    } catch (e) {
+      AppConfig.debugPrint(
+          '⚠️ Could not request Android notification permission: $e');
+      // Non-fatal — see class-level note.
     }
   }
 

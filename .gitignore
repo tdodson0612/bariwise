@@ -1,3 +1,42 @@
 build/
 *.ipa
 *.xcarchive
+
+# ── Added this session — secrets & environment files ────────────────────
+# .env was previously tracked and committed with real SUPABASE_URL,
+# SUPABASE_ANON_KEY, and CLOUDFLARE_WORKER_URL values, in a PUBLIC repo.
+# Adding it here only stops FUTURE commits from including it — it does
+# NOT remove it from git history. See follow-up steps provided separately.
+.env
+.env.*
+!.env.example
+
+# Android release signing config — referenced by android/app/build.gradle.kts
+# (keystoreProperties / key.properties). Contains keystore path + passwords.
+# Not currently tracked, but must never become tracked.
+key.properties
+*.jks
+*.keystore
+
+# ── Standard Flutter / Dart ignores ──────────────────────────────────────
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated launcher icon / splash screen intermediates
+android/app/src/main/res/mipmap-*/ic_launcher.png
+ios/Runner/Assets.xcassets/AppIcon.appiconset/
+ios/Runner/Assets.xcassets/LaunchImage.imageset/

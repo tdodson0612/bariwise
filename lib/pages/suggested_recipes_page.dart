@@ -1,4 +1,3 @@
-
 // lib/pages/suggested_recipes_page.dart
 // PATCHED FOR LORA INTEGRATION
 //
@@ -649,6 +648,7 @@ debugPrint('📦 Using cached recipes (${recipes.length} found)');
             ),
           IconButton(
             icon: const Icon(Icons.shopping_cart),
+            tooltip: 'Open grocery list',
             onPressed: () {
               try {
                 Navigator.pushNamed(context, '/grocery-list');
@@ -847,6 +847,7 @@ debugPrint('📦 Using cached recipes (${recipes.length} found)');
                           color:
                               isFavorited ? Colors.red : Colors.grey,
                         ),
+                        tooltip: isFavorited ? 'Remove from favorites' : 'Add to favorites',
                         onPressed: () => _toggleFavorite(recipe),
                       );
                     },
@@ -854,6 +855,7 @@ debugPrint('📦 Using cached recipes (${recipes.length} found)');
                   IconButton(
                     icon: const Icon(Icons.add_shopping_cart,
                         color: Colors.blue),
+                    tooltip: 'Add to grocery list',
                     onPressed: () => _addToShoppingList(recipe),
                   ),
                 ],

@@ -508,6 +508,7 @@ class FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
+                      tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
@@ -809,6 +810,7 @@ class FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
           ),
           child: IconButton(
             icon: Icon(icon, color: Colors.white, size: 28),
+            tooltip: label,
             onPressed: onPressed,
           ),
         ),
@@ -836,6 +838,7 @@ class FavoriteRecipesPageState extends State<FavoriteRecipesPage> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
+            tooltip: 'Open menu',
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),

@@ -634,6 +634,7 @@ class _NutritionSearchScreenState extends State<NutritionSearchScreen> {
                 color: isFavorite ? Colors.red : Colors.grey,
                 size: 20,
               ),
+              tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
               onPressed: () => _toggleFavoriteRecipe(recipe),
             ),
             const Icon(Icons.expand_more),

@@ -873,6 +873,7 @@ class _WeeklyTab extends StatelessWidget {
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left_rounded),
+                tooltip: 'Previous week',
                 onPressed: onPrevWeek,
                 color: Colors.orange.shade700,
               ),
@@ -896,6 +897,7 @@ class _WeeklyTab extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right_rounded),
+                tooltip: 'Next week',
                 onPressed: onNextWeek,
                 color: Colors.orange.shade700,
               ),
@@ -1050,6 +1052,7 @@ class _WeeklyTab extends StatelessWidget {
                               icon: Icon(Icons.add_circle_rounded,
                                   color: Colors.orange.shade700,
                                   size: 22),
+                              tooltip: 'Add meal',
                               onPressed: () => onAddMeal(day),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -1609,6 +1612,7 @@ class _RecipePlannerTabState extends State<_RecipePlannerTab> {
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left_rounded),
+                tooltip: 'Previous week',
                 onPressed: widget.onPrevWeek,
                 color: Colors.orange.shade700,
               ),
@@ -1623,6 +1627,7 @@ class _RecipePlannerTabState extends State<_RecipePlannerTab> {
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right_rounded),
+                tooltip: 'Next week',
                 onPressed: widget.onNextWeek,
                 color: Colors.orange.shade700,
               ),

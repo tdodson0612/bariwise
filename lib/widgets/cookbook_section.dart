@@ -226,6 +226,7 @@ class _CookbookSectionState extends State<CookbookSection> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
+                      tooltip: 'Close',
                       icon: const Icon(Icons.close),
                     ),
                   ],

@@ -127,6 +127,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to login',
           onPressed: _goToLogin,
         ),
       ),
@@ -317,6 +318,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
               ),
+              tooltip: _obscurePassword ? 'Show password' : 'Hide password',
               onPressed: () => setState(
                   () => _obscurePassword = !_obscurePassword),
             ),
@@ -345,6 +347,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
               ),
+              tooltip: _obscureConfirm ? 'Show confirm password' : 'Hide confirm password',
               onPressed: () =>
                   setState(() => _obscureConfirm = !_obscureConfirm),
             ),

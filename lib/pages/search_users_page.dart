@@ -960,6 +960,7 @@ class _SearchUsersPageState extends State<SearchUsersPage>
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
+            tooltip: 'Open menu',
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
@@ -1058,6 +1059,7 @@ class _SearchUsersPageState extends State<SearchUsersPage>
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, size: 20),
+                      tooltip: 'Dismiss error message',
                       onPressed: () {
                         setState(() {
                           _errorMessage = null;

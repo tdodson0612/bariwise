@@ -206,6 +206,7 @@ class _ContactScreenState extends State<ContactScreen> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
+            tooltip: 'Open menu',
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),

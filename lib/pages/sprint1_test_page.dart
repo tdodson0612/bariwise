@@ -144,6 +144,7 @@ class _Sprint1TestPageState extends State<Sprint1TestPage>
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear),
+                      tooltip: 'Clear search',
                       onPressed: () {
                         setState(() {
                           _searchController.clear();
@@ -854,6 +855,7 @@ class _Sprint1TestPageState extends State<Sprint1TestPage>
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete, color: Colors.red),
+          tooltip: 'Delete ingredient',
           onPressed: () => _deleteCustomIngredient(ingredient['id']),
         ),
       ),

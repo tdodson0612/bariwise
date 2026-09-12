@@ -428,6 +428,7 @@ class ChatPageState extends State<ChatPage> {
               ),
               child: IconButton(
                 onPressed: _isSending ? null : _sendMessage,
+                tooltip: 'Send message',
                 icon: _isSending
                     ? const SizedBox(
                         width: 20,
@@ -468,6 +469,7 @@ class ChatPageState extends State<ChatPage> {
           leading: Builder(
             builder: (context) => IconButton(
               icon: MenuIconWithBadge(key: MenuIconWithBadge.globalKey),
+              tooltip: 'Open menu',
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
           ),

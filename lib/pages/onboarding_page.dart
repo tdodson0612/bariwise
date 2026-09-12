@@ -436,6 +436,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
           children: [
             IconButton(
               icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+              tooltip: 'Previous step',
               onPressed: _prevPage,
               color: Colors.orange.shade700,
             ),

@@ -291,6 +291,7 @@ class _HydrationLogPageState extends State<HydrationLogPage> {
                           trailing: IconButton(
                             icon: const Icon(Icons.delete_outline,
                                 color: Colors.red),
+                            tooltip: 'Delete entry',
                             onPressed: () => _deleteEntry(e),
                           ),
                         );

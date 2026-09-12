@@ -2684,6 +2684,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
               SizedBox(width: 8),
               IconButton(
                 icon: Icon(Icons.send, color: Colors.orange),
+                tooltip: 'Post comment',
                 onPressed: () => _postComment(postId),
               ),
             ],
@@ -2740,6 +2741,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
               if (isOwnComment)
                 IconButton(
                   icon: Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                  tooltip: 'Delete comment',
                   onPressed: () => _deleteComment(postId, comment['id'].toString()),
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints(),
@@ -4261,6 +4263,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                   color: isFavorite ? Colors.red : Colors.white,
                   size: 20,
                 ),
+                tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
                 onPressed: () => _toggleFavoriteRecipe(recipe),
               ),
             ),
@@ -5308,6 +5311,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                   prefixIcon: Icon(Icons.person_search, color: Colors.orange),
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.search, color: Colors.orange),
+                    tooltip: 'Search users',
                     onPressed: () => _searchUsers(_searchController.text),
                   ),
                   border: OutlineInputBorder(
@@ -5914,6 +5918,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
                   color: isFavorite ? Colors.red : Colors.grey,
                   size: 20,
                 ),
+                tooltip: isFavorite ? 'Remove from favorites' : 'Add to favorites',
                 onPressed: () {
                   final recipeObj = Recipe(
                     title: recipe['name']!,
@@ -6195,6 +6200,7 @@ debugPrint("⚠️ Skipping ad (no ad ready)");
         leading: Builder(
           builder: (context) => IconButton(
             icon: MenuIconWithBadge(key: MenuIconWithBadge.globalKey),
+            tooltip: 'Open menu',
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),

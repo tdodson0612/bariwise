@@ -1394,6 +1394,7 @@ debugPrint('📦 Using cached comments (${comments.length} found)');
                                     )
                                   : IconButton(
                                       onPressed: _submitComment,
+                                      tooltip: 'Post comment',
                                       icon: Icon(Icons.send),
                                       color: Colors.orange,
                                     ),

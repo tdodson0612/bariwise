@@ -602,6 +602,7 @@ class _LoginPageState extends State<LoginPage> {
                                   icon: Icon(_obscurePassword
                                       ? Icons.visibility_outlined
                                       : Icons.visibility_off_outlined),
+                                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
                                   onPressed: () => setState(() =>
                                       _obscurePassword = !_obscurePassword),
                                 ),
@@ -639,6 +640,7 @@ class _LoginPageState extends State<LoginPage> {
                                     icon: Icon(_obscureConfirmPassword
                                         ? Icons.visibility_outlined
                                         : Icons.visibility_off_outlined),
+                                    tooltip: _obscureConfirmPassword ? 'Show confirm password' : 'Hide confirm password',
                                     onPressed: () => setState(() =>
                                         _obscureConfirmPassword =
                                             !_obscureConfirmPassword),

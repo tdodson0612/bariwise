@@ -658,6 +658,7 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
               SizedBox(width: 8),
               IconButton(
                 icon: Icon(Icons.send, color: Colors.orange),
+                tooltip: 'Post comment',
                 onPressed: () => _postComment(postId),
               ),
             ],
@@ -714,6 +715,7 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
               if (isOwnComment)
                 IconButton(
                   icon: Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                  tooltip: 'Delete comment',
                   onPressed: () => _deleteComment(postId, comment['id'].toString()),
                   padding: EdgeInsets.zero,
                   constraints: BoxConstraints(),

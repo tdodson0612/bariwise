@@ -706,6 +706,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
             actions: [
               IconButton(
                 icon: const Icon(Icons.more_vert),
+                tooltip: 'More options',
                 onPressed: () {
                   Navigator.pop(context);
                   _showPictureOptionsDialog(imageUrl);
@@ -2624,6 +2625,7 @@ debugPrint('📦 Using cached friends (${friends.length} found)');
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
+            tooltip: 'Open menu',
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),

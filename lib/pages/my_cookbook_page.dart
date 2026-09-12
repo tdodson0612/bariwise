@@ -313,6 +313,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
+                      tooltip: 'Close',
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -966,6 +967,7 @@ class MyCookbookPageState extends State<MyCookbookPage> {
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear),
+                          tooltip: 'Clear search',
                           onPressed: () {
                             setState(() => _searchQuery = '');
                           },

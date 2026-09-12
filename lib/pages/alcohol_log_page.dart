@@ -461,6 +461,7 @@ class _LogTabState extends State<_LogTab> {
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline,
                           color: Colors.red, size: 20),
+                      tooltip: 'Delete entry',
                       onPressed: () => widget.onDelete(e),
                     ),
                   ),

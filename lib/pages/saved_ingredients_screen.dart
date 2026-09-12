@@ -125,6 +125,7 @@ class _SavedIngredientsScreenState extends State<SavedIngredientsScreen> {
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete,
                                       color: Colors.red),
+                                  tooltip: 'Remove ingredient',
                                   onPressed: () => _removeIngredient(item),
                                 ),
                                 onTap: () {

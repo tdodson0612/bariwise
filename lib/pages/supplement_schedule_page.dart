@@ -241,6 +241,7 @@ class _SupplementSchedulePageState extends State<SupplementSchedulePage> {
                                   Icons.delete_outline,
                                   color: Colors.red,
                                   size: 20),
+                              tooltip: 'Delete supplement schedule',
                               onPressed: () => _deleteSchedule(s),
                             ),
                           ],

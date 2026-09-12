@@ -897,7 +897,7 @@ class _ToleranceTabState extends State<_ToleranceTab> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             child: ListTile(dense: true,
               onTap: () => _showDetail(e),
-              leading: CircleAvatar(radius: 14, backgroundColor: Color(_scoreColors[e.toleranceScore]!.value).withOpacity(0.15),
+              leading: CircleAvatar(radius: 14, backgroundColor: _scoreColors[e.toleranceScore]!.withValues(alpha: 0.15),
                 child: Text('${e.toleranceScore}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _scoreColors[e.toleranceScore]))),
               title: Text(e.foodName, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text([if (e.symptoms != null) e.symptoms!, if (e.notes != null) e.notes!].join(' · '),
@@ -1199,7 +1199,7 @@ class _AllergyTabState extends State<_AllergyTab> {
                 onTap: () => setState(() => _severity = s),
                 child: AnimatedContainer(duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: sel ? color.withOpacity(0.15) : Colors.grey.shade100,
+                  decoration: BoxDecoration(color: sel ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: sel ? color : Colors.grey.shade300, width: sel ? 2 : 1)),
                   child: Center(child: Text(s[0].toUpperCase() + s.substring(1),
@@ -1335,7 +1335,7 @@ class _AllergyDetailSheetState extends State<_AllergyDetailSheet> {
                 onTap: () => setState(() => _severity = s),
                 child: AnimatedContainer(duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: sel ? color.withOpacity(0.15) : Colors.grey.shade100,
+                  decoration: BoxDecoration(color: sel ? color.withValues(alpha: 0.15) : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: sel ? color : Colors.grey.shade300, width: sel ? 2 : 1)),
                   child: Center(child: Text(s[0].toUpperCase() + s.substring(1),
@@ -2179,9 +2179,9 @@ class _StatCard extends StatelessWidget {
     return Expanded(child: Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.25))),
+        border: Border.all(color: color.withValues(alpha: 0.25))),
       child: Column(children: [
         Icon(icon, color: color, size: 22),
         const SizedBox(height: 4),
@@ -2248,7 +2248,7 @@ class _MiniLineChart extends StatelessWidget {
             child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
               Container(height: barH,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.7),
+                  color: color.withValues(alpha: 0.7),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(3)))),
             ]),
           ));

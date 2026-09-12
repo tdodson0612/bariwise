@@ -33,10 +33,11 @@ import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
 import 'meal_planner_page.dart' show PlannedMeal;
 
-const _kDNavy      = Color(0xFF0A1628);
-const _kDNavyLight = Color(0xFF1A2E4A);
-const _kDBg        = Color(0xFFEEF2F7);
-const _kDGold      = Color(0xFFC9A84C);
+// ✅ FIXED: same leftover BBRS navy/gold violation already fixed in
+// ai_personalization_page.dart, bari_hub_page.dart, account_preferences_page.dart.
+const _kDPrimary      = Color(0xFFBF360C); // deep orange — was _kDPrimary
+const _kDPrimaryLight = Color(0xFFFF9800); // bright orange — was _kDPrimaryLight / _kDPrimaryLight
+const _kDBg           = Color(0xFFEEF2F7); // unchanged — neutral background
 
 // Mirrors the private `_prefKey` in meal_planner_page.dart's State class.
 // Duplicated intentionally — that key is a private (`_`-prefixed) const
@@ -329,7 +330,7 @@ class _BariDashboardPageState extends State<BariDashboardPage>
       backgroundColor: _kDBg,
       appBar: AppBar(
         title: const Text('Bariatric Dashboard'),
-        backgroundColor: _kDNavy,
+        backgroundColor: _kDPrimary,
         foregroundColor: Colors.white,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(96),
@@ -349,12 +350,12 @@ class _BariDashboardPageState extends State<BariDashboardPage>
                         label: Text('$d days',
                             style: const TextStyle(fontSize: 12)),
                         selected: sel,
-                        selectedColor: _kDGold.withOpacity(0.25),
-                        backgroundColor: Colors.white.withOpacity(0.08),
+                        selectedColor: _kDPrimaryLight.withValues(alpha: 0.25),
+                        backgroundColor: Colors.white.withValues(alpha: 0.08),
                         labelStyle: TextStyle(
-                            color: sel ? _kDGold : Colors.white70),
+                            color: sel ? _kDPrimaryLight : Colors.white70),
                         side: BorderSide(
-                            color: sel ? _kDGold : Colors.white24),
+                            color: sel ? _kDPrimaryLight : Colors.white24),
                         onSelected: (_) => _onRangeChanged(d),
                       ),
                     );
@@ -363,9 +364,9 @@ class _BariDashboardPageState extends State<BariDashboardPage>
               ),
               TabBar(
                 controller: _tabs,
-                indicatorColor: _kDGold,
+                indicatorColor: _kDPrimaryLight,
                 indicatorWeight: 3,
-                labelColor: _kDGold,
+                labelColor: _kDPrimaryLight,
                 unselectedLabelColor: Colors.white54,
                 isScrollable: true,
                 tabs: const [
@@ -642,8 +643,8 @@ class _OverviewTab extends StatelessWidget {
             icon: const Icon(Icons.bar_chart_rounded),
             label: const Text('View Full Nutrient Trends'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: _kDNavy,
-              side: const BorderSide(color: _kDNavy),
+              foregroundColor: _kDPrimary,
+              side: const BorderSide(color: _kDPrimary),
               minimumSize: const Size(double.infinity, 44),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
@@ -661,7 +662,6 @@ class _TrackerSummaryCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
-  final Color? subtitleColor;
 
   const _TrackerSummaryCard({
     required this.icon,
@@ -669,7 +669,6 @@ class _TrackerSummaryCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.subtitle,
-    this.subtitleColor,
   });
 
   @override
@@ -684,7 +683,7 @@ class _TrackerSummaryCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFDDE3EE)),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2)),
         ],
@@ -713,7 +712,7 @@ class _TrackerSummaryCard extends StatelessWidget {
           Text(subtitle,
               style: TextStyle(
                   fontSize: 10,
-                  color: subtitleColor ?? Colors.grey.shade500),
+                  color: Colors.grey.shade500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis),
         ],
@@ -817,7 +816,7 @@ class _InsightsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.insights_rounded, color: _kDGold),
+              Icon(Icons.insights_rounded, color: _kDPrimaryLight),
               const SizedBox(width: 8),
               const Text('Insights',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
@@ -926,7 +925,7 @@ class _NutrientTabState extends State<_NutrientTab> {
                   child: ChoiceChip(
                     label: Text(entry.value.label),
                     selected: sel,
-                    selectedColor: entry.value.color.withOpacity(0.2),
+                    selectedColor: entry.value.color.withValues(alpha: 0.2),
                     side: BorderSide(
                         color: sel
                             ? entry.value.color
@@ -992,10 +991,10 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.85),
+        color: Colors.white.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFDDE3EE)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Column(
         children: [
@@ -1080,7 +1079,7 @@ class _SimpleBarChart extends StatelessWidget {
                           ? Colors.grey.shade200
                           : isOver
                               ? Colors.red.shade300
-                              : color.withOpacity(0.8),
+                              : color.withValues(alpha: 0.8),
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
                     ),
@@ -1164,7 +1163,7 @@ class _SymptomTab extends StatelessWidget {
                               horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: _severityColor(avgSeverity.round())
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -1307,16 +1306,16 @@ class _GoalsTab extends StatelessWidget {
         children: [
           Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [_kDNavy, _kDNavyLight],
+              gradient: const LinearGradient(colors: [_kDPrimary, _kDPrimaryLight],
                   begin: Alignment.topLeft, end: Alignment.bottomRight),
-              border: Border.all(color: _kDGold.withOpacity(0.3)),
+              border: Border.all(color: _kDPrimaryLight.withValues(alpha: 0.3)),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
                 children: [
-                  const Icon(Icons.flag_rounded, color: _kDGold),
+                  const Icon(Icons.flag_rounded, color: _kDPrimaryLight),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -1348,8 +1347,8 @@ class _GoalsTab extends StatelessWidget {
                   : const Icon(Icons.save_rounded),
               label: Text(saving ? 'Saving…' : 'Save Weekly Goals'),
               style: FilledButton.styleFrom(
-                  backgroundColor: _kDNavy,
-                  side: BorderSide(color: _kDGold.withOpacity(0.4))),
+                  backgroundColor: _kDPrimary,
+                  side: BorderSide(color: _kDPrimaryLight.withValues(alpha: 0.4))),
               onPressed: saving ? null : onSave,
             ),
           ),

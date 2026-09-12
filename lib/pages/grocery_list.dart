@@ -575,6 +575,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
+                          tooltip: 'Close',
                           onPressed: () => Navigator.pop(ctx),
                         ),
                       ],
@@ -1271,6 +1272,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
                         padding: const EdgeInsets.only(left: 8),
                         child: IconButton(
                           icon: Icon(Icons.remove_circle, color: Colors.red.shade400, size: 28),
+                          tooltip: 'Remove item',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: () => _removeItem(index),
@@ -1370,6 +1372,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
         leading: isMultiSelectMode
             ? IconButton(
                 icon: const Icon(Icons.close),
+                tooltip: 'Exit selection mode',
                 onPressed: _toggleMultiSelectMode,
               )
             : null,
@@ -1459,6 +1462,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.close, size: 20),
+                                  tooltip: 'Dismiss error message',
                                   onPressed: () {
                                     setState(() {
                                       _errorMessage = null;

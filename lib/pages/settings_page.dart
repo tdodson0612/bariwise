@@ -88,7 +88,7 @@ const List<String> _kLocalDataLabels = [
 // this cannot be sourced from anywhere in the codebase and needs a real
 // support inbox from the user before release. Still flagged in Technical Debt.
 const String _kAppVersion = '1.0.0';
-const String _kSupportEmail = 'support@bariwise.app';
+const String _kSupportEmail = 'brittneyhanna@yahoo.com';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -397,7 +397,8 @@ class _SettingsPageState extends State<SettingsPage> {
       backgroundColor: const Color(0xFFEEF2F7),
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: const Color(0xFF0A1628),
+        // ✅ FIXED: was hardcoded BBRS navy Color(0xFF0A1628).
+        backgroundColor: Colors.orange.shade700,
         foregroundColor: Colors.white,
         elevation: 0,
       ),

@@ -9,11 +9,10 @@ import '../services/bari_features_service.dart';
 import '../services/recent_activity_tracker.dart';
 import '../config/app_config.dart';
 
-// ─── BBRS Design Tokens ───────────────────────────────────────────────────────
-const _kNavy      = Color(0xFF0A1628);
-const _kNavyLight = Color(0xFF1A2E4A);
-const _kBg        = Color(0xFFEEF2F7);
-const _kGold      = Color(0xFFC9A84C);
+// ✅ FIXED: leftover BBRS navy/gold violation of Rule 13 (BariWise = orange).
+const _kPrimary      = Color(0xFFBF360C); // deep orange — was _kPrimary
+const _kPrimaryLight = Color(0xFFFF9800); // bright orange — was _kPrimaryLight / _kPrimaryLight
+const _kBg           = Color(0xFFEEF2F7); // unchanged — neutral background
 
 class BariHubPage extends StatefulWidget {
   const BariHubPage({super.key});
@@ -80,11 +79,12 @@ class _BariHubPageState extends State<BariHubPage> {
       backgroundColor: _kBg,
       appBar: AppBar(
         title: const Text('Bariatric Health'),
-        backgroundColor: _kNavy,
+        backgroundColor: _kPrimary,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
             onPressed: () {
               setState(() => _loading = true);
               _loadSummary();
@@ -94,7 +94,7 @@ class _BariHubPageState extends State<BariHubPage> {
       ),
       body: RefreshIndicator(
         onRefresh: _loadSummary,
-        color: _kGold,
+        color: _kPrimaryLight,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
@@ -370,14 +370,14 @@ class _TipCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [_kNavy, _kNavyLight],
+          colors: [_kPrimary, _kPrimaryLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kGold.withValues(alpha: 0.3)),
+        border: Border.all(color: _kPrimaryLight.withValues(alpha: 0.3)),
         boxShadow: [
-          BoxShadow(color: _kNavy.withValues(alpha: 0.3),
+          BoxShadow(color: _kPrimary.withValues(alpha: 0.3),
               blurRadius: 12, offset: const Offset(0, 4)),
         ],
       ),

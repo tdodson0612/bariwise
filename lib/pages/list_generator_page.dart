@@ -567,6 +567,7 @@ class _ListTabState extends State<_ListTab> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.close),
+                          tooltip: 'Close',
                           onPressed: () => Navigator.pop(ctx),
                         ),
                       ],
@@ -1129,6 +1130,7 @@ class _ItemTile extends StatelessWidget {
         trailing: IconButton(
           icon: Icon(Icons.delete_outline_rounded,
               size: 18, color: Colors.grey.shade400),
+          tooltip: 'Delete item',
           onPressed: onDelete,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),

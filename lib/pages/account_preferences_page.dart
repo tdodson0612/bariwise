@@ -11,7 +11,7 @@
 //
 // Uses ProfileService for Supabase fields (same methods as onboarding + tracker).
 // Uses SharedPreferences for dietary restrictions and supplement baseline.
-// BBRS design language: navy header, glass cards, gold accents.
+// BariWise design language: orange header, glass cards, orange accents.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,10 +24,10 @@ import '../services/error_handling_service.dart';
 import '../utils/height_utils.dart';
 import '../config/app_config.dart';
 
-// ─── BBRS Tokens ──────────────────────────────────────────────────────────────
-const _kNavy  = Color(0xFF0A1628);
+// ✅ FIXED: leftover BBRS navy/gold violation of Rule 13.
+const _kPrimary      = Color(0xFFBF360C); // deep orange — was _kPrimary
 const _kBg    = Color(0xFFEEF2F7);
-const _kGold  = Color(0xFFC9A84C);
+const _kPrimaryLight = Color(0xFFFF9800); // bright orange — was _kPrimaryLight
 const _kBody  = Color(0xFF1A2332);
 const _kMuted = Color(0xFF6B7A94);
 const _kBorder = Color(0xFFDDE3EE);
@@ -343,7 +343,7 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
       backgroundColor: _kBg,
       appBar: AppBar(
         title: const Text('Account Preferences'),
-        backgroundColor: _kNavy,
+        backgroundColor: _kPrimary,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -357,7 +357,7 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
                         strokeWidth: 2, color: Colors.white))
                 : const Text('Save',
                     style: TextStyle(
-                        color: _kGold,
+                        color: _kPrimaryLight,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
           ),
@@ -365,7 +365,7 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
       ),
       body: _loading
           ? const Center(
-              child: CircularProgressIndicator(color: _kGold))
+              child: CircularProgressIndicator(color: _kPrimaryLight))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -636,11 +636,11 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
             : const Icon(Icons.save_rounded),
         label: Text(_saving ? 'Saving…' : 'Save All Preferences'),
         style: FilledButton.styleFrom(
-          backgroundColor: _kNavy,
+          backgroundColor: _kPrimary,
           padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: _kGold.withValues(alpha: 0.4))),
+              side: BorderSide(color: _kPrimaryLight.withValues(alpha: 0.4))),
         ),
       ),
     );
@@ -657,8 +657,8 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: const ColorScheme.light(
-              primary: _kNavy, onPrimary: Colors.white,
-              secondary: _kGold),
+              primary: _kPrimary, onPrimary: Colors.white,
+              secondary: _kPrimaryLight),
         ),
         child: child!,
       ),
@@ -676,7 +676,7 @@ class _AccountPreferencesPageState extends State<AccountPreferencesPage> {
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _kGold, width: 2)),
+            borderSide: const BorderSide(color: _kPrimaryLight, width: 2)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       );
@@ -718,9 +718,9 @@ class _PrefCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                  color: _kGold.withValues(alpha: 0.12),
+                  color: _kPrimaryLight.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, color: _kGold, size: 18),
+              child: Icon(icon, color: _kPrimaryLight, size: 18),
             ),
             const SizedBox(width: 10),
             Text(title,
@@ -769,7 +769,7 @@ class _PrefField extends StatelessWidget {
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kGold, width: 2)),
+                borderSide: const BorderSide(color: _kPrimaryLight, width: 2)),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
@@ -824,8 +824,8 @@ class _SwitchRow extends StatelessWidget {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeThumbColor: _kGold,
-          activeTrackColor: _kGold.withValues(alpha: 0.3),
+          activeThumbColor: _kPrimaryLight,
+          activeTrackColor: _kPrimaryLight.withValues(alpha: 0.3),
         ),
       ]),
     );
@@ -860,7 +860,7 @@ class _UnitToggle extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: sel ? _kNavy : Colors.transparent,
+                  color: sel ? _kPrimary : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(

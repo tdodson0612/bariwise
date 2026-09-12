@@ -52,7 +52,6 @@ class TrackerPage extends StatefulWidget {
 
 class _TrackerPageState extends State<TrackerPage> {
   late final PremiumGateController _premiumController;
-  bool _isPremium = false;
 
   DateTime _selectedDate = DateTime.now();
   TrackerEntry? _currentEntry;
@@ -74,9 +73,9 @@ class _TrackerPageState extends State<TrackerPage> {
   String _exerciseUnit = 'minutes';
   String _waterUnit = 'cups';
 
-  static const String _PREF_WEIGHT_UNIT = 'tracker_weight_unit_';
-  static const String _PREF_EXERCISE_UNIT = 'tracker_exercise_unit_';
-  static const String _PREF_WATER_UNIT = 'tracker_water_unit_';
+  static const String _prefWeightUnit = 'tracker_weight_unit_';
+  static const String _prefExerciseUnit = 'tracker_exercise_unit_';
+  static const String _prefWaterUnit = 'tracker_water_unit_';
 
   List<Map<String, dynamic>> _meals = [];
 
@@ -111,9 +110,7 @@ class _TrackerPageState extends State<TrackerPage> {
 
   void _updatePremiumState() {
     if (mounted) {
-      setState(() {
-        _isPremium = _premiumController.isPremium;
-      });
+      setState(() {});
     }
   }
 
@@ -196,7 +193,7 @@ class _TrackerPageState extends State<TrackerPage> {
           ElevatedButton(
             onPressed: () async {
               await TrackerService.acceptDisclaimer();
-              if (mounted) {
+              if (context.mounted) {
                 Navigator.pop(context);
               }
             },
@@ -217,10 +214,10 @@ class _TrackerPageState extends State<TrackerPage> {
       final userId = AuthService.currentUserId ?? '';
 
       setState(() {
-        _weightUnit = prefs.getString('$_PREF_WEIGHT_UNIT$userId') ?? 'kg';
+        _weightUnit = prefs.getString('$_prefWeightUnit$userId') ?? 'kg';
         _exerciseUnit =
-            prefs.getString('$_PREF_EXERCISE_UNIT$userId') ?? 'minutes';
-        _waterUnit = prefs.getString('$_PREF_WATER_UNIT$userId') ?? 'cups';
+            prefs.getString('$_prefExerciseUnit$userId') ?? 'minutes';
+        _waterUnit = prefs.getString('$_prefWaterUnit$userId') ?? 'cups';
       });
 
       AppConfig.debugPrint('📋 Loaded unit preferences:');
@@ -718,6 +715,8 @@ class _TrackerPageState extends State<TrackerPage> {
     final existingPreference =
         await ProfileService.getHeightUnitPreference(userId);
 
+    if (!mounted) return;
+
     final feetController = TextEditingController();
     final inchesController = TextEditingController();
     final cmController = TextEditingController();
@@ -962,7 +961,7 @@ class _TrackerPageState extends State<TrackerPage> {
                           'Preference verification failed after save');
                     }
 
-                    if (mounted) {
+                    if (context.mounted) {
                       setState(() {
                         _userHeight = heightInCm;
                         _heightUnitPreference = heightSystem;
@@ -974,10 +973,12 @@ class _TrackerPageState extends State<TrackerPage> {
                           'Height saved: ${HeightUtils.formatHeight(heightInCm, heightSystem)}');
                     }
                   }
-                  Navigator.pop(context);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                  }
                 } catch (e) {
                   AppConfig.debugPrint('❌ Error saving height: $e');
-                  if (mounted) {
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(
                           'Failed to save height: ${e.toString()}'),
@@ -1022,9 +1023,11 @@ class _TrackerPageState extends State<TrackerPage> {
                 final userId = AuthService.currentUserId;
                 if (userId != null) {
                   await TrackerService.debugStorageState(userId);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content:
-                          Text('Check debug logs for storage state')));
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content:
+                            Text('Check debug logs for storage state')));
+                  }
                 }
               },
             ),
@@ -1090,12 +1093,14 @@ class _TrackerPageState extends State<TrackerPage> {
           children: [
             IconButton(
                 onPressed: () => _changeDate(-1),
+                tooltip: 'Previous day',
                 icon: const Icon(Icons.chevron_left)),
             Text(_formatDate(_selectedDate),
                 style: const TextStyle(
                     fontSize: 18, fontWeight: FontWeight.bold)),
             IconButton(
                 onPressed: canGoForward ? () => _changeDate(1) : null,
+                tooltip: 'Next day',
                 icon: const Icon(Icons.chevron_right)),
           ],
         ),
@@ -1185,7 +1190,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _weightUnit = value);
-                        _saveUnitPreference(_PREF_WEIGHT_UNIT, value);
+                        _saveUnitPreference(_prefWeightUnit, value);
                       }
                     },
                   ),
@@ -1321,6 +1326,7 @@ class _TrackerPageState extends State<TrackerPage> {
                         children: [
                           IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
+                              tooltip: 'Remove meal',
                               onPressed: () => _removeMeal(index)),
                           Icon(Icons.chevron_right_rounded,
                               size: 18, color: Colors.grey.shade400),
@@ -1706,7 +1712,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _exerciseUnit = value);
-                        _saveUnitPreference(_PREF_EXERCISE_UNIT, value);
+                        _saveUnitPreference(_prefExerciseUnit, value);
                       }
                     },
                   ),
@@ -1776,7 +1782,7 @@ class _TrackerPageState extends State<TrackerPage> {
                     onChanged: (value) {
                       if (value != null) {
                         setState(() => _waterUnit = value);
-                        _saveUnitPreference(_PREF_WATER_UNIT, value);
+                        _saveUnitPreference(_prefWaterUnit, value);
                       }
                     },
                   ),

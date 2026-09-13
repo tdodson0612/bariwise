@@ -1055,7 +1055,7 @@ class _WeeklyTab extends StatelessWidget {
                               tooltip: 'Add meal',
                               onPressed: () => onAddMeal(day),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                             ),
                         ],
                       ),

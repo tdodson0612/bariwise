@@ -1105,7 +1105,7 @@ class _RecipeCardState extends State<_RecipeCard> {
                   ? 'Remove from favorites'
                   : 'Add to favorites',
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             ),
             const SizedBox(width: 8),
             Icon(Icons.expand_more_rounded,

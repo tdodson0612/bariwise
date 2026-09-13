@@ -718,7 +718,7 @@ class _SavedPostsPageState extends State<SavedPostsPage> with SingleTickerProvid
                   tooltip: 'Delete comment',
                   onPressed: () => _deleteComment(postId, comment['id'].toString()),
                   padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(),
+                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 ),
             ],
           ),

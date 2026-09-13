@@ -790,7 +790,7 @@ class _ListTabState extends State<_ListTab> {
                     onPressed: _confirmClearAll,
                     tooltip: 'Archive all',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   ),
                 Stack(
                   clipBehavior: Clip.none,
@@ -801,7 +801,7 @@ class _ListTabState extends State<_ListTab> {
                       onPressed: widget.onOpenArchive,
                       tooltip: 'View archive',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
                     if (widget.archivedCount > 0)
                       Positioned(
@@ -1133,7 +1133,7 @@ class _ItemTile extends StatelessWidget {
           tooltip: 'Delete item',
           onPressed: onDelete,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
         ),
       ),
     );

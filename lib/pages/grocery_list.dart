@@ -1261,7 +1261,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
                         child: IconButton(
                           icon: Icon(Icons.open_in_full, color: Colors.blue.shade400, size: 20),
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                           tooltip: 'View Details',
                           onPressed: () => _showItemDetailSheet(index),
                         ),
@@ -1274,7 +1274,7 @@ debugPrint('⚠️ Using stale cache as fallback (${staleItems.length} items)');
                           icon: Icon(Icons.remove_circle, color: Colors.red.shade400, size: 28),
                           tooltip: 'Remove item',
                           padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                           onPressed: () => _removeItem(index),
                         ),
                       ),

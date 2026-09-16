@@ -6,19 +6,28 @@
 //   '/admin-page': (context) => const AdminGuard(child: SomeAdminPage()),
 //
 // What counts as admin:
-//   - AppConfig.isDevelopment must be true (same gate as the drawer entry)
 //   - AuthService.currentUser email must be in _adminEmails
 //
-// Both conditions must be true. This means:
-//   - Production builds (isProduction = true) → blocked for everyone
-//   - Dev builds with non-admin email → blocked
-//   - Dev builds with admin email → allowed
+// ✅ FIXED THIS SESSION: previously also required AppConfig.isDevelopment
+// to be true, via a hardcoded `const bool isProduction = false` in
+// app_config.dart that was disconnected from the app's real
+// environment-detection system (Environment.isProduction in
+// environment.dart, which correctly reads a build-time flag). This
+// meant that if anyone ever "corrected" that hardcoded flag before a
+// real release — a very plausible action given its name — admin
+// access would have broken completely for everyone, permanently,
+// while the real production flag stayed unaffected. Removed the
+// isDevelopment requirement entirely: admin access is now gated purely
+// by the email whitelist below, working identically in development and
+// production. This also now matches the server-side admin check added
+// to the Cloudflare Worker this session (same two emails) — previously
+// this client-side gate had no server-side equivalent at all, so
+// anyone could bypass it by hitting the Worker's endpoint directly.
 //
 // iOS 14 Compatible | Production Ready
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../config/app_config.dart';
 
 class AdminGuard extends StatelessWidget {
   final Widget child;
@@ -28,13 +37,15 @@ class AdminGuard extends StatelessWidget {
   // ── Admin email list ───────────────────────────────────────────────────────
   // Separate from premium emails intentionally.
   // Add emails here to grant admin access without affecting premium status.
+  // ⚠️ Kept in sync manually with ADMIN_EMAILS in the Cloudflare Worker —
+  // two separate deployables, no shared source of truth between them.
+  // If this list ever changes, update both places.
   static const Set<String> _adminEmails = {
     'terryd0612@gmail.com',
     'liverdiseasescanner@gmail.com',
   };
 
   static bool get isAdmin {
-    if (!AppConfig.isDevelopment) return false;
     final email = AuthService.currentUser?.email?.trim().toLowerCase();
     if (email == null) return false;
     return _adminEmails.contains(email);
@@ -83,7 +94,7 @@ class AdminGuard extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'This page is only accessible to admin users in development mode.',
+                'This page is only accessible to admin users.',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade600,

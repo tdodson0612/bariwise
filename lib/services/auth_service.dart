@@ -392,9 +392,16 @@ class AuthService {
         '📱 Saving FCM token: ${token.substring(0, 20)}...',
       );
 
+      // ✅ FIXED THIS SESSION: was table: 'user_profiles', a table that
+      // never actually existed in the database (confirmed via direct
+      // schema audit). This meant every FCM token save silently failed,
+      // while the Cloudflare Worker's own push-sending logic reads
+      // fcm_token from `profiles` — so push notifications for new
+      // messages have likely never worked for any user. Now points at
+      // the real, existing table.
       await DatabaseServiceCore.workerQuery(
         action: 'update',
-        table: 'user_profiles',
+        table: 'profiles',
         filters: {'id': userId},
         data: {
           'fcm_token': token,
@@ -417,9 +424,10 @@ class AuthService {
           '🔄 FCM token refreshed: ${newToken.substring(0, 20)}...',
         );
         try {
+          // ✅ FIXED THIS SESSION: same table-name bug as above.
           await DatabaseServiceCore.workerQuery(
             action: 'update',
-            table: 'user_profiles',
+            table: 'profiles',
             filters: {'id': userId},
             data: {
               'fcm_token': newToken,

@@ -20,7 +20,16 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.wiseapps.bariwise"
-    compileSdk = flutter.compileSdkVersion
+    // ✅ FIXED: was `flutter.compileSdkVersion`. Confirmed Flutter 3.35.7
+    // (the version actually installed) still defaults to API 35 — Google
+    // Play requires new submissions to target API 36 (Android 16) as of
+    // Aug 31, 2026, a deadline that has already passed. Hardcoding here
+    // instead of waiting for Flutter's own default to catch up. AGP 8.9.1
+    // + Gradle 8.12 (both already in use in this project) are new enough
+    // to support compiling against API 36 without further toolchain changes.
+    // Requires the Android 16 (API 36) SDK Platform to be installed via
+    // Android Studio's SDK Manager before this will build successfully.
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     // 🔧 FIX FOR FIREBASE — required in AGP 8+
@@ -41,7 +50,8 @@ android {
     defaultConfig {
         applicationId = "com.wiseapps.bariwise"
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        // ✅ FIXED: same reasoning as compileSdk above.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
